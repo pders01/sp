@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/pders01/sp/internal/editor"
 	"github.com/pders01/sp/internal/scratchpad"
 	"github.com/pders01/sp/internal/tui"
 
@@ -56,16 +57,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	editor := tui.NewEditor(sp.Date, sp.Content)
-	p := tea.NewProgram(editor)
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error running editor TUI: %v\n", err)
+	// Use external editor
+	ed, err := editor.NewEditor()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing editor: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Edit the content
+	newContent, err := ed.Edit(sp.Content, sp.Date+".md")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error editing scratchpad: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Save if content changed
-	if editor.GetContent() != sp.Content {
-		sp.Content = editor.GetContent()
+	if newContent != sp.Content {
+		sp.Content = newContent
 		if err := mgr.Save(sp); err != nil {
 			fmt.Fprintf(os.Stderr, "Error saving scratchpad: %v\n", err)
 			os.Exit(1)
