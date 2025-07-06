@@ -75,6 +75,10 @@ func (n *Notebook) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			n.viewport.SetYOffset(n.viewport.YOffset - n.viewport.Height)
 		case "pgdown", "f":
 			n.viewport.SetYOffset(n.viewport.YOffset + n.viewport.Height)
+		case "ctrl+u":
+			n.viewport.SetYOffset(n.viewport.YOffset - n.viewport.Height/2)
+		case "ctrl+d":
+			n.viewport.SetYOffset(n.viewport.YOffset + n.viewport.Height/2)
 		case "g":
 			n.viewport.GotoTop()
 		case "G":
@@ -174,7 +178,7 @@ func (n *Notebook) renderFooter() string {
 	// Controls on separate line
 	help := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#626262")).
-		Render("←/h: prev • →/l: next • ↑/k: up • ↓/j: down • q: quit")
+		Render("←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • q: quit")
 
 	// Center the navigation line
 	navStyle := lipgloss.NewStyle().Width(n.width).Align(lipgloss.Center)

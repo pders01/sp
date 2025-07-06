@@ -161,6 +161,21 @@ func TestNotebook_Update_Scrolling(t *testing.T) {
 	require.True(t, ok)
 	assert.Nil(t, cmd)
 
+	// Test Ctrl+u and Ctrl+d
+	msg = tea.KeyMsg{Type: tea.KeyCtrlU}
+	model, cmd = updatedNotebook.Update(msg)
+
+	updatedNotebook, ok = model.(*Notebook)
+	require.True(t, ok)
+	assert.Nil(t, cmd)
+
+	msg = tea.KeyMsg{Type: tea.KeyCtrlD}
+	model, cmd = updatedNotebook.Update(msg)
+
+	updatedNotebook, ok = model.(*Notebook)
+	require.True(t, ok)
+	assert.Nil(t, cmd)
+
 	// Test goto top/bottom
 	msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}}
 	model, cmd = updatedNotebook.Update(msg)
@@ -233,7 +248,7 @@ func TestNotebook_View_WithContent(t *testing.T) {
 	assert.Contains(t, view, "📖 Notebook - 2024-01-16")
 
 	// Should contain navigation controls
-	assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • q: quit")
+	assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • q: quit")
 
 	// Should contain page indicators
 	assert.Contains(t, view, "2024-01-15")
@@ -345,6 +360,6 @@ func TestNotebook_FooterScrolling(t *testing.T) {
 		assert.Contains(t, view, pages[i])
 
 		// Should show navigation controls
-		assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • q: quit")
+		assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • q: quit")
 	}
 }
