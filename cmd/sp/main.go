@@ -12,6 +12,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Version information - set during build
+var (
+	version = "dev"
+	commit  = "unknown"
+	date    = "unknown"
+)
+
 var (
 	calendarFlag bool
 	notebookFlag bool
@@ -22,8 +29,9 @@ func main() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "sp",
-	Short: "A daily scratchpad for quick notes and todos",
+	Use:     "sp",
+	Version: version,
+	Short:   "A daily scratchpad for quick notes and todos",
 	Long: `sp is a CLI/TUI-based scratchpad application for quickly storing notes, 
 todos, and thoughts. It automatically creates a new scratchpad for each day 
 and allows you to browse historical entries through a calendar interface.
