@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"sort"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/pders01/sp/internal/editor"
@@ -13,6 +14,7 @@ import (
 
 var (
 	calendarFlag bool
+	notebookFlag bool
 )
 
 func main() {
@@ -29,6 +31,7 @@ and allows you to browse historical entries through a calendar interface.
 Features:
 - Daily scratchpad with automatic daily clearing
 - TUI calendar view for browsing historical entries
+- Notebook view for browsing all notes with markdown rendering
 - External editor integration (uses $EDITOR)
 - Markdown support for rich formatting
 - Clean, distraction-free interface`,
@@ -37,6 +40,7 @@ Features:
 
 func init() {
 	rootCmd.Flags().BoolVarP(&calendarFlag, "calendar", "c", false, "Open calendar view to select a date")
+	rootCmd.Flags().BoolVarP(&notebookFlag, "notebook", "n", false, "Open notebook view to browse all notes")
 }
 
 func Execute() {
@@ -50,6 +54,37 @@ func runScratchpad(cmd *cobra.Command, args []string) error {
 	mgr, err := scratchpad.NewManager()
 	if err != nil {
 		return fmt.Errorf("failed to initialize scratchpad manager: %w", err)
+	}
+
+	if notebookFlag {
+		// Load all scratchpad files
+		dates, err := mgr.ListDates()
+		if err != nil {
+			return fmt.Errorf("failed to list dates: %w", err)
+		}
+		if len(dates) == 0 {
+			fmt.Println("No scratchpad pages found.")
+			return nil
+		}
+		// Sort dates in descending order (most recent first)
+		sort.Sort(sort.Reverse(sort.StringSlice(dates)))
+		// Load content for each date
+		contents := make(map[string]string)
+		for _, date := range dates {
+			sp, err := mgr.GetByDate(date)
+			if err != nil {
+				contents[date] = fmt.Sprintf("Error loading: %v", err)
+			} else {
+				contents[date] = sp.Content
+			}
+		}
+		notebook := tui.NewNotebook(dates)
+		notebook.SetContents(contents)
+		p := tea.NewProgram(notebook, tea.WithAltScreen())
+		if _, err := p.Run(); err != nil {
+			return fmt.Errorf("failed to run notebook TUI: %w", err)
+		}
+		return nil
 	}
 
 	var date string
