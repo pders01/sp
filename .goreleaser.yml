@@ -16,6 +16,7 @@ builds:
       - goos: windows
         goarch: arm64
     binary: sp
+    main: ./cmd/sp
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
@@ -60,7 +61,6 @@ brews:
     commit_author:
       name: Paul Derscheid
       email: paulderscheid@gmail.com
-    folder: Formula
     url_template: "https://github.com/pders01/sp/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_msg_template: "Bump {{ .ProjectName }} to {{ .Tag }}"
 
