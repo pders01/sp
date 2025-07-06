@@ -61,6 +61,7 @@ brews:
     commit_author:
       name: Paul Derscheid
       email: paulderscheid@gmail.com
+    directory: Formula
     url_template: "https://github.com/pders01/sp/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_msg_template: "Bump {{ .ProjectName }} to {{ .Tag }}"
 
