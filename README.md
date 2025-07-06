@@ -43,12 +43,25 @@ sp
 sp --calendar
 ```
 
-### Editor Controls
+### Editor Support
 
-- **Ctrl+S**: Save and exit
-- **Ctrl+C** or **Esc**: Exit without saving
-- **Arrow Keys**: Navigate through text
-- **Line Numbers**: Displayed on the left for easy reference
+The application uses your preferred editor for editing scratchpads. It will:
+
+1. **Check `$EDITOR` environment variable** first
+2. **Check `$VISUAL` environment variable** as fallback
+3. **Use platform-specific defaults** (vim, nano, etc.)
+
+**Supported editors include:**
+- **Terminal editors**: vim, nvim, nano, micro, emacs
+- **GUI editors**: VSCode, Sublime Text, Atom, gedit, kate
+- **Platform editors**: Notepad (Windows), TextEdit (macOS)
+
+**To set your preferred editor:**
+```bash
+export EDITOR=vim
+# or
+export EDITOR="code --wait"
+```
 
 ### Calendar Controls
 
@@ -81,10 +94,11 @@ sp/
 ├── cmd/sp/
 │   └── main.go          # CLI entry point
 ├── internal/
+│   ├── editor/
+│   │   └── editor.go     # External editor integration
 │   ├── scratchpad/
 │   │   └── scratchpad.go # Core scratchpad logic
 │   └── tui/
-│       ├── editor.go     # Text editor component
 │       └── calendar.go   # Calendar view component
 ├── go.mod
 └── README.md
