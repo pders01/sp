@@ -62,7 +62,6 @@ brews:
       email: paul@derscheid.dev
     folder: Formula
     homepage_template: "https://github.com/pders01/sp"
-    commit_msg_template: "Bump {{ .ProjectName }} to {{ .Tag }}"
     url_template: "https://github.com/pders01/sp/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_msg_template: "Bump {{ .ProjectName }} to {{ .Tag }}"
 
@@ -72,11 +71,4 @@ release:
     name: sp
   draft: false
   prerelease: false
-  name_template: '{{ .Tag }}'
-  release_header_template: |
-    ## What's Changed
-
-    {{ .Changelog }}
-
-    ---
-    **Full Changelog**: https://github.com/pders01/sp/compare/{{ .PreviousTag }}...{{ .Tag }} 
+  name_template: '{{ .Tag }}' 
