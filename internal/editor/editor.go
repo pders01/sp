@@ -99,7 +99,6 @@ func (e *Editor) editGUI(cmd *exec.Cmd, filename string) (string, error) {
 			}
 			if info.ModTime().After(initialInfo.ModTime()) {
 				modified = true
-				break
 			}
 		}
 		if modified {
