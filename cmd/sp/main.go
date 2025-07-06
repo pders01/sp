@@ -31,7 +31,7 @@ func main() {
 			os.Exit(1)
 		}
 		calendar := tui.NewCalendar(dates)
-		p := tea.NewProgram(calendar)
+		p := tea.NewProgram(calendar, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error running calendar TUI: %v\n", err)
 			os.Exit(1)

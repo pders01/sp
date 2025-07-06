@@ -47,6 +47,8 @@ type Calendar struct {
 	dates    []string
 	selected string
 	quitting bool
+	width    int
+	height   int
 }
 
 // NewCalendar creates a new calendar instance
@@ -80,13 +82,16 @@ func NewCalendar(dates []string) *Calendar {
 		}}, items...)
 	}
 
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
+	// Start with a reasonable default size
+	l := list.New(items, list.NewDefaultDelegate(), 40, 10)
 	l.Title = "📅 Scratchpad Calendar"
 	l.SetShowHelp(true)
 
 	return &Calendar{
-		list:  l,
-		dates: dates,
+		list:   l,
+		dates:  dates,
+		width:  40,
+		height: 10,
 	}
 }
 
@@ -98,6 +103,11 @@ func (e *Calendar) Init() tea.Cmd {
 // Update handles calendar updates
 func (e *Calendar) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		e.width = msg.Width
+		e.height = msg.Height
+		e.list.SetSize(msg.Width, msg.Height-5) // -5 for help/title
+		return e, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
