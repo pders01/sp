@@ -59,9 +59,8 @@ brews:
       name: homebrew-sp
     commit_author:
       name: Paul Derscheid
-      email: paul@derscheid.dev
+      email: paulderscheid@gmail.com
     folder: Formula
-    homepage_template: "https://github.com/pders01/sp"
     url_template: "https://github.com/pders01/sp/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_msg_template: "Bump {{ .ProjectName }} to {{ .Tag }}"
 
