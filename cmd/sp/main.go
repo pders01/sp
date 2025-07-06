@@ -1,44 +1,72 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/pders01/sp/internal/editor"
 	"github.com/pders01/sp/internal/scratchpad"
 	"github.com/pders01/sp/internal/tui"
+	"github.com/spf13/cobra"
+)
 
-	tea "github.com/charmbracelet/bubbletea"
+var (
+	calendarFlag bool
 )
 
 func main() {
-	calendarFlag := flag.Bool("calendar", false, "Open calendar view")
-	flag.Parse()
+	Execute()
+}
 
+var rootCmd = &cobra.Command{
+	Use:   "sp",
+	Short: "A daily scratchpad for quick notes and todos",
+	Long: `sp is a CLI/TUI-based scratchpad application for quickly storing notes, 
+todos, and thoughts. It automatically creates a new scratchpad for each day 
+and allows you to browse historical entries through a calendar interface.
+
+Features:
+- Daily scratchpad with automatic daily clearing
+- TUI calendar view for browsing historical entries
+- External editor integration (uses $EDITOR)
+- Markdown support for rich formatting
+- Clean, distraction-free interface`,
+	RunE: runScratchpad,
+}
+
+func init() {
+	rootCmd.Flags().BoolVarP(&calendarFlag, "calendar", "c", false, "Open calendar view to select a date")
+}
+
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runScratchpad(cmd *cobra.Command, args []string) error {
 	mgr, err := scratchpad.NewManager()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error initializing scratchpad manager: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to initialize scratchpad manager: %w", err)
 	}
 
 	var date string
-	if *calendarFlag {
+	if calendarFlag {
 		// Show calendar view
 		dates, err := mgr.ListDates()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error listing dates: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to list dates: %w", err)
 		}
 		calendar := tui.NewCalendar(dates)
 		p := tea.NewProgram(calendar, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error running calendar TUI: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to run calendar TUI: %w", err)
 		}
 		if calendar.GetSelectedDate() == "" {
 			fmt.Println("No date selected. Exiting.")
-			return
+			return nil
 		}
 		date = calendar.GetSelectedDate()
 	} else {
@@ -53,31 +81,29 @@ func main() {
 		sp, err = mgr.GetByDate(date)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading scratchpad: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to load scratchpad: %w", err)
 	}
 
 	// Use external editor
 	ed, err := editor.NewEditor()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error initializing editor: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to initialize editor: %w", err)
 	}
 
 	// Edit the content
 	newContent, err := ed.Edit(sp.Content, sp.Date+".md")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error editing scratchpad: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to edit scratchpad: %w", err)
 	}
 
 	// Save if content changed
 	if newContent != sp.Content {
 		sp.Content = newContent
 		if err := mgr.Save(sp); err != nil {
-			fmt.Fprintf(os.Stderr, "Error saving scratchpad: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to save scratchpad: %w", err)
 		}
 		fmt.Println("Scratchpad saved!")
 	}
+
+	return nil
 }
