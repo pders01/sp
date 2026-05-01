@@ -284,6 +284,12 @@ func TestNotebook_GetCurrentPage(t *testing.T) {
 	assert.Equal(t, "", emptyNotebook.GetCurrentPage())
 }
 
+func TestNotebook_SetIcons(t *testing.T) {
+	notebook := NewNotebook([]string{"2024-01-15"})
+	notebook.SetIcons(nerdIcons)
+	assert.Equal(t, nerdIcons, notebook.icons)
+}
+
 func TestNotebook_IsQuitting(t *testing.T) {
 	notebook := NewNotebook([]string{"2024-01-15"})
 
