@@ -201,24 +201,32 @@ func TestNotebook_Update_Scrolling(t *testing.T) {
 func TestNotebook_Update_Quit(t *testing.T) {
 	notebook := NewNotebook([]string{"2024-01-15"})
 
-	// Test quit with 'q'
+	// Test quit with 'q' — sub-view sets state, router decides whether
+	// to actually emit tea.Quit.
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
-	model, cmd := notebook.Update(msg)
+	model, _ := notebook.Update(msg)
 
 	updatedNotebook, ok := model.(*Notebook)
 	require.True(t, ok)
 	assert.True(t, updatedNotebook.quitting)
-	assert.NotNil(t, cmd) // Just check that a command is returned
 
 	// Test quit with Ctrl+C
 	notebook.quitting = false
 	msg = tea.KeyMsg{Type: tea.KeyCtrlC}
-	model, cmd = notebook.Update(msg)
+	model, _ = notebook.Update(msg)
 
 	updatedNotebook, ok = model.(*Notebook)
 	require.True(t, ok)
 	assert.True(t, updatedNotebook.quitting)
-	assert.NotNil(t, cmd) // Just check that a command is returned
+}
+
+func TestNotebook_Update_PopOnEsc(t *testing.T) {
+	notebook := NewNotebook([]string{"2024-01-15"})
+	model, cmd := notebook.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	notebook = model.(*Notebook)
+	assert.True(t, notebook.IsPopping())
+	assert.False(t, notebook.IsQuitting())
+	assert.Nil(t, cmd)
 }
 
 func TestNotebook_View_Empty(t *testing.T) {
@@ -254,7 +262,7 @@ func TestNotebook_View_WithContent(t *testing.T) {
 	assert.Contains(t, view, "Notebook · 2024-01-16")
 
 	// Should contain navigation controls
-	assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • enter/e: edit • Ctrl+t: theme • q: quit")
+	assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • enter/e: edit • esc: back • Ctrl+t: theme • q: quit")
 
 	// Should contain page indicators
 	assert.Contains(t, view, "2024-01-15")
@@ -303,16 +311,15 @@ func TestNotebook_EnterSelectsCurrentPage(t *testing.T) {
 		{Type: tea.KeyRunes, Runes: []rune{'i'}},
 	} {
 		fresh := NewNotebook(pages)
-		model, cmd := fresh.Update(key)
+		// Without an editor wired the notebook falls back to setting
+		// state and letting the router decide what to do.
+		model, _ := fresh.Update(key)
 		fresh = model.(*Notebook)
 		if fresh.GetSelectedDate() != want {
 			t.Errorf("key %v: selected = %q, want %q", key, fresh.GetSelectedDate(), want)
 		}
 		if !fresh.IsQuitting() {
 			t.Errorf("key %v: expected quitting=true", key)
-		}
-		if cmd == nil {
-			t.Errorf("key %v: expected tea.Quit cmd", key)
 		}
 		fresh.Close()
 	}
@@ -420,6 +427,6 @@ func TestNotebook_FooterScrolling(t *testing.T) {
 		assert.Contains(t, view, notebook.pages[i])
 
 		// Should show navigation controls
-		assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • enter/e: edit • Ctrl+t: theme • q: quit")
+		assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • enter/e: edit • esc: back • Ctrl+t: theme • q: quit")
 	}
 }

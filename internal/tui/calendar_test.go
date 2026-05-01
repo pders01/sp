@@ -99,20 +99,17 @@ func TestCalendarMonthEnterSelectsDay(t *testing.T) {
 	cal := NewCalendar(nil)
 	want := cal.cursor.Format("2006-01-02")
 
-	model, cmd := cal.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ := cal.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	cal = model.(*Calendar)
 
 	if cal.selected != want {
 		t.Errorf("selected = %q, want %q", cal.selected, want)
 	}
-	if !cal.quitting {
-		t.Error("month-view enter should quit")
+	if cal.quitting {
+		t.Error("plain Enter no longer quits the sub-view; the router pops to notebook")
 	}
 	if cal.IsDirectEdit() {
 		t.Error("plain Enter should drill via notebook, not direct edit")
-	}
-	if cmd == nil {
-		t.Error("month-view enter should return tea.Quit cmd")
 	}
 }
 
@@ -125,7 +122,8 @@ func TestCalendarMonthEKeyDirectEdits(t *testing.T) {
 		{Type: tea.KeyRunes, Runes: []rune{'i'}},
 	} {
 		c := NewCalendar(nil)
-		model, cmd := c.Update(key)
+		// No editor wired here — fallback path: state set, router quits.
+		model, _ := c.Update(key)
 		c = model.(*Calendar)
 		if c.GetSelectedDate() != want {
 			t.Errorf("key %v: selected = %q, want %q", key, c.GetSelectedDate(), want)
@@ -135,9 +133,6 @@ func TestCalendarMonthEKeyDirectEdits(t *testing.T) {
 		}
 		if !c.quitting {
 			t.Errorf("key %v: expected quitting=true", key)
-		}
-		if cmd == nil {
-			t.Errorf("key %v: expected tea.Quit cmd", key)
 		}
 	}
 	_ = cal
@@ -177,13 +172,11 @@ func TestCalendarQuitKeys(t *testing.T) {
 		{Type: tea.KeyEsc},
 	} {
 		cal := NewCalendar(nil)
-		model, cmd := cal.Update(key)
+		// Sub-view sets quitting=true; router decides whether to emit tea.Quit.
+		model, _ := cal.Update(key)
 		cal = model.(*Calendar)
 		if !cal.quitting {
 			t.Errorf("key %v: expected quitting=true", key)
-		}
-		if cmd == nil {
-			t.Errorf("key %v: expected tea.Quit cmd", key)
 		}
 	}
 }

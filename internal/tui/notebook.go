@@ -35,6 +35,7 @@ type Notebook struct {
 	width    int
 	height   int
 	quitting bool
+	popping  bool
 	selected string
 	icons    IconSet
 	theme    *themeWatcher
@@ -171,7 +172,10 @@ func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "q":
 		n.quitting = true
-		return n, tea.Quit
+		return n, nil
+	case "esc", "backspace":
+		n.popping = true
+		return n, nil
 	case "enter", "e", "i":
 		if len(n.pages) == 0 {
 			return n, nil
@@ -180,10 +184,10 @@ func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if cmd := n.startEdit(date); cmd != nil {
 			return n, cmd
 		}
-		// Fallback: caller wired no editor; quit and let main run it.
+		// Fallback: caller wired no editor; signal the orchestrator.
 		n.selected = date
 		n.quitting = true
-		return n, tea.Quit
+		return n, nil
 	case "ctrl+t":
 		n.theme.Cycle()
 		return n, nil
@@ -311,7 +315,7 @@ func (n *Notebook) renderFooter() string {
 	rule := n.theme.Palette().Separator.Render(strings.Repeat("─", max(n.width, 0)))
 
 	// Controls on separate line
-	help := n.theme.Palette().Help.Render("←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • enter/e: edit • Ctrl+t: theme • q: quit")
+	help := n.theme.Palette().Help.Render("←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • enter/e: edit • esc: back • Ctrl+t: theme • q: quit")
 
 	// Center the navigation line
 	navStyle := lipgloss.NewStyle().Width(n.width).Align(lipgloss.Center)
@@ -391,4 +395,44 @@ func (n *Notebook) SetCurrentDate(date string) {
 // IsQuitting returns whether the notebook is quitting
 func (n *Notebook) IsQuitting() bool {
 	return n.quitting
+}
+
+// IsPopping reports whether the user requested back-navigation
+// (Esc/Backspace). The router pops to the calendar in -c mode and
+// quits the program in -n mode.
+func (n *Notebook) IsPopping() bool { return n.popping }
+
+// ClearState resets quit / pop / selected so the router can resume the
+// notebook after pulling it back into focus.
+func (n *Notebook) ClearState() {
+	n.quitting = false
+	n.popping = false
+	n.selected = ""
+}
+
+// CurrentContent returns the rendered content of the active page.
+// Used by the router so the calendar can update its hasData/previews
+// after the notebook persists an inline edit.
+func (n *Notebook) CurrentContent() (date, content string) {
+	if len(n.pages) == 0 {
+		return "", ""
+	}
+	d := n.pages[n.current]
+	return d, n.contents[d]
+}
+
+// AddPage inserts the given date into the page list (sorted descending)
+// when not already present and seeds an empty content entry. No-op when
+// the date is already known.
+func (n *Notebook) AddPage(date string) {
+	for _, p := range n.pages {
+		if p == date {
+			return
+		}
+	}
+	n.pages = append(n.pages, date)
+	sort.Sort(sort.Reverse(sort.StringSlice(n.pages)))
+	if _, ok := n.contents[date]; !ok {
+		n.contents[date] = ""
+	}
 }

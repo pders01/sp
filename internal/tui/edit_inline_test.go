@@ -19,17 +19,14 @@ func TestNotebookEnterFallsBackWhenEditorMissing(t *testing.T) {
 	nb := NewNotebook(pages)
 	defer nb.Close()
 
-	model, cmd := nb.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ := nb.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	nb = model.(*Notebook)
 
 	if !nb.IsQuitting() {
-		t.Error("Enter without editor should quit")
+		t.Error("Enter without editor should set quitting")
 	}
 	if nb.GetSelectedDate() == "" {
 		t.Error("Enter without editor should set selected")
-	}
-	if cmd == nil {
-		t.Error("Enter without editor should return tea.Quit cmd")
 	}
 }
 
@@ -37,17 +34,14 @@ func TestCalendarEFallsBackWhenEditorMissing(t *testing.T) {
 	cal := NewCalendar(nil)
 	defer cal.Close()
 
-	model, cmd := cal.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	model, _ := cal.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
 	cal = model.(*Calendar)
 
 	if !cal.IsDirectEdit() {
 		t.Error("e without editor should set directEdit")
 	}
 	if !cal.quitting {
-		t.Error("e without editor should quit")
-	}
-	if cmd == nil {
-		t.Error("e without editor should return tea.Quit cmd")
+		t.Error("e without editor should set quitting")
 	}
 }
 
