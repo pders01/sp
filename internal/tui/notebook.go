@@ -132,10 +132,10 @@ func (n *Notebook) View() string {
 		return ""
 	}
 	if len(n.pages) == 0 {
-		return MutedStyle.Render("No scratchpad pages found.")
+		return n.theme.Palette().MutedText.Render("No scratchpad pages found.")
 	}
 
-	header := HeaderStyle.Render(
+	header := n.theme.Palette().Header.Render(
 		withIcon(n.icons.Notebook, fmt.Sprintf("Notebook · %s", n.pages[n.current])),
 	)
 	if status := n.theme.StatusText(); status != "" {
@@ -143,7 +143,7 @@ func (n *Notebook) View() string {
 			lipgloss.Top,
 			header,
 			"   ",
-			MutedStyle.Render(status),
+			n.theme.Palette().MutedText.Render(status),
 		)
 	}
 
@@ -194,31 +194,31 @@ func (n *Notebook) renderFooter() string {
 	}
 
 	// Build visible page indicators
-	sep := MutedStyle.Render(" " + n.icons.Sep + " ")
+	sep := n.theme.Palette().MutedText.Render(" " + n.icons.Sep + " ")
 	var pageIndicators []string
 	for i := startIdx; i < startIdx+maxVisibleDates && i < len(n.pages); i++ {
 		page := n.pages[i]
 		if i == n.current {
-			pageIndicators = append(pageIndicators, SelectedDateStyle.Render(page))
+			pageIndicators = append(pageIndicators, n.theme.Palette().SelectedDate.Render(page))
 		} else {
-			pageIndicators = append(pageIndicators, MutedStyle.Render(page))
+			pageIndicators = append(pageIndicators, n.theme.Palette().MutedText.Render(page))
 		}
 	}
 
 	// Add navigation indicators if there are more pages
 	navLine := strings.Join(pageIndicators, sep)
 	if startIdx > 0 && n.icons.Prev != "" {
-		navLine = MutedStyle.Render(n.icons.Prev) + " " + navLine
+		navLine = n.theme.Palette().MutedText.Render(n.icons.Prev) + " " + navLine
 	}
 	if startIdx+maxVisibleDates < len(n.pages) && n.icons.Next != "" {
-		navLine = navLine + " " + MutedStyle.Render(n.icons.Next)
+		navLine = navLine + " " + n.theme.Palette().MutedText.Render(n.icons.Next)
 	}
 
 	// Horizontal rule separating dates from keybindings
-	rule := SeparatorStyle.Render(strings.Repeat("─", max(n.width, 0)))
+	rule := n.theme.Palette().Separator.Render(strings.Repeat("─", max(n.width, 0)))
 
 	// Controls on separate line
-	help := HelpStyle.Render("←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • Ctrl+t: theme • q: quit")
+	help := n.theme.Palette().Help.Render("←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • Ctrl+t: theme • q: quit")
 
 	// Center the navigation line
 	navStyle := lipgloss.NewStyle().Width(n.width).Align(lipgloss.Center)

@@ -57,6 +57,9 @@ func (w *themeWatcher) Pref() string { return w.pref }
 // Style returns the resolved glamour style label.
 func (w *themeWatcher) Style() string { return w.resolved }
 
+// Palette returns the brand palette matching the resolved style.
+func (w *themeWatcher) Palette() Palette { return paletteFor(w.resolved) }
+
 // Cycle advances the preference auto -> light -> dark -> auto and
 // schedules a re-resolve through the event channel.
 func (w *themeWatcher) Cycle() {

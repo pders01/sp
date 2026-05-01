@@ -225,13 +225,13 @@ func (c *Calendar) View() string {
 		helpText = "←/h/→/l: day • ↑/k/↓/j: week • H/L: month • enter: open • y: year view • t: today • Ctrl+t: theme • q: quit"
 	}
 
-	header := HeaderStyle.Render(headerText)
+	header := c.theme.Palette().Header.Render(headerText)
 	if status := c.theme.StatusText(); status != "" {
 		header = lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			header,
 			"   ",
-			MutedStyle.Render(status),
+			c.theme.Palette().MutedText.Render(status),
 		)
 	}
 	bodyBlock := lipgloss.NewStyle().
@@ -240,9 +240,9 @@ func (c *Calendar) View() string {
 		Align(lipgloss.Center, lipgloss.Top).
 		Render(body)
 
-	rule := SeparatorStyle.Render(strings.Repeat("─", max(c.width, 0)))
-	focus := MutedStyle.Render(c.focusLine())
-	help := HelpStyle.Render(helpText)
+	rule := c.theme.Palette().Separator.Render(strings.Repeat("─", max(c.width, 0)))
+	focus := c.theme.Palette().MutedText.Render(c.focusLine())
+	help := c.theme.Palette().Help.Render(helpText)
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -281,7 +281,7 @@ func (c *Calendar) renderMonth(width, height int) string {
 
 	weekdays := []string{"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"}
 	headerCells := make([]string, len(weekdays))
-	headerStyle := MutedStyle.Width(cellW).Align(lipgloss.Center).Bold(true)
+	headerStyle := c.theme.Palette().MutedText.Width(cellW).Align(lipgloss.Center).Bold(true)
 	for i, w := range weekdays {
 		headerCells[i] = headerStyle.Render(w)
 	}
@@ -320,16 +320,17 @@ func (c *Calendar) renderDayCell(day time.Time, month time.Month, w, h int) stri
 	hasData := c.hasData[dateStr]
 	isToday := day.Equal(c.today)
 
+	p := c.theme.Palette()
 	dayStyle := lipgloss.NewStyle()
 	switch {
 	case outOfMonth:
-		dayStyle = dayStyle.Foreground(MutedColor).Faint(true)
+		dayStyle = dayStyle.Foreground(p.Muted).Faint(true)
 	case hasData:
-		dayStyle = dayStyle.Foreground(AccentColor).Bold(true)
+		dayStyle = dayStyle.Foreground(p.Accent).Bold(true)
 	case isToday:
-		dayStyle = dayStyle.Foreground(SecondaryColor).Underline(true)
+		dayStyle = dayStyle.Foreground(p.Secondary).Underline(true)
 	default:
-		dayStyle = dayStyle.Foreground(TextColor)
+		dayStyle = dayStyle.Foreground(p.Text)
 	}
 
 	lines := []string{dayStyle.Render(dayLabel)}
@@ -342,21 +343,21 @@ func (c *Calendar) renderDayCell(day time.Time, month time.Month, w, h int) stri
 	cell := lipgloss.NewStyle().Width(w).Height(h).Padding(0, 1)
 	if cursorMatch {
 		cell = cell.
-			Background(HighlightColor).
-			Foreground(lipgloss.Color("#1A1A2E"))
+			Background(p.Highlight).
+			Foreground(p.CursorFg)
 	}
 	return cell.Render(strings.Join(lines, "\n"))
 }
 
 func (c *Calendar) cellAnnotation(day time.Time, dateStr string, w int) string {
 	if preview := c.previews[dateStr]; preview != "" {
-		return MutedStyle.Render(truncate(preview, w))
+		return c.theme.Palette().MutedText.Render(truncate(preview, w))
 	}
 	if c.hasData[dateStr] {
-		return MutedStyle.Render(truncate("• entry", w))
+		return c.theme.Palette().MutedText.Render(truncate("• entry", w))
 	}
 	if day.Equal(c.today) {
-		return MutedStyle.Render(truncate("today", w))
+		return c.theme.Palette().MutedText.Render(truncate("today", w))
 	}
 	return ""
 }
@@ -398,21 +399,22 @@ func (c *Calendar) renderMonthTile(year int, month time.Month, w, h int) string 
 	}
 
 	cursorMonth := month == c.cursor.Month()
+	p := c.theme.Palette()
 
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(TextColor)
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(p.Text)
 	if cursorMonth {
-		titleStyle = titleStyle.Foreground(HighlightColor)
+		titleStyle = titleStyle.Foreground(p.Highlight)
 	}
 	titleLine := titleStyle.Render(first.Format("January"))
 
 	var summary string
 	switch {
 	case count == 0:
-		summary = MutedStyle.Render("no entries")
+		summary = p.MutedText.Render("no entries")
 	case count == 1:
-		summary = lipgloss.NewStyle().Foreground(AccentColor).Render("1 entry")
+		summary = lipgloss.NewStyle().Foreground(p.Accent).Render("1 entry")
 	default:
-		summary = lipgloss.NewStyle().Foreground(AccentColor).Render(fmt.Sprintf("%d entries", count))
+		summary = lipgloss.NewStyle().Foreground(p.Accent).Render(fmt.Sprintf("%d entries", count))
 	}
 
 	spark := c.monthSparkline(first, last, w-4)
@@ -423,7 +425,7 @@ func (c *Calendar) renderMonthTile(year int, month time.Month, w, h int) string 
 		Padding(1, 2).
 		Align(lipgloss.Center, lipgloss.Center)
 	if cursorMonth {
-		tile = tile.Background(lipgloss.Color("#16213E"))
+		tile = tile.Background(p.TileBg)
 	}
 
 	lines := []string{titleLine, summary}
@@ -449,7 +451,7 @@ func (c *Calendar) monthSparkline(first, last time.Time, w int) string {
 		}
 		written++
 	}
-	return MutedStyle.Render(b.String())
+	return c.theme.Palette().MutedText.Render(b.String())
 }
 
 func truncate(s string, w int) string {
