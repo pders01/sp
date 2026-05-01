@@ -126,7 +126,9 @@ func runScratchpad(cmd *cobra.Command, args []string) error {
 		}
 		calendar := tui.NewCalendar(dates)
 		calendar.SetIcons(icons)
+		calendar.SetThemePref(cfg.UI.Theme)
 		calendar.SetContents(contents)
+		defer calendar.Close()
 		p := tea.NewProgram(calendar, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("failed to run calendar TUI: %w", err)

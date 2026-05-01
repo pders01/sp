@@ -1,11 +1,9 @@
 package tui
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -24,74 +22,39 @@ type Notebook struct {
 	height   int
 	quitting bool
 	icons    IconSet
-
-	// Glamour rendering. themePref holds the user-facing preference
-	// ("auto"/"light"/"dark"); glamourStyle is the resolved style passed
-	// to the renderer. The renderer is cached and rebuilt on theme
-	// changes or width-driven word-wrap shifts.
-	themePref     string
-	glamourStyle  string
-	rendererStyle string
-
-	// Theme change plumbing. themeEvents is signaled (without payload)
-	// whenever an external source — SIGUSR1 or the macOS plist watcher —
-	// asks the notebook to re-resolve. The reader-loop tea.Cmd installed
-	// in Init waits on this channel and emits themeChangedMsg.
-	themeEvents      chan struct{}
-	themeWatchCancel context.CancelFunc
-	themeWatchWG     sync.WaitGroup
-
-	// Transient status banner shown briefly after a theme swap.
-	status        string
-	statusExpires time.Time
+	theme    *themeWatcher
 }
-
-// themeChangedMsg is dispatched by waitThemeChange when an external
-// signal source (SIGUSR1, macOS plist watcher) has fired.
-type themeChangedMsg struct{}
-
-// statusExpireMsg clears the transient status banner.
-type statusExpireMsg struct{}
 
 // NewNotebook creates a new notebook instance
 func NewNotebook(pages []string) *Notebook {
 	sort.Sort(sort.Reverse(sort.StringSlice(pages)))
-	pref := ThemePrefAuto
 	return &Notebook{
-		pages:        pages,
-		contents:     make(map[string]string),
-		current:      0,
-		width:        80,
-		height:       24,
-		icons:        DefaultIconSet(),
-		themePref:    pref,
-		glamourStyle: resolveGlamourStyle(pref),
-		themeEvents:  make(chan struct{}, 1),
+		pages:    pages,
+		contents: make(map[string]string),
+		current:  0,
+		width:    80,
+		height:   24,
+		icons:    DefaultIconSet(),
+		theme:    newThemeWatcher(ThemePrefAuto),
 	}
 }
 
-// SetThemePref sets the initial theme preference and re-resolves the
-// glamour style. Call before Init so watchers and the first render
-// pick up the value.
+// SetThemePref sets the initial theme preference. Call before Init so
+// watchers and the first render pick up the value.
 func (n *Notebook) SetThemePref(pref string) {
-	n.themePref = pref
-	n.glamourStyle = resolveGlamourStyle(pref)
+	n.theme.SetPref(pref)
 }
 
 // Init initializes the notebook
 func (n *Notebook) Init() tea.Cmd {
-	n.startThemeWatchers()
-	return n.waitThemeChange()
+	n.theme.start()
+	return n.theme.wait()
 }
 
 // Close releases resources held by the notebook (theme watchers).
 // Safe to call multiple times.
 func (n *Notebook) Close() {
-	if n.themeWatchCancel != nil {
-		n.themeWatchCancel()
-		n.themeWatchCancel = nil
-	}
-	n.themeWatchWG.Wait()
+	n.theme.stop()
 }
 
 // Update handles notebook updates
@@ -107,18 +70,15 @@ func (n *Notebook) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return n, nil
 	case themeChangedMsg:
 		var cmds []tea.Cmd
-		if n.applyResolvedStyle() {
+		if n.theme.applyResolved() {
 			n.updateViewportContent()
-			n.setStatus(MsgThemeApplied(n.themePref, n.glamourStyle), 2*time.Second)
-			cmds = append(cmds, n.expireStatusAfter(2*time.Second))
+			n.theme.SetStatus(MsgThemeApplied(n.theme.Pref(), n.theme.Style()), 2*time.Second)
+			cmds = append(cmds, n.theme.expireStatusCmd(2*time.Second))
 		}
-		cmds = append(cmds, n.waitThemeChange())
+		cmds = append(cmds, n.theme.wait())
 		return n, tea.Batch(cmds...)
 	case statusExpireMsg:
-		if !n.statusExpires.IsZero() && time.Now().After(n.statusExpires) {
-			n.status = ""
-			n.statusExpires = time.Time{}
-		}
+		n.theme.HandleStatusExpire()
 		return n, nil
 	case tea.KeyMsg:
 		return n.handleKey(msg)
@@ -132,8 +92,7 @@ func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		n.quitting = true
 		return n, tea.Quit
 	case "ctrl+t":
-		n.themePref = nextThemePref(n.themePref)
-		n.signalThemeChange()
+		n.theme.Cycle()
 		return n, nil
 	case "left", "h":
 		if n.current > 0 {
@@ -179,12 +138,12 @@ func (n *Notebook) View() string {
 	header := HeaderStyle.Render(
 		withIcon(n.icons.Notebook, fmt.Sprintf("Notebook · %s", n.pages[n.current])),
 	)
-	if n.status != "" {
+	if status := n.theme.StatusText(); status != "" {
 		header = lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			header,
 			"   ",
-			MutedStyle.Render(n.status),
+			MutedStyle.Render(status),
 		)
 	}
 
@@ -281,13 +240,8 @@ func (n *Notebook) updateViewportContent() {
 		return
 	}
 	content := n.contents[n.pages[n.current]]
-	style := n.glamourStyle
-	if style == "" {
-		style = resolveGlamourStyle(n.themePref)
-		n.glamourStyle = style
-	}
 	renderer, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(style),
+		glamour.WithStandardStyle(n.theme.Style()),
 		glamour.WithWordWrap(n.width-4),
 	)
 	if err != nil {
@@ -299,73 +253,7 @@ func (n *Notebook) updateViewportContent() {
 		n.viewport.SetContent(content)
 		return
 	}
-	n.rendererStyle = style
 	n.viewport.SetContent(rendered)
-}
-
-// applyResolvedStyle re-resolves the glamour style from the current
-// preference and returns true when the style actually changed.
-func (n *Notebook) applyResolvedStyle() bool {
-	next := resolveGlamourStyle(n.themePref)
-	if next == n.glamourStyle {
-		return false
-	}
-	n.glamourStyle = next
-	return true
-}
-
-// signalThemeChange wakes the watcher reader without blocking. The
-// channel is buffered to one slot so coalesced bursts collapse into a
-// single re-resolve.
-func (n *Notebook) signalThemeChange() {
-	if n.themeEvents == nil {
-		return
-	}
-	select {
-	case n.themeEvents <- struct{}{}:
-	default:
-	}
-}
-
-// waitThemeChange returns a tea.Cmd that blocks on the next theme
-// event and emits themeChangedMsg. Update re-issues this command after
-// each event so the watcher behaves like a long-lived subscription.
-func (n *Notebook) waitThemeChange() tea.Cmd {
-	return func() tea.Msg {
-		_, ok := <-n.themeEvents
-		if !ok {
-			return nil
-		}
-		return themeChangedMsg{}
-	}
-}
-
-// startThemeWatchers spawns SIGUSR1 and (on macOS) plist-based theme
-// observers. Both write to n.themeEvents. Cancelling the context shuts
-// them down via Close.
-func (n *Notebook) startThemeWatchers() {
-	ctx, cancel := context.WithCancel(context.Background())
-	n.themeWatchCancel = cancel
-
-	n.themeWatchWG.Add(1)
-	go func() {
-		defer n.themeWatchWG.Done()
-		watchThemeSignal(ctx, n.signalThemeChange)
-	}()
-
-	if err := watchSystemTheme(ctx, &n.themeWatchWG, n.signalThemeChange); err != nil {
-		// Watcher unavailable on this platform; SIGUSR1 + Ctrl+T still work.
-		_ = err
-	}
-}
-
-func (n *Notebook) setStatus(msg string, ttl time.Duration) {
-	n.status = msg
-	n.statusExpires = time.Now().Add(ttl)
-}
-
-func (n *Notebook) expireStatusAfter(ttl time.Duration) tea.Cmd {
-	return tea.Tick(ttl, func(time.Time) tea.Msg { return statusExpireMsg{} })
 }
 
 // SetContents sets the contents for all pages

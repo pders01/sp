@@ -252,10 +252,11 @@ func TestTruncate(t *testing.T) {
 	}
 }
 
-func TestCalendarInitReturnsNil(t *testing.T) {
+func TestCalendarInitArmsThemeWatcher(t *testing.T) {
 	cal := NewCalendar(nil)
-	if cmd := cal.Init(); cmd != nil {
-		t.Errorf("Init() = %v, want nil", cmd)
+	defer cal.Close()
+	if cmd := cal.Init(); cmd == nil {
+		t.Error("Init() returned nil; expected theme-wait cmd")
 	}
 }
 

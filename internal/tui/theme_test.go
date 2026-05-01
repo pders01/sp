@@ -98,39 +98,37 @@ func TestMsgThemeApplied_Format(t *testing.T) {
 	}
 }
 
-func TestNotebook_CtrlT_Cycles(t *testing.T) {
-	nb := NewNotebook([]string{"2024-01-01"})
-	defer nb.Close()
-	nb.SetThemePref(ThemePrefAuto)
+func TestThemeWatcher_CycleAndApply(t *testing.T) {
+	w := newThemeWatcher(ThemePrefAuto)
 
-	if nb.themePref != ThemePrefAuto {
-		t.Fatalf("initial pref = %q, want %q", nb.themePref, ThemePrefAuto)
+	if w.Pref() != ThemePrefAuto {
+		t.Fatalf("initial pref = %q, want %q", w.Pref(), ThemePrefAuto)
 	}
 
-	// Simulate Ctrl+T three times: auto -> light -> dark -> auto
+	// Cycle drains exactly one event each call; consume to keep channel empty.
 	wants := []string{ThemePrefLight, ThemePrefDark, ThemePrefAuto}
 	for i, want := range wants {
-		nb.themePref = nextThemePref(nb.themePref)
-		if nb.themePref != want {
-			t.Errorf("step %d: pref = %q, want %q", i, nb.themePref, want)
+		w.Cycle()
+		<-w.events
+		if w.Pref() != want {
+			t.Errorf("step %d: pref = %q, want %q", i, w.Pref(), want)
 		}
 	}
 }
 
-func TestNotebook_ApplyResolvedStyle(t *testing.T) {
-	nb := NewNotebook([]string{"2024-01-01"})
-	defer nb.Close()
-	nb.SetThemePref(ThemePrefDark)
+func TestThemeWatcher_ApplyResolved(t *testing.T) {
+	w := newThemeWatcher(ThemePrefDark)
 
-	if changed := nb.applyResolvedStyle(); changed {
-		t.Error("applyResolvedStyle should be a no-op when style is unchanged")
+	if changed := w.applyResolved(); changed {
+		t.Error("applyResolved should be a no-op when style is unchanged")
 	}
 
-	nb.themePref = ThemePrefLight
-	if changed := nb.applyResolvedStyle(); !changed {
-		t.Error("applyResolvedStyle should return true on style swap")
+	w.SetPref(ThemePrefLight)
+	// SetPref already updates resolved, so applyResolved is now a no-op.
+	if changed := w.applyResolved(); changed {
+		t.Error("applyResolved after SetPref should not report change")
 	}
-	if nb.glamourStyle != styles.LightStyle {
-		t.Errorf("glamourStyle = %q, want %q", nb.glamourStyle, styles.LightStyle)
+	if w.Style() != styles.LightStyle {
+		t.Errorf("style = %q, want %q", w.Style(), styles.LightStyle)
 	}
 }
