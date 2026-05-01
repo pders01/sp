@@ -13,12 +13,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version information - set during build
+// Version information - set during build via -ldflags. commit and date
+// are surfaced through the rootCmd long description so they don't get
+// flagged as unused; goreleaser populates them on every release.
 var (
 	version = "dev"
 	commit  = "unknown"
 	date    = "unknown"
 )
+
+// VersionInfo formats the build metadata for display. Pure helper; the
+// underlying vars are kept package-level so the linker can patch them.
+func VersionInfo() string {
+	return fmt.Sprintf("sp %s (commit %s, built %s)", version, commit, date)
+}
 
 var (
 	calendarFlag bool
@@ -31,7 +39,7 @@ func main() {
 
 var rootCmd = &cobra.Command{
 	Use:     "sp",
-	Version: version,
+	Version: VersionInfo(),
 	Short:   "A daily scratchpad for quick notes and todos",
 	Long: `sp is a CLI/TUI-based scratchpad application for quickly storing notes, 
 todos, and thoughts. It automatically creates a new scratchpad for each day 
@@ -59,7 +67,7 @@ func Execute() {
 	}
 }
 
-func runScratchpad(cmd *cobra.Command, args []string) error {
+func runScratchpad(_ *cobra.Command, _ []string) error {
 	mgr, err := scratchpad.NewManager()
 	if err != nil {
 		return fmt.Errorf("failed to initialize scratchpad manager: %w", err)
@@ -77,9 +85,9 @@ func runScratchpad(cmd *cobra.Command, args []string) error {
 
 	if notebookFlag {
 		// Load all scratchpad files
-		dates, err := mgr.ListDates()
-		if err != nil {
-			return fmt.Errorf("failed to list dates: %w", err)
+		dates, lerr := mgr.ListDates()
+		if lerr != nil {
+			return fmt.Errorf("failed to list dates: %w", lerr)
 		}
 		if len(dates) == 0 {
 			fmt.Println("No scratchpad pages found.")
@@ -89,12 +97,12 @@ func runScratchpad(cmd *cobra.Command, args []string) error {
 		sort.Sort(sort.Reverse(sort.StringSlice(dates)))
 		// Load content for each date
 		contents := make(map[string]string)
-		for _, date := range dates {
-			sp, err := mgr.GetByDate(date)
-			if err != nil {
-				contents[date] = fmt.Sprintf("Error loading: %v", err)
+		for _, d := range dates {
+			sp, gerr := mgr.GetByDate(d)
+			if gerr != nil {
+				contents[d] = fmt.Sprintf("Error loading: %v", gerr)
 			} else {
-				contents[date] = sp.Content
+				contents[d] = sp.Content
 			}
 		}
 		notebook := tui.NewNotebook(dates)
@@ -103,8 +111,8 @@ func runScratchpad(cmd *cobra.Command, args []string) error {
 		notebook.SetContents(contents)
 		defer notebook.Close()
 		p := tea.NewProgram(notebook, tea.WithAltScreen())
-		if _, err := p.Run(); err != nil {
-			return fmt.Errorf("failed to run notebook TUI: %w", err)
+		if _, rerr := p.Run(); rerr != nil {
+			return fmt.Errorf("failed to run notebook TUI: %w", rerr)
 		}
 		return nil
 	}
@@ -112,14 +120,14 @@ func runScratchpad(cmd *cobra.Command, args []string) error {
 	var date string
 	if calendarFlag {
 		// Show calendar view
-		dates, err := mgr.ListDates()
-		if err != nil {
-			return fmt.Errorf("failed to list dates: %w", err)
+		dates, lerr := mgr.ListDates()
+		if lerr != nil {
+			return fmt.Errorf("failed to list dates: %w", lerr)
 		}
 		contents := make(map[string]string, len(dates))
 		for _, d := range dates {
-			sp, err := mgr.GetByDate(d)
-			if err != nil {
+			sp, gerr := mgr.GetByDate(d)
+			if gerr != nil {
 				continue
 			}
 			contents[d] = sp.Content
@@ -130,8 +138,8 @@ func runScratchpad(cmd *cobra.Command, args []string) error {
 		calendar.SetContents(contents)
 		defer calendar.Close()
 		p := tea.NewProgram(calendar, tea.WithAltScreen())
-		if _, err := p.Run(); err != nil {
-			return fmt.Errorf("failed to run calendar TUI: %w", err)
+		if _, rerr := p.Run(); rerr != nil {
+			return fmt.Errorf("failed to run calendar TUI: %w", rerr)
 		}
 		if calendar.GetSelectedDate() == "" {
 			fmt.Println("No date selected. Exiting.")

@@ -116,7 +116,7 @@ func TestNotebook_Update_NavigationBounds(t *testing.T) {
 
 	// Go to last page
 	msg = tea.KeyMsg{Type: tea.KeyRight}
-	model, cmd = updatedNotebook.Update(msg)
+	model, _ = updatedNotebook.Update(msg)
 
 	updatedNotebook, ok = model.(*Notebook)
 	require.True(t, ok)
@@ -193,7 +193,7 @@ func TestNotebook_Update_Scrolling(t *testing.T) {
 	msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}}
 	model, cmd = updatedNotebook.Update(msg)
 
-	updatedNotebook, ok = model.(*Notebook)
+	_, ok = model.(*Notebook)
 	require.True(t, ok)
 	assert.Nil(t, cmd)
 }

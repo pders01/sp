@@ -25,8 +25,10 @@ func NewEditor() (*Editor, error) {
 	return editor, nil
 }
 
-// Edit opens content in the user's preferred editor
-func (e *Editor) Edit(content, filename string) (string, error) {
+// Edit opens content in the user's preferred editor. The filename
+// argument is reserved for future use (so the temp file can carry a
+// meaningful suffix); right now we always use sp-*.md.
+func (e *Editor) Edit(content, _ string) (string, error) {
 	// Create temporary file
 	tmpFile, err := os.CreateTemp("", "sp-*.md")
 	if err != nil {
@@ -35,13 +37,15 @@ func (e *Editor) Edit(content, filename string) (string, error) {
 	defer os.Remove(tmpFile.Name())
 
 	// Write content to temp file
-	if _, err := tmpFile.WriteString(content); err != nil {
-		return "", fmt.Errorf("failed to write to temp file: %w", err)
+	if _, werr := tmpFile.WriteString(content); werr != nil {
+		return "", fmt.Errorf("failed to write to temp file: %w", werr)
 	}
 	tmpFile.Close()
 
-	// Build command
-	args := append(e.args, tmpFile.Name())
+	// Build command. Copy e.args so we don't mutate the editor's slice.
+	args := make([]string, 0, len(e.args)+1)
+	args = append(args, e.args...)
+	args = append(args, tmpFile.Name())
 	cmd := exec.Command(e.command, args...)
 
 	// Set up I/O
@@ -55,14 +59,14 @@ func (e *Editor) Edit(content, filename string) (string, error) {
 	}
 
 	// For terminal editors, run in foreground
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("editor failed: %w", err)
+	if rerr := cmd.Run(); rerr != nil {
+		return "", fmt.Errorf("editor failed: %w", rerr)
 	}
 
 	// Read back the content
-	data, err := os.ReadFile(tmpFile.Name())
-	if err != nil {
-		return "", fmt.Errorf("failed to read edited file: %w", err)
+	data, rerr := os.ReadFile(tmpFile.Name())
+	if rerr != nil {
+		return "", fmt.Errorf("failed to read edited file: %w", rerr)
 	}
 
 	return string(data), nil
@@ -77,8 +81,8 @@ func (e *Editor) editGUI(cmd *exec.Cmd, filename string) (string, error) {
 	}
 
 	// Start editor in background
-	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("failed to start editor: %w", err)
+	if serr := cmd.Start(); serr != nil {
+		return "", fmt.Errorf("failed to start editor: %w", serr)
 	}
 
 	// Wait for file modification (with timeout)
@@ -90,11 +94,11 @@ func (e *Editor) editGUI(cmd *exec.Cmd, filename string) (string, error) {
 	for {
 		select {
 		case <-timeout:
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill()
 			return "", fmt.Errorf("editor timeout")
 		case <-ticker.C:
-			info, err := os.Stat(filename)
-			if err != nil {
+			info, statErr := os.Stat(filename)
+			if statErr != nil {
 				continue
 			}
 			if info.ModTime().After(initialInfo.ModTime()) {
@@ -107,14 +111,14 @@ func (e *Editor) editGUI(cmd *exec.Cmd, filename string) (string, error) {
 	}
 
 	// Wait for editor to finish
-	if err := cmd.Wait(); err != nil {
-		return "", fmt.Errorf("editor failed: %w", err)
+	if werr := cmd.Wait(); werr != nil {
+		return "", fmt.Errorf("editor failed: %w", werr)
 	}
 
 	// Read back the content
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return "", fmt.Errorf("failed to read edited file: %w", err)
+	data, rerr := os.ReadFile(filename)
+	if rerr != nil {
+		return "", fmt.Errorf("failed to read edited file: %w", rerr)
 	}
 
 	return string(data), nil

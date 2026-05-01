@@ -34,7 +34,7 @@ func TestLoadParsesTOML(t *testing.T) {
 icons = "nerd"
 theme = "dark"
 `
-	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := Load(path)
@@ -51,7 +51,7 @@ theme = "dark"
 
 func TestLoadFillsBlankFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(path, []byte("[ui]\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("[ui]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := Load(path)
@@ -65,7 +65,7 @@ func TestLoadFillsBlankFields(t *testing.T) {
 
 func TestLoadRejectsCorruptTOML(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(path, []byte("not = = valid"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("not = = valid"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Load(path); err == nil {
