@@ -169,6 +169,89 @@ func TestCalendarViewQuittingReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestExtractPreview(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"plain", "first line\nsecond", "first line"},
+		{"heading", "# Heading\nbody", "Heading"},
+		{"multi-hash", "### Sub\nmore", "Sub"},
+		{"leading blank", "\n\n  hello\n", "hello"},
+		{"only hash", "###\nbody", "body"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := extractPreview(tt.in); got != tt.want {
+				t.Errorf("extractPreview(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCalendarSetContentsBuildsPreviews(t *testing.T) {
+	cal := NewCalendar([]string{"2024-03-10"})
+	cal.SetContents(map[string]string{
+		"2024-03-10": "# Daily standup\nNotes...",
+		"2024-03-11": "Inline thought",
+	})
+
+	if got := cal.previews["2024-03-10"]; got != "Daily standup" {
+		t.Errorf("preview for 2024-03-10 = %q, want %q", got, "Daily standup")
+	}
+	if got := cal.previews["2024-03-11"]; got != "Inline thought" {
+		t.Errorf("preview for 2024-03-11 = %q, want %q", got, "Inline thought")
+	}
+	// SetContents implies hasData when preview non-empty.
+	if !cal.hasData["2024-03-11"] {
+		t.Error("expected hasData[2024-03-11] = true after SetContents")
+	}
+}
+
+func TestCalendarFocusLineIncludesPreview(t *testing.T) {
+	cal := NewCalendar(nil)
+	date := cal.cursor.Format("2006-01-02")
+	cal.SetContents(map[string]string{date: "# Coffee with team"})
+
+	out := cal.View()
+	if !strings.Contains(out, "Coffee with team") {
+		t.Errorf("expected preview in focus line, got: %q", out)
+	}
+}
+
+func TestCalendarMonthViewShowsAnnotation(t *testing.T) {
+	cal := NewCalendar([]string{"2024-03-10"})
+	cal.width = 140
+	cal.height = 40
+	cal.cursor = time.Date(2024, time.March, 15, 0, 0, 0, 0, time.UTC)
+	cal.SetContents(map[string]string{"2024-03-10": "# Sprint kickoff"})
+
+	out := cal.View()
+	if !strings.Contains(out, "Sprint kickoff") {
+		t.Errorf("expected day annotation in month view, got: %q", out)
+	}
+}
+
+func TestTruncate(t *testing.T) {
+	tests := []struct {
+		s    string
+		w    int
+		want string
+	}{
+		{"hello", 10, "hello"},
+		{"hello world", 5, "hell…"},
+		{"hi", 1, "…"},
+		{"hi", 0, "hi"},
+	}
+	for _, tt := range tests {
+		if got := truncate(tt.s, tt.w); got != tt.want {
+			t.Errorf("truncate(%q, %d) = %q, want %q", tt.s, tt.w, got, tt.want)
+		}
+	}
+}
+
 func TestCalendarYearViewRenders(t *testing.T) {
 	cal := NewCalendar([]string{"2024-03-10", "2024-03-11"})
 	cal.width = 100
