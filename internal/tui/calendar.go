@@ -27,17 +27,18 @@ const (
 
 // Calendar is a full-screen month/year calendar that drills down to a day.
 type Calendar struct {
-	icons    IconSet
-	hasData  map[string]bool
-	previews map[string]string
-	cursor   time.Time
-	today    time.Time
-	view     CalendarView
-	selected string
-	quitting bool
-	width    int
-	height   int
-	theme    *themeWatcher
+	icons      IconSet
+	hasData    map[string]bool
+	previews   map[string]string
+	cursor     time.Time
+	today      time.Time
+	view       CalendarView
+	selected   string
+	directEdit bool
+	quitting   bool
+	width      int
+	height     int
+	theme      *themeWatcher
 }
 
 // NewCalendar creates a calendar seeded with the given dates as "has data".
@@ -154,7 +155,19 @@ func (c *Calendar) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			c.view = ViewMonth
 			return c, nil
 		}
+		// Drill into the notebook positioned on the picked day; the
+		// caller routes from notebook to editor.
 		c.selected = c.cursor.Format("2006-01-02")
+		c.quitting = true
+		return c, tea.Quit
+	case "e", "i":
+		if c.view == ViewYear {
+			return c, nil
+		}
+		// Power-user shortcut: skip the notebook drill and go straight
+		// to the editor for the picked day.
+		c.selected = c.cursor.Format("2006-01-02")
+		c.directEdit = true
 		c.quitting = true
 		return c, tea.Quit
 	}
@@ -221,7 +234,7 @@ func (c *Calendar) View() string {
 	default:
 		headerText = withIcon(c.icons.Calendar, fmt.Sprintf("Calendar · %s", c.cursor.Format("2006-01")))
 		body = c.renderMonth(c.width, bodyHeight)
-		helpText = "←/h/→/l: day • ↑/k/↓/j: week • H/L: month • enter: open • y: year view • t: today • Ctrl+t: theme • q: quit"
+		helpText = "←/h/→/l: day • ↑/k/↓/j: week • H/L: month • enter: open • e: edit • y: year view • t: today • Ctrl+t: theme • q: quit"
 	}
 
 	header := c.theme.Palette().Header.Render(headerText)
@@ -482,6 +495,10 @@ func clamp(v, lo, hi int) int {
 
 // GetSelectedDate returns the selected date in YYYY-MM-DD form, or empty.
 func (c *Calendar) GetSelectedDate() string { return c.selected }
+
+// IsDirectEdit reports whether the user pressed e/i to skip the
+// notebook drill and jump straight to the editor.
+func (c *Calendar) IsDirectEdit() bool { return c.directEdit }
 
 // IsQuitting reports whether the calendar is exiting.
 func (c *Calendar) IsQuitting() bool { return c.quitting }

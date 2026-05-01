@@ -21,6 +21,7 @@ type Notebook struct {
 	width    int
 	height   int
 	quitting bool
+	selected string
 	icons    IconSet
 	theme    *themeWatcher
 }
@@ -93,6 +94,12 @@ func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+c", "q":
 		n.quitting = true
 		return n, tea.Quit
+	case "enter", "e", "i":
+		if len(n.pages) > 0 {
+			n.selected = n.pages[n.current]
+			n.quitting = true
+			return n, tea.Quit
+		}
 	case "ctrl+t":
 		n.theme.Cycle()
 		return n, nil
@@ -220,7 +227,7 @@ func (n *Notebook) renderFooter() string {
 	rule := n.theme.Palette().Separator.Render(strings.Repeat("─", max(n.width, 0)))
 
 	// Controls on separate line
-	help := n.theme.Palette().Help.Render("←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • Ctrl+t: theme • q: quit")
+	help := n.theme.Palette().Help.Render("←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • enter/e: edit • Ctrl+t: theme • q: quit")
 
 	// Center the navigation line
 	navStyle := lipgloss.NewStyle().Width(n.width).Align(lipgloss.Center)
@@ -276,6 +283,25 @@ func (n *Notebook) GetCurrentPage() string {
 		return ""
 	}
 	return n.pages[n.current]
+}
+
+// GetSelectedDate returns the date the user committed to (Enter/e/i),
+// or empty when the user quit without selecting.
+func (n *Notebook) GetSelectedDate() string {
+	return n.selected
+}
+
+// SetCurrentDate positions the cursor on the given date if present in
+// the page list. No-op when the date is unknown.
+func (n *Notebook) SetCurrentDate(date string) {
+	for i, p := range n.pages {
+		if p == date {
+			n.current = i
+			n.updateViewportContent()
+			n.viewport.GotoTop()
+			return
+		}
+	}
 }
 
 // IsQuitting returns whether the notebook is quitting

@@ -108,8 +108,53 @@ func TestCalendarMonthEnterSelectsDay(t *testing.T) {
 	if !cal.quitting {
 		t.Error("month-view enter should quit")
 	}
+	if cal.IsDirectEdit() {
+		t.Error("plain Enter should drill via notebook, not direct edit")
+	}
 	if cmd == nil {
 		t.Error("month-view enter should return tea.Quit cmd")
+	}
+}
+
+func TestCalendarMonthEKeyDirectEdits(t *testing.T) {
+	cal := NewCalendar(nil)
+	want := cal.cursor.Format("2006-01-02")
+
+	for _, key := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune{'e'}},
+		{Type: tea.KeyRunes, Runes: []rune{'i'}},
+	} {
+		c := NewCalendar(nil)
+		model, cmd := c.Update(key)
+		c = model.(*Calendar)
+		if c.GetSelectedDate() != want {
+			t.Errorf("key %v: selected = %q, want %q", key, c.GetSelectedDate(), want)
+		}
+		if !c.IsDirectEdit() {
+			t.Errorf("key %v: expected directEdit=true", key)
+		}
+		if !c.quitting {
+			t.Errorf("key %v: expected quitting=true", key)
+		}
+		if cmd == nil {
+			t.Errorf("key %v: expected tea.Quit cmd", key)
+		}
+	}
+	_ = cal
+}
+
+func TestCalendarYearEKeyIgnored(t *testing.T) {
+	cal := NewCalendar(nil)
+	cal.view = ViewYear
+
+	model, _ := cal.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	cal = model.(*Calendar)
+
+	if cal.IsDirectEdit() {
+		t.Error("e in year view should not trigger direct edit")
+	}
+	if cal.quitting {
+		t.Error("e in year view should not quit")
 	}
 }
 
