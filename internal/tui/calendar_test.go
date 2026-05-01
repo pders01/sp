@@ -252,6 +252,135 @@ func TestTruncate(t *testing.T) {
 	}
 }
 
+func TestCalendarInitReturnsNil(t *testing.T) {
+	cal := NewCalendar(nil)
+	if cmd := cal.Init(); cmd != nil {
+		t.Errorf("Init() = %v, want nil", cmd)
+	}
+}
+
+func TestCalendarAccessors(t *testing.T) {
+	cal := NewCalendar(nil)
+
+	if got := cal.GetSelectedDate(); got != "" {
+		t.Errorf("GetSelectedDate() before selection = %q, want empty", got)
+	}
+	if cal.IsQuitting() {
+		t.Error("IsQuitting() before quit should be false")
+	}
+
+	cal.selected = "2024-04-04"
+	cal.quitting = true
+	if got := cal.GetSelectedDate(); got != "2024-04-04" {
+		t.Errorf("GetSelectedDate() = %q, want %q", got, "2024-04-04")
+	}
+	if !cal.IsQuitting() {
+		t.Error("IsQuitting() after quit should be true")
+	}
+}
+
+func TestCalendarSetIcons(t *testing.T) {
+	cal := NewCalendar(nil)
+	cal.SetIcons(nerdIcons)
+	if cal.icons != nerdIcons {
+		t.Errorf("SetIcons did not apply: icons = %+v", cal.icons)
+	}
+}
+
+func TestCalendarUpdateIgnoresUnknownMsg(t *testing.T) {
+	cal := NewCalendar(nil)
+	before := cal.cursor
+
+	model, cmd := cal.Update("not a key")
+	cal = model.(*Calendar)
+
+	if cmd != nil {
+		t.Errorf("unknown msg returned cmd %v, want nil", cmd)
+	}
+	if !cal.cursor.Equal(before) {
+		t.Errorf("unknown msg moved cursor from %v to %v", before, cal.cursor)
+	}
+}
+
+func TestCalendarWindowSizeMsgUpdatesDims(t *testing.T) {
+	cal := NewCalendar(nil)
+	model, _ := cal.Update(tea.WindowSizeMsg{Width: 200, Height: 50})
+	cal = model.(*Calendar)
+	if cal.width != 200 || cal.height != 50 {
+		t.Errorf("dims = %dx%d, want 200x50", cal.width, cal.height)
+	}
+}
+
+func TestCalendarMonthKeysFullCoverage(t *testing.T) {
+	cases := []struct {
+		key    tea.KeyMsg
+		deltaD int
+		deltaM int
+		deltaY int
+	}{
+		{tea.KeyMsg{Type: tea.KeyLeft}, -1, 0, 0},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}, -1, 0, 0},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}, 1, 0, 0},
+		{tea.KeyMsg{Type: tea.KeyUp}, -7, 0, 0},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}, -7, 0, 0},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, 7, 0, 0},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'H'}}, 0, -1, 0},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'L'}}, 0, 1, 0},
+	}
+	for _, tc := range cases {
+		cal := NewCalendar(nil)
+		start := cal.cursor
+		want := start.AddDate(tc.deltaY, tc.deltaM, tc.deltaD)
+		model, _ := cal.Update(tc.key)
+		cal = model.(*Calendar)
+		if !cal.cursor.Equal(want) {
+			t.Errorf("key %v: cursor = %v, want %v", tc.key, cal.cursor, want)
+		}
+	}
+}
+
+func TestCalendarYearKeysFullCoverage(t *testing.T) {
+	cases := []struct {
+		key    tea.KeyMsg
+		deltaD int
+		deltaM int
+		deltaY int
+	}{
+		{tea.KeyMsg{Type: tea.KeyLeft}, 0, -1, 0},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}, 0, -1, 0},
+		{tea.KeyMsg{Type: tea.KeyUp}, 0, -3, 0},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}, 0, -3, 0},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, 0, 3, 0},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'H'}}, 0, 0, -1},
+	}
+	for _, tc := range cases {
+		cal := NewCalendar(nil)
+		cal.view = ViewYear
+		start := cal.cursor
+		want := start.AddDate(tc.deltaY, tc.deltaM, tc.deltaD)
+		model, _ := cal.Update(tc.key)
+		cal = model.(*Calendar)
+		if !cal.cursor.Equal(want) {
+			t.Errorf("key %v: cursor = %v, want %v", tc.key, cal.cursor, want)
+		}
+	}
+}
+
+func TestClampBoundaries(t *testing.T) {
+	cases := []struct{ v, lo, hi, want int }{
+		{5, 1, 10, 5},
+		{0, 1, 10, 1},
+		{15, 1, 10, 10},
+		{1, 1, 10, 1},
+		{10, 1, 10, 10},
+	}
+	for _, tc := range cases {
+		if got := clamp(tc.v, tc.lo, tc.hi); got != tc.want {
+			t.Errorf("clamp(%d, %d, %d) = %d, want %d", tc.v, tc.lo, tc.hi, got, tc.want)
+		}
+	}
+}
+
 func TestCalendarYearViewRenders(t *testing.T) {
 	cal := NewCalendar([]string{"2024-03-10", "2024-03-11"})
 	cal.width = 100
