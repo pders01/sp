@@ -567,6 +567,18 @@ func (c *Calendar) ClearSelection() {
 // Used by the router so it doesn't re-add a known day to the notebook.
 func (c *Calendar) HasData(date string) bool { return c.hasData[date] }
 
+// SetCursor moves the cursor to the given YYYY-MM-DD date. Bad input
+// is ignored. Used by the router to sync the calendar to wherever the
+// user ended up in the notebook before popping back.
+func (c *Calendar) SetCursor(date string) {
+	t, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return
+	}
+	c.cursor = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, c.cursor.Location())
+	c.view = ViewMonth
+}
+
 // MarkDate ensures the calendar shows the given day as having data and
 // stores its preview, so the cursor cell repaints after an inline edit
 // or after a notebook returns content for a freshly-created day.
