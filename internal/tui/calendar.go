@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/pders01/sp/internal/editor"
 )
 
 // CalendarView selects which granularity the calendar renders.
@@ -39,6 +40,9 @@ type Calendar struct {
 	width      int
 	height     int
 	theme      *themeWatcher
+	editor     *editor.Editor
+	save       Saver
+	loader     func(date string) (string, error)
 }
 
 // NewCalendar creates a calendar seeded with the given dates as "has data".
@@ -66,6 +70,17 @@ func NewCalendar(dates []string) *Calendar {
 // watchers pick up the value.
 func (c *Calendar) SetThemePref(pref string) {
 	c.theme.SetPref(pref)
+}
+
+// SetEditor wires the external editor and the save / load callbacks
+// used by the e shortcut. With all three present, e suspends the TUI
+// via tea.ExecProcess, persists changes, and resumes the calendar.
+// With any unset, e falls back to quit-with-direct-edit so the caller
+// can run the editor itself.
+func (c *Calendar) SetEditor(ed *editor.Editor, save Saver, load func(date string) (string, error)) {
+	c.editor = ed
+	c.save = save
+	c.loader = load
 }
 
 // SetContents stores per-day previews extracted from the given content map.
@@ -127,10 +142,42 @@ func (c *Calendar) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusExpireMsg:
 		c.theme.HandleStatusExpire()
 		return c, nil
+	case editDoneMsg:
+		return c.finishEdit(msg)
 	case tea.KeyMsg:
 		return c.handleKey(msg)
 	}
 	return c, nil
+}
+
+func (c *Calendar) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.cleanup != nil {
+		defer msg.cleanup()
+	}
+	if msg.err != nil {
+		c.theme.SetStatus(fmt.Sprintf("editor: %v", msg.err), 2*time.Second)
+		return c, c.theme.expireStatusCmd(2 * time.Second)
+	}
+	newContent, rerr := editor.ReadEdited(msg.path)
+	if rerr != nil {
+		c.theme.SetStatus(fmt.Sprintf("read: %v", rerr), 2*time.Second)
+		return c, c.theme.expireStatusCmd(2 * time.Second)
+	}
+	if c.save != nil {
+		if serr := c.save(msg.date, newContent); serr != nil {
+			c.theme.SetStatus(fmt.Sprintf("save: %v", serr), 2*time.Second)
+			return c, c.theme.expireStatusCmd(2 * time.Second)
+		}
+	}
+	// Reflect the new entry in the calendar's data so cells repaint.
+	if newContent != "" {
+		c.hasData[msg.date] = true
+		if preview := extractPreview(newContent); preview != "" {
+			c.previews[msg.date] = preview
+		}
+	}
+	c.theme.SetStatus("Saved", 1500*time.Millisecond)
+	return c, c.theme.expireStatusCmd(1500 * time.Millisecond)
 }
 
 func (c *Calendar) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -164,9 +211,12 @@ func (c *Calendar) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if c.view == ViewYear {
 			return c, nil
 		}
-		// Power-user shortcut: skip the notebook drill and go straight
-		// to the editor for the picked day.
-		c.selected = c.cursor.Format("2006-01-02")
+		date := c.cursor.Format("2006-01-02")
+		if cmd := c.startEdit(date); cmd != nil {
+			return c, cmd
+		}
+		// Fallback: caller wired no editor; quit and let main run it.
+		c.selected = date
 		c.directEdit = true
 		c.quitting = true
 		return c, tea.Quit
@@ -499,6 +549,28 @@ func (c *Calendar) GetSelectedDate() string { return c.selected }
 // IsDirectEdit reports whether the user pressed e/i to skip the
 // notebook drill and jump straight to the editor.
 func (c *Calendar) IsDirectEdit() bool { return c.directEdit }
+
+// startEdit suspends the TUI to run the editor on the picked day. Returns
+// nil when no editor is wired or preparation fails (caller falls back to
+// quit-with-direct-edit so the orchestrator can run the editor).
+func (c *Calendar) startEdit(date string) tea.Cmd {
+	if c.editor == nil || c.save == nil || c.loader == nil {
+		return nil
+	}
+	content, lerr := c.loader(date)
+	if lerr != nil {
+		c.theme.SetStatus(fmt.Sprintf("load: %v", lerr), 2*time.Second)
+		return c.theme.expireStatusCmd(2 * time.Second)
+	}
+	cmd, path, cleanup, perr := c.editor.Prepare(content)
+	if perr != nil {
+		c.theme.SetStatus(fmt.Sprintf("editor prepare: %v", perr), 2*time.Second)
+		return c.theme.expireStatusCmd(2 * time.Second)
+	}
+	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
+		return editDoneMsg{date: date, path: path, cleanup: cleanup, err: execErr}
+	})
+}
 
 // IsQuitting reports whether the calendar is exiting.
 func (c *Calendar) IsQuitting() bool { return c.quitting }

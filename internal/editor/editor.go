@@ -25,6 +25,53 @@ func NewEditor() (*Editor, error) {
 	return editor, nil
 }
 
+// Prepare builds the *exec.Cmd that opens content in the user's editor
+// alongside the temp-file path that holds the buffered content and a
+// cleanup func to remove that file. Callers wait for the command to
+// finish (either by Run-ing it or by handing it to tea.ExecProcess),
+// then call ReadEdited(path) to fetch the saved content before
+// invoking cleanup.
+func (e *Editor) Prepare(content string) (cmd *exec.Cmd, path string, cleanup func(), err error) {
+	tmpFile, err := os.CreateTemp("", "sp-*.md")
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("failed to create temp file: %w", err)
+	}
+	cleanup = func() { _ = os.Remove(tmpFile.Name()) }
+
+	if _, werr := tmpFile.WriteString(content); werr != nil {
+		cleanup()
+		return nil, "", nil, fmt.Errorf("failed to write to temp file: %w", werr)
+	}
+	if cerr := tmpFile.Close(); cerr != nil {
+		cleanup()
+		return nil, "", nil, fmt.Errorf("failed to close temp file: %w", cerr)
+	}
+
+	args := make([]string, 0, len(e.args)+1)
+	args = append(args, e.args...)
+	args = append(args, tmpFile.Name())
+	cmd = exec.Command(e.command, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd, tmpFile.Name(), cleanup, nil
+}
+
+// IsGUI reports whether the resolved editor is a GUI binary that
+// detaches from the terminal. TUI callers should fall back to a
+// suspend-and-edit flow for these editors because tea.ExecProcess
+// returns immediately when the process forks.
+func (e *Editor) IsGUI() bool { return e.isGUI }
+
+// ReadEdited reads the content the editor wrote to path.
+func ReadEdited(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to read edited file: %w", err)
+	}
+	return string(data), nil
+}
+
 // Edit opens content in the user's preferred editor. The filename
 // argument is reserved for future use (so the temp file can carry a
 // meaningful suffix); right now we always use sp-*.md.

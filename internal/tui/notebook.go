@@ -10,7 +10,21 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/pders01/sp/internal/editor"
 )
+
+// Saver persists an edited scratchpad. Returning a non-nil error
+// surfaces a transient banner inside the view but does not exit it.
+type Saver func(date string, content string) error
+
+// editDoneMsg is dispatched after tea.ExecProcess has handed control
+// back from the external editor.
+type editDoneMsg struct {
+	date    string
+	path    string
+	cleanup func()
+	err     error
+}
 
 // Notebook represents the notebook view
 type Notebook struct {
@@ -24,6 +38,8 @@ type Notebook struct {
 	selected string
 	icons    IconSet
 	theme    *themeWatcher
+	editor   *editor.Editor
+	save     Saver
 }
 
 // NewNotebook creates a new notebook instance. Pages are copied and
@@ -46,6 +62,16 @@ func NewNotebook(pages []string) *Notebook {
 // watchers and the first render pick up the value.
 func (n *Notebook) SetThemePref(pref string) {
 	n.theme.SetPref(pref)
+}
+
+// SetEditor wires the external editor and a save callback. With both
+// set, Enter / e / i suspend the TUI, run the editor via
+// tea.ExecProcess, persist changes, and resume the notebook with the
+// updated content. With either unset, those keys remain a quit-with-
+// selected fallback so the caller can run the editor itself.
+func (n *Notebook) SetEditor(ed *editor.Editor, save Saver) {
+	n.editor = ed
+	n.save = save
 }
 
 // Init initializes the notebook
@@ -83,10 +109,62 @@ func (n *Notebook) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusExpireMsg:
 		n.theme.HandleStatusExpire()
 		return n, nil
+	case editDoneMsg:
+		return n.finishEdit(msg)
 	case tea.KeyMsg:
 		return n.handleKey(msg)
 	}
 	return n, nil
+}
+
+// startEdit prepares the editor command for the given date and asks
+// bubbletea to suspend the TUI while it runs. Returns nil when no
+// editor is wired or preparation fails (the caller falls back to
+// quit-with-selected so the orchestrator can run the editor).
+func (n *Notebook) startEdit(date string) tea.Cmd {
+	if n.editor == nil || n.save == nil {
+		return nil
+	}
+	cmd, path, cleanup, err := n.editor.Prepare(n.contents[date])
+	if err != nil {
+		n.flashError(fmt.Sprintf("editor prepare: %v", err))
+		return n.theme.expireStatusCmd(2 * time.Second)
+	}
+	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
+		return editDoneMsg{date: date, path: path, cleanup: cleanup, err: execErr}
+	})
+}
+
+// finishEdit reads the edited buffer, persists changes, and refreshes
+// the rendered viewport. Errors surface as transient status banners.
+func (n *Notebook) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.cleanup != nil {
+		defer msg.cleanup()
+	}
+	if msg.err != nil {
+		n.flashError(fmt.Sprintf("editor: %v", msg.err))
+		return n, n.theme.expireStatusCmd(2 * time.Second)
+	}
+	newContent, rerr := editor.ReadEdited(msg.path)
+	if rerr != nil {
+		n.flashError(fmt.Sprintf("read: %v", rerr))
+		return n, n.theme.expireStatusCmd(2 * time.Second)
+	}
+	if newContent == n.contents[msg.date] {
+		return n, nil
+	}
+	n.contents[msg.date] = newContent
+	if serr := n.save(msg.date, newContent); serr != nil {
+		n.flashError(fmt.Sprintf("save: %v", serr))
+		return n, n.theme.expireStatusCmd(2 * time.Second)
+	}
+	n.theme.SetStatus("Saved", 1500*time.Millisecond)
+	n.updateViewportContent()
+	return n, n.theme.expireStatusCmd(1500 * time.Millisecond)
+}
+
+func (n *Notebook) flashError(text string) {
+	n.theme.SetStatus(text, 2*time.Second)
 }
 
 func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -95,11 +173,17 @@ func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		n.quitting = true
 		return n, tea.Quit
 	case "enter", "e", "i":
-		if len(n.pages) > 0 {
-			n.selected = n.pages[n.current]
-			n.quitting = true
-			return n, tea.Quit
+		if len(n.pages) == 0 {
+			return n, nil
 		}
+		date := n.pages[n.current]
+		if cmd := n.startEdit(date); cmd != nil {
+			return n, cmd
+		}
+		// Fallback: caller wired no editor; quit and let main run it.
+		n.selected = date
+		n.quitting = true
+		return n, tea.Quit
 	case "ctrl+t":
 		n.theme.Cycle()
 		return n, nil

@@ -82,65 +82,55 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 	}
 	icons := tui.NewIconSet(cfg.UI.Icons)
 
-	pickedDate, ok, err := pickDate(mgr, icons, cfg)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return nil
+	ed, eerr := editor.NewEditor()
+	if eerr != nil {
+		return fmt.Errorf("failed to initialize editor: %w", eerr)
 	}
 
-	return editAndSave(mgr, pickedDate)
-}
-
-// pickDate runs the appropriate TUI chain and returns the date the user
-// committed to. ok is false when the user quit out without picking.
-func pickDate(mgr *scratchpad.Manager, icons tui.IconSet, cfg *config.Config) (date string, ok bool, err error) {
 	switch {
 	case calendarFlag:
-		return runCalendarChain(mgr, icons, cfg)
+		return runCalendarFlow(mgr, ed, icons, cfg)
 	case notebookFlag:
-		return runNotebookChain(mgr, icons, cfg, "")
+		return runNotebookFlow(mgr, ed, icons, cfg, "")
 	default:
-		// Default flow: edit today.
-		return "", true, nil
+		return editAndSave(mgr, ed, "")
 	}
 }
 
-func runCalendarChain(mgr *scratchpad.Manager, icons tui.IconSet, cfg *config.Config) (date string, ok bool, err error) {
+func runCalendarFlow(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *config.Config) error {
 	dates, contents, err := loadAll(mgr)
 	if err != nil {
-		return "", false, err
+		return err
 	}
 	cal := tui.NewCalendar(dates)
 	cal.SetIcons(icons)
 	cal.SetThemePref(cfg.UI.Theme)
 	cal.SetContents(contents)
+	cal.SetEditor(ed, makeSaver(mgr), makeLoader(mgr))
 	defer cal.Close()
 
 	if _, rerr := tea.NewProgram(cal, tea.WithAltScreen()).Run(); rerr != nil {
-		return "", false, fmt.Errorf("failed to run calendar TUI: %w", rerr)
+		return fmt.Errorf("failed to run calendar TUI: %w", rerr)
 	}
 
 	picked := cal.GetSelectedDate()
 	if picked == "" {
-		fmt.Println("No date selected. Exiting.")
-		return "", false, nil
+		// User pressed e (handled inside the calendar) or quit.
+		return nil
 	}
 	if cal.IsDirectEdit() {
-		return picked, true, nil
+		// Reached only when the editor wasn't wired; preserve the old
+		// "calendar quits + main runs editor" path as a fallback.
+		return editAndSave(mgr, ed, picked)
 	}
 	// Drill into the notebook positioned on the picked day.
-	return runNotebookChain(mgr, icons, cfg, picked)
+	return runNotebookFlow(mgr, ed, icons, cfg, picked)
 }
 
-// runNotebookChain runs the notebook view. When startDate is non-empty,
-// the cursor positions on it and the date is added to the page list if
-// missing so brand-new days are reachable.
-func runNotebookChain(mgr *scratchpad.Manager, icons tui.IconSet, cfg *config.Config, startDate string) (date string, ok bool, err error) {
+func runNotebookFlow(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *config.Config, startDate string) error {
 	dates, contents, err := loadAll(mgr)
 	if err != nil {
-		return "", false, err
+		return err
 	}
 	if startDate != "" {
 		if _, exists := contents[startDate]; !exists {
@@ -150,27 +140,50 @@ func runNotebookChain(mgr *scratchpad.Manager, icons tui.IconSet, cfg *config.Co
 	}
 	if len(dates) == 0 {
 		fmt.Println("No scratchpad pages found.")
-		return "", false, nil
+		return nil
 	}
 
 	nb := tui.NewNotebook(dates)
 	nb.SetIcons(icons)
 	nb.SetThemePref(cfg.UI.Theme)
 	nb.SetContents(contents)
+	nb.SetEditor(ed, makeSaver(mgr))
 	if startDate != "" {
 		nb.SetCurrentDate(startDate)
 	}
 	defer nb.Close()
 
 	if _, rerr := tea.NewProgram(nb, tea.WithAltScreen()).Run(); rerr != nil {
-		return "", false, fmt.Errorf("failed to run notebook TUI: %w", rerr)
+		return fmt.Errorf("failed to run notebook TUI: %w", rerr)
 	}
 
 	picked := nb.GetSelectedDate()
 	if picked == "" {
-		return "", false, nil
+		return nil
 	}
-	return picked, true, nil
+	// Fallback path: editor wasn't wired, run it now.
+	return editAndSave(mgr, ed, picked)
+}
+
+func makeSaver(mgr *scratchpad.Manager) tui.Saver {
+	return func(date, content string) error {
+		sp, err := mgr.GetByDate(date)
+		if err != nil {
+			return err
+		}
+		sp.Content = content
+		return mgr.Save(sp)
+	}
+}
+
+func makeLoader(mgr *scratchpad.Manager) func(string) (string, error) {
+	return func(date string) (string, error) {
+		sp, err := mgr.GetByDate(date)
+		if err != nil {
+			return "", err
+		}
+		return sp.Content, nil
+	}
 }
 
 // loadAll reads every saved scratchpad and returns dates (descending)
@@ -195,8 +208,10 @@ func loadAll(mgr *scratchpad.Manager) (dates []string, contents map[string]strin
 }
 
 // editAndSave opens the picked date (or today, when empty) in $EDITOR
-// and persists changes when the user actually edited something.
-func editAndSave(mgr *scratchpad.Manager, pickedDate string) error {
+// and persists changes when the user actually edited something. Used
+// for the bare `sp` flow and as a fallback when the TUI couldn't wire
+// the editor inline.
+func editAndSave(mgr *scratchpad.Manager, ed *editor.Editor, pickedDate string) error {
 	var sp *scratchpad.Scratchpad
 	var err error
 	if pickedDate == "" {
@@ -206,11 +221,6 @@ func editAndSave(mgr *scratchpad.Manager, pickedDate string) error {
 	}
 	if err != nil {
 		return fmt.Errorf("failed to load scratchpad: %w", err)
-	}
-
-	ed, err := editor.NewEditor()
-	if err != nil {
-		return fmt.Errorf("failed to initialize editor: %w", err)
 	}
 
 	newContent, err := ed.Edit(sp.Content, sp.Date+".md")
