@@ -401,11 +401,15 @@ func (c *Calendar) renderMonthTile(year int, month time.Month, w, h int) string 
 	cursorMonth := month == c.cursor.Month()
 	p := c.theme.Palette()
 
+	titleText := first.Format("January")
+	if cursorMonth {
+		titleText = "▌ " + titleText + " ▐"
+	}
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(p.Text)
 	if cursorMonth {
 		titleStyle = titleStyle.Foreground(p.Highlight)
 	}
-	titleLine := titleStyle.Render(first.Format("January"))
+	titleLine := titleStyle.Render(titleText)
 
 	var summary string
 	switch {
@@ -419,20 +423,12 @@ func (c *Calendar) renderMonthTile(year int, month time.Month, w, h int) string 
 
 	spark := c.monthSparkline(first, last, w-4)
 
-	tile := lipgloss.NewStyle().
-		Width(w).
-		Height(h).
-		Padding(1, 2).
-		Align(lipgloss.Center, lipgloss.Center)
-	if cursorMonth {
-		tile = tile.Background(p.TileBg)
-	}
-
 	lines := []string{titleLine, summary}
 	if spark != "" {
 		lines = append(lines, spark)
 	}
-	return tile.Render(lipgloss.JoinVertical(lipgloss.Center, lines...))
+	content := lipgloss.JoinVertical(lipgloss.Center, lines...)
+	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, content)
 }
 
 // monthSparkline returns one row of glyphs (one per day) with filled markers
