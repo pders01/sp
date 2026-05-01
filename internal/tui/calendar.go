@@ -396,12 +396,18 @@ func (c *Calendar) renderDayCell(day time.Time, month time.Month, w, h int) stri
 		dayStyle = dayStyle.Foreground(p.Text)
 	}
 
-	label := dayLabel
+	var rendered string
 	if cursorMatch {
-		label = "▌" + strings.TrimSpace(dayLabel)
+		// Bracket marker stays un-underlined so the highlight reads as
+		// "this is the day" without dragging the line across the glyph.
+		bracket := lipgloss.NewStyle().Foreground(p.Highlight).Bold(true).Render("▌")
+		number := dayStyle.Render(strings.TrimSpace(dayLabel))
+		rendered = bracket + number
+	} else {
+		rendered = dayStyle.Render(dayLabel)
 	}
 
-	lines := []string{dayStyle.Render(label)}
+	lines := []string{rendered}
 	if h > minCellHeight && !outOfMonth {
 		if ann := c.cellAnnotation(day, dateStr, innerW); ann != "" {
 			lines = append(lines, ann)
