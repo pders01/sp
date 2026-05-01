@@ -184,7 +184,7 @@ func (c *Calendar) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "q", "esc":
 		c.quitting = true
-		return c, tea.Quit
+		return c, nil
 	case "ctrl+t":
 		c.theme.Cycle()
 		return c, nil
@@ -203,10 +203,9 @@ func (c *Calendar) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return c, nil
 		}
 		// Drill into the notebook positioned on the picked day; the
-		// caller routes from notebook to editor.
+		// router pops the calendar and switches to the notebook.
 		c.selected = c.cursor.Format("2006-01-02")
-		c.quitting = true
-		return c, tea.Quit
+		return c, nil
 	case "e", "i":
 		if c.view == ViewYear {
 			return c, nil
@@ -215,11 +214,11 @@ func (c *Calendar) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if cmd := c.startEdit(date); cmd != nil {
 			return c, cmd
 		}
-		// Fallback: caller wired no editor; quit and let main run it.
+		// Fallback: caller wired no editor; signal the orchestrator.
 		c.selected = date
 		c.directEdit = true
 		c.quitting = true
-		return c, tea.Quit
+		return c, nil
 	}
 
 	if c.view == ViewYear {
@@ -549,6 +548,28 @@ func (c *Calendar) GetSelectedDate() string { return c.selected }
 // IsDirectEdit reports whether the user pressed e/i to skip the
 // notebook drill and jump straight to the editor.
 func (c *Calendar) IsDirectEdit() bool { return c.directEdit }
+
+// ClearSelection wipes drill / direct-edit / quit state so the router
+// can resume the calendar after a notebook pop.
+func (c *Calendar) ClearSelection() {
+	c.selected = ""
+	c.directEdit = false
+	c.quitting = false
+}
+
+// HasData reports whether the calendar already tracks the given date.
+// Used by the router so it doesn't re-add a known day to the notebook.
+func (c *Calendar) HasData(date string) bool { return c.hasData[date] }
+
+// MarkDate ensures the calendar shows the given day as having data and
+// stores its preview, so the cursor cell repaints after an inline edit
+// or after a notebook returns content for a freshly-created day.
+func (c *Calendar) MarkDate(date, preview string) {
+	c.hasData[date] = true
+	if preview != "" {
+		c.previews[date] = preview
+	}
+}
 
 // startEdit suspends the TUI to run the editor on the picked day. Returns
 // nil when no editor is wired or preparation fails (caller falls back to
