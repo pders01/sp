@@ -153,15 +153,24 @@ sp --version
 
 ## Development
 
-For development builds, you can build locally:
+For development builds, use the Makefile or `go build` directly. The
+build target is the package directory (`./cmd/sp`), not the entry
+file:
 
 ```bash
-# Build for current platform
-go build -o sp cmd/sp/main.go
+# Make targets
+make build              # ./sp
+make release-snapshot   # GoReleaser snapshot to ./dist
 
-# Build for specific platform
-GOOS=darwin GOARCH=amd64 go build -o sp-darwin-amd64 cmd/sp/main.go
+# Manual go build
+go build -o sp ./cmd/sp
+
+# Cross-compile
+GOOS=darwin GOARCH=amd64 go build -o sp-darwin-amd64 ./cmd/sp
 ```
+
+`make ci` runs the full local pipeline (`deps → lint → test → build`)
+and is the same set of checks the GitHub Actions CI workflow runs.
 
 ## Notes
 

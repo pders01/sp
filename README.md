@@ -1,174 +1,184 @@
-# sp - Daily Scratchpad
+# sp — Daily Scratchpad
 
-A CLI/TUI-based scratchpad application for quickly storing notes, todos, and thoughts. Built with Go and charm.sh tools.
+CLI/TUI scratchpad for daily notes, todos, and quick thoughts. Built
+with Go and the [charm.sh](https://charm.sh) toolchain.
 
 ## Features
 
-- **Daily Scratchpad**: Automatically creates a new scratchpad for each day
-- **TUI Interface**: Beautiful terminal user interface using charm.sh/bubbletea
-- **Markdown Support**: Write notes in markdown format with rich rendering
-- **Calendar View**: Browse and select historical scratchpads with TUI
-- **Notebook View**: Browse all scratchpads with markdown rendering and navigation
-- **External Editor Integration**: Use your preferred editor (vim, VSCode, etc.)
-- **Auto-save**: Content is automatically saved when you exit the editor
-- **Clean Daily Reset**: Each day starts with a fresh scratchpad
-- **Vim-style Navigation**: Familiar key bindings throughout the interface
+- Daily scratchpad: a fresh page per day, kept on disk forever
+- Three view modes that drill into one another:
+  - Year / month calendar with per-day previews and entry sparklines
+  - Notebook viewer with glamour-rendered markdown, scrubbable across
+    pages
+  - External editor (`$EDITOR`) for actually writing
+- One semantic rule across the TUI: **Enter goes deeper**
+- Inline editing: hand the editor to `tea.ExecProcess`, save on exit,
+  resume the same view with a refreshed render — no shell hop between
+  edits
+- Light / dark palette swap driven by your terminal: `Ctrl+T` toggles
+  in-session, `SIGUSR1` re-detects, macOS appearance changes are
+  picked up automatically via an fsnotify watcher on the global
+  preferences plist
+- Glyph set choice: nerd-font icons or pure-ASCII fallback, set in
+  `~/.sp/config.toml`
 
 ## Installation
 
-### Prerequisites
+### Homebrew
 
-- Go 1.24.4 or later
-
-### Build from Source
-
-```bash
-git clone https://github.com/pders01/sp.git
-cd sp
-go build -o sp ./cmd/sp
+```sh
+brew tap pders01/sp
+brew install sp
 ```
 
-### Install Locally
+### Build from source
 
-```bash
-go install ./cmd/sp
+Requires Go 1.24 or later.
+
+```sh
+git clone https://github.com/pders01/sp.git
+cd sp
+make install   # → $GOPATH/bin/sp
+```
+
+Or manually:
+
+```sh
+go build -o sp ./cmd/sp
 ```
 
 ## Usage
 
-### Basic Usage
-
-```bash
-# Open today's scratchpad
-sp
-
-# Open calendar view to select a date
-sp --calendar
-
-# Open notebook view to browse all scratchpads
-sp --notebook
+```sh
+sp          # open today's page in $EDITOR
+sp -n       # notebook viewer; Enter / e / i opens the editor
+sp -c       # calendar; Enter drills into the notebook on that day
+sp --version
 ```
 
-### Editor Support
+### Flow
 
-The application uses your preferred editor for editing scratchpads. It will:
+```
+sp -c   →   calendar   ──Enter──→   notebook   ──Enter/e/i──→   editor
+                ▲ ▲                     │                          │
+                │ └────── Esc ──────────┘                          │
+                │                                                  │
+                └─────── editor exits, view resumes ───────────────┘
+            (Calendar 'e' is a power-user shortcut: skip the notebook
+             and edit the picked day immediately.)
+```
 
-1. **Check `$EDITOR` environment variable** first
-2. **Check `$VISUAL` environment variable** as fallback
-3. **Use platform-specific defaults** (vim, nano, etc.)
+After the editor saves and exits, the active view repaints with the
+updated content. Pop from notebook back to calendar with `Esc`/
+`Backspace`; the calendar cursor follows wherever you were in the
+notebook.
 
-**Supported editors include:**
+### Key reference
 
-- **Terminal editors**: vim, nvim, nano, micro, emacs
-- **GUI editors**: VSCode, Sublime Text, Atom, gedit, kate
-- **Platform editors**: Notepad (Windows), TextEdit (macOS)
+#### Calendar
 
-**To set your preferred editor:**
+| Key                | Action                                |
+| ------------------ | ------------------------------------- |
+| `←/h` `→/l`        | day (month view) / month (year view)  |
+| `↑/k` `↓/j`        | week (month view) / row (year view)   |
+| `H` `L`            | jump month / year                     |
+| `Enter`            | drill into the notebook on that day   |
+| `e` `i`            | edit the day immediately (month view) |
+| `m` `y`            | switch to month / year view           |
+| `t`                | reset cursor to today                 |
+| `Ctrl+T`           | cycle theme: auto → light → dark      |
+| `q` `Ctrl+C` `Esc` | quit                                  |
 
-```bash
+#### Notebook
+
+| Key                  | Action                          |
+| -------------------- | ------------------------------- |
+| `←/h` `→/l`          | previous / next page            |
+| `↑/k` `↓/j`          | scroll content                  |
+| `Ctrl+u` `Ctrl+d`    | half-page up / down             |
+| `b` `f` `pgup`/`pgdn`| full-page up / down             |
+| `g` `G`              | jump to top / bottom            |
+| `Enter` `e` `i`      | edit current page               |
+| `Esc` `Backspace`    | pop back to calendar (when -c)  |
+| `Ctrl+T`             | cycle theme                     |
+| `q` `Ctrl+C`         | quit                            |
+
+## Configuration
+
+Optional TOML at `~/.sp/config.toml`. Missing fields fall back to the
+defaults shown in `config.example.toml`:
+
+```toml
+[ui]
+icons = "unicode"   # or "nerd" if you have a Nerd Font installed
+theme = "auto"      # "auto" | "light" | "dark"
+```
+
+`auto` resolves via `GLAMOUR_STYLE` → `COLORFGBG` → terminal
+detection → macOS `AppleInterfaceStyle`. Send `SIGUSR1` (`pkill -USR1
+sp`) to re-detect after a manual switch.
+
+## Editor support
+
+`sp` resolves the editor via `$EDITOR`, then `$VISUAL`, then
+platform-specific fallbacks (vim, nvim, nano, micro, emacs, code,
+etc.).
+
+```sh
 export EDITOR=vim
-# or
 export EDITOR="code --wait"
 ```
 
-### Calendar Controls
+**Caveat:** GUI editors that fork-and-detach (VS Code without
+`--wait`, Sublime, Atom) will return immediately when invoked from
+inside the TUI and look broken — `tea.ExecProcess` waits on the
+launched process. For those, stick with bare `sp` (the synchronous
+path keeps the original GUI polling loop).
 
-- **Arrow Keys**: Navigate through dates
-- **Enter**: Select a date and open its scratchpad
-- **Ctrl+C** or **Esc**: Exit calendar without selection
+## Data storage
 
-### Notebook Controls
+Scratchpads live in `~/.sp/<YYYY-MM-DD>.json`. Each file holds the
+date, content (raw markdown), and creation / modified timestamps.
 
-The notebook view provides a full-screen interface for browsing all scratchpads with rich markdown rendering:
+## Project layout
 
-- **Page Navigation**: `←/h` (previous), `→/l` (next)
-- **Content Scrolling**: `↑/k` (up), `↓/j` (down)
-- **Page Scrolling**: `Ctrl+u` (page up), `Ctrl+d` (page down), `b/f` (full page)
-- **Jump to**: `g` (top), `G` (bottom)
-- **Quit**: `q` or `Ctrl+c`
-
-The interface automatically shows neighboring dates in the footer and provides smooth navigation between pages.
-
-## Data Storage
-
-Scratchpads are stored as JSON files in `~/.sp/` directory:
-
-```plain
-~/.sp/
-├── 2024-01-15.json
-├── 2024-01-16.json
-└── 2024-01-17.json
 ```
-
-Each file contains:
-
-- Date
-- Content (markdown text)
-- Creation timestamp
-- Last modified timestamp
-
-## Project Structure
-
-```plain
 sp/
-├── cmd/sp/
-│   └── main.go          # CLI entry point with Cobra integration
+├── cmd/sp/                main.go            Cobra entry point
 ├── internal/
-│   ├── editor/
-│   │   └── editor.go     # External editor integration
-│   ├── scratchpad/
-│   │   └── scratchpad.go # Core scratchpad logic
+│   ├── config/            config.go          TOML loader
+│   ├── editor/            editor.go          editor resolution + Prepare/Edit
+│   ├── scratchpad/        scratchpad.go      JSON store, ListDates, Save/Load
 │   └── tui/
-│       ├── calendar.go   # Calendar view component
-│       └── notebook.go   # Notebook view component
-├── go.mod
-└── README.md
+│       ├── app.go         router model: calendar ↔ notebook ↔ editor
+│       ├── calendar.go    full-screen month / year grid
+│       ├── notebook.go    glamour viewer with inline edit
+│       ├── branding.go    Palette struct + light/dark variants
+│       ├── icons.go       IconSet (nerd / unicode)
+│       ├── theme.go       glamour style resolution
+│       ├── theme_watcher.go  shared SIGUSR1 + plist subscription
+│       └── theme_watch_*.go  per-OS plist watchers
+├── Makefile               build / test / lint / coverage / release
+├── .golangci.yml          mirrors fwrd's lint config
+├── .github/workflows/     ci.yml + release.yml
+├── config.example.toml
+└── .goreleaser.yml
 ```
 
 ## Development
 
-### Dependencies
-
-- `github.com/charmbracelet/bubbletea` - TUI framework
-- `github.com/charmbracelet/bubbles` - TUI components (viewport, textarea)
-- `github.com/charmbracelet/lipgloss` - Styling
-- `github.com/charmbracelet/glamour` - Markdown rendering
-- `github.com/spf13/cobra` - CLI framework
-- `github.com/stretchr/testify` - Testing framework
-
-### Building
-
-```bash
-go build -o sp ./cmd/sp
+```sh
+make build       # ./sp
+make test        # all packages
+make test-race   # race detector
+make coverage    # writes coverage.html
+make lint        # golangci-lint (fall back to go vet)
+make modernize   # gopls source.fixAll
+make ci          # deps + lint + test + build
 ```
 
-### Running Tests
-
-```bash
-go test ./...
-```
-
-## Roadmap
-
-- [x] ~~TUI calendar view for browsing historical entries~~
-- [x] ~~External editor integration~~
-- [x] ~~Notebook view with markdown rendering~~
-- [x] ~~Vim-style navigation controls~~
-- [x] ~~Comprehensive test coverage~~
-- [ ] Search functionality across all scratchpads
-- [ ] Export scratchpads to different formats
-- [ ] Tags and categories
-- [ ] Backup and sync functionality
-- [ ] Custom themes and styling
-- [ ] Keyboard shortcuts customization
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+CI matrix runs on Linux, macOS, and Windows; lint pinned to
+`golangci-lint v1.64.8`. See `RELEASE.md` for the GoReleaser flow.
 
 ## License
 
