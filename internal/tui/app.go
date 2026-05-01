@@ -115,10 +115,15 @@ func (a *App) updateNotebook(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case a.nb.IsPopping():
 		// Esc / Backspace: pop to calendar when one is behind us, else
 		// quit. Sync any inline-edit changes into the calendar's data
-		// so the cell paints correctly when we return.
+		// so the cell paints correctly when we return, and move the
+		// calendar cursor to wherever the user landed in the notebook
+		// so the pop doesn't feel stale.
 		date, content := a.nb.CurrentContent()
 		if content != "" {
 			a.cal.MarkDate(date, extractPreview(content))
+		}
+		if date != "" {
+			a.cal.SetCursor(date)
 		}
 		a.nb.ClearState()
 		if a.canPop {

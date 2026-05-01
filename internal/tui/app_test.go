@@ -137,6 +137,32 @@ func TestAppViewSwitchesByMode(t *testing.T) {
 	}
 }
 
+func TestAppPopSyncsCalendarCursor(t *testing.T) {
+	app := newTestApp(ModeCalendar)
+	defer app.Close()
+	app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Drill into the notebook, scroll forward via 'l', then pop. The
+	// calendar should land on the page the notebook was showing, not
+	// on the original drill date.
+	app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// Notebook starts on the drilled date; pages descending so 'l'
+	// (right) advances to an older page. Push to the next page if
+	// available, otherwise just verify cursor sync to current page.
+	if len(app.nb.pages) > 1 {
+		app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	}
+	wantDate, _ := app.nb.CurrentContent()
+	app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+
+	if got := app.cal.cursor.Format("2006-01-02"); got != wantDate {
+		t.Errorf("calendar cursor after pop = %q, want %q", got, wantDate)
+	}
+	if app.cal.view != ViewMonth {
+		t.Errorf("pop should land on month view, got %v", app.cal.view)
+	}
+}
+
 func TestAppCalendarDrillSeedsMissingDate(t *testing.T) {
 	cal := NewCalendar(nil)
 	nb := NewNotebook(nil)
