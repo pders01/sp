@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+
 // CalendarView selects which granularity the calendar renders.
 type CalendarView int
 
@@ -37,6 +38,7 @@ type Calendar struct {
 	quitting bool
 	width    int
 	height   int
+	theme    *themeWatcher
 }
 
 // NewCalendar creates a calendar seeded with the given dates as "has data".
@@ -56,7 +58,14 @@ func NewCalendar(dates []string) *Calendar {
 		view:     ViewMonth,
 		width:    80,
 		height:   24,
+		theme:    newThemeWatcher(ThemePrefAuto),
 	}
+}
+
+// SetThemePref sets the initial theme preference. Call before Init so
+// watchers pick up the value.
+func (c *Calendar) SetThemePref(pref string) {
+	c.theme.SetPref(pref)
 }
 
 // SetContents stores per-day previews extracted from the given content map.
@@ -90,8 +99,15 @@ func extractPreview(body string) string {
 	return ""
 }
 
-// Init implements tea.Model.
-func (c *Calendar) Init() tea.Cmd { return nil }
+// Init implements tea.Model. Starts the theme watchers and arms the
+// long-lived theme-event subscription.
+func (c *Calendar) Init() tea.Cmd {
+	c.theme.start()
+	return c.theme.wait()
+}
+
+// Close releases theme watchers. Safe to call multiple times.
+func (c *Calendar) Close() { c.theme.stop() }
 
 // Update implements tea.Model.
 func (c *Calendar) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -99,6 +115,17 @@ func (c *Calendar) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		c.width = msg.Width
 		c.height = msg.Height
+		return c, nil
+	case themeChangedMsg:
+		var cmds []tea.Cmd
+		if c.theme.applyResolved() {
+			c.theme.SetStatus(MsgThemeApplied(c.theme.Pref(), c.theme.Style()), 2*time.Second)
+			cmds = append(cmds, c.theme.expireStatusCmd(2*time.Second))
+		}
+		cmds = append(cmds, c.theme.wait())
+		return c, tea.Batch(cmds...)
+	case statusExpireMsg:
+		c.theme.HandleStatusExpire()
 		return c, nil
 	case tea.KeyMsg:
 		return c.handleKey(msg)
@@ -111,6 +138,9 @@ func (c *Calendar) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+c", "q", "esc":
 		c.quitting = true
 		return c, tea.Quit
+	case "ctrl+t":
+		c.theme.Cycle()
+		return c, nil
 	case "t", "T":
 		c.cursor = c.today
 		return c, nil
@@ -188,14 +218,22 @@ func (c *Calendar) View() string {
 	case ViewYear:
 		headerText = withIcon(c.icons.Calendar, fmt.Sprintf("Calendar · %d", c.cursor.Year()))
 		body = c.renderYear(c.width, bodyHeight)
-		helpText = "←/h/→/l: month • ↑/k/↓/j: row • H/L: year • enter: open • m: month view • t: today • q: quit"
+		helpText = "←/h/→/l: month • ↑/k/↓/j: row • H/L: year • enter: open • m: month view • t: today • Ctrl+t: theme • q: quit"
 	default:
 		headerText = withIcon(c.icons.Calendar, fmt.Sprintf("Calendar · %s", c.cursor.Format("2006-01")))
 		body = c.renderMonth(c.width, bodyHeight)
-		helpText = "←/h/→/l: day • ↑/k/↓/j: week • H/L: month • enter: open • y: year view • t: today • q: quit"
+		helpText = "←/h/→/l: day • ↑/k/↓/j: week • H/L: month • enter: open • y: year view • t: today • Ctrl+t: theme • q: quit"
 	}
 
 	header := HeaderStyle.Render(headerText)
+	if status := c.theme.StatusText(); status != "" {
+		header = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			header,
+			"   ",
+			MutedStyle.Render(status),
+		)
+	}
 	bodyBlock := lipgloss.NewStyle().
 		Width(c.width).
 		Height(bodyHeight).
