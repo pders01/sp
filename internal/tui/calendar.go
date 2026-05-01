@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-
 // CalendarView selects which granularity the calendar renders.
 type CalendarView int
 

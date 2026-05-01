@@ -91,7 +91,7 @@ func TestGetByDateMissingReturnsBlank(t *testing.T) {
 func TestGetByDateRejectsCorruptJSON(t *testing.T) {
 	mgr := setupTestManager(t)
 	path := filepath.Join(mgr.storageDir, "2024-02-29.json")
-	if err := os.WriteFile(path, []byte("not valid json"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("not valid json"), 0o644); err != nil {
 		t.Fatalf("seed file: %v", err)
 	}
 	if _, err := mgr.GetByDate("2024-02-29"); err == nil {
@@ -101,10 +101,10 @@ func TestGetByDateRejectsCorruptJSON(t *testing.T) {
 
 func TestListDatesIgnoresNonJSON(t *testing.T) {
 	mgr := setupTestManager(t)
-	if err := os.WriteFile(filepath.Join(mgr.storageDir, "2024-03-01.json"), []byte("{}"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(mgr.storageDir, "2024-03-01.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(mgr.storageDir, "stray.txt"), []byte("ignore"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(mgr.storageDir, "stray.txt"), []byte("ignore"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	dates, err := mgr.ListDates()

@@ -29,7 +29,7 @@ func NewManager() (*Manager, error) {
 	}
 
 	storageDir := filepath.Join(homeDir, ".sp")
-	if err := os.MkdirAll(storageDir, 0755); err != nil {
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create storage directory: %w", err)
 	}
 
@@ -79,7 +79,7 @@ func (m *Manager) Save(scratchpad *Scratchpad) error {
 	}
 
 	filename := filepath.Join(m.storageDir, scratchpad.Date+".json")
-	if err := os.WriteFile(filename, data, 0644); err != nil {
+	if err := os.WriteFile(filename, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write scratchpad file: %w", err)
 	}
 
