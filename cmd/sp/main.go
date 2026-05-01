@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/pders01/sp/internal/config"
 	"github.com/pders01/sp/internal/editor"
 	"github.com/pders01/sp/internal/scratchpad"
 	"github.com/pders01/sp/internal/tui"
@@ -64,6 +65,16 @@ func runScratchpad(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize scratchpad manager: %w", err)
 	}
 
+	cfg := config.Default()
+	if path, perr := config.DefaultPath(); perr == nil {
+		if loaded, lerr := config.Load(path); lerr == nil {
+			cfg = loaded
+		} else {
+			fmt.Fprintf(os.Stderr, "sp: %v\n", lerr)
+		}
+	}
+	icons := tui.NewIconSet(cfg.UI.Icons)
+
 	if notebookFlag {
 		// Load all scratchpad files
 		dates, err := mgr.ListDates()
@@ -87,7 +98,10 @@ func runScratchpad(cmd *cobra.Command, args []string) error {
 			}
 		}
 		notebook := tui.NewNotebook(dates)
+		notebook.SetIcons(icons)
+		notebook.SetThemePref(cfg.UI.Theme)
 		notebook.SetContents(contents)
+		defer notebook.Close()
 		p := tea.NewProgram(notebook, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("failed to run notebook TUI: %w", err)
@@ -111,6 +125,7 @@ func runScratchpad(cmd *cobra.Command, args []string) error {
 			contents[d] = sp.Content
 		}
 		calendar := tui.NewCalendar(dates)
+		calendar.SetIcons(icons)
 		calendar.SetContents(contents)
 		p := tea.NewProgram(calendar, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
