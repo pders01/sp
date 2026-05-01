@@ -20,6 +20,7 @@ type Notebook struct {
 	width    int
 	height   int
 	quitting bool
+	icons    IconSet
 }
 
 // NewNotebook creates a new notebook instance
@@ -31,6 +32,7 @@ func NewNotebook(pages []string) *Notebook {
 		current:  0,
 		width:    80,
 		height:   24,
+		icons:    DefaultIconSet(),
 	}
 }
 
@@ -45,7 +47,7 @@ func (n *Notebook) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		n.width = msg.Width
 		n.height = msg.Height
-		vpHeight := n.height - 4 // header + footer (now 2 lines)
+		vpHeight := n.height - 4 // 1 header + 3 footer lines (nav, rule, help)
 		n.viewport.Width = n.width
 		n.viewport.Height = vpHeight
 		n.updateViewportContent()
@@ -94,15 +96,12 @@ func (n *Notebook) View() string {
 		return ""
 	}
 	if len(n.pages) == 0 {
-		return lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#626262")).
-			Render("No scratchpad pages found.")
+		return MutedStyle.Render("No scratchpad pages found.")
 	}
 
-	header := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FAFAFA")).
-		Render(fmt.Sprintf("📖 Notebook - %s", n.pages[n.current]))
+	header := HeaderStyle.Render(
+		withIcon(n.icons.Notebook, fmt.Sprintf("Notebook · %s", n.pages[n.current])),
+	)
 
 	footer := n.renderFooter()
 
@@ -151,43 +150,41 @@ func (n *Notebook) renderFooter() string {
 	}
 
 	// Build visible page indicators
+	sep := MutedStyle.Render(" " + n.icons.Sep + " ")
 	var pageIndicators []string
 	for i := startIdx; i < startIdx+maxVisibleDates && i < len(n.pages); i++ {
 		page := n.pages[i]
 		if i == n.current {
-			pageIndicators = append(pageIndicators, lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("#00FF00")).
-				Render(page))
+			pageIndicators = append(pageIndicators, SelectedDateStyle.Render(page))
 		} else {
-			pageIndicators = append(pageIndicators, lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#626262")).
-				Render(page))
+			pageIndicators = append(pageIndicators, MutedStyle.Render(page))
 		}
 	}
 
 	// Add navigation indicators if there are more pages
-	navLine := strings.Join(pageIndicators, " | ")
-	if startIdx > 0 {
-		navLine = "◀ " + navLine
+	navLine := strings.Join(pageIndicators, sep)
+	if startIdx > 0 && n.icons.Prev != "" {
+		navLine = MutedStyle.Render(n.icons.Prev) + " " + navLine
 	}
-	if startIdx+maxVisibleDates < len(n.pages) {
-		navLine = navLine + " ▶"
+	if startIdx+maxVisibleDates < len(n.pages) && n.icons.Next != "" {
+		navLine = navLine + " " + MutedStyle.Render(n.icons.Next)
 	}
 
+	// Horizontal rule separating dates from keybindings
+	rule := SeparatorStyle.Render(strings.Repeat("─", max(n.width, 0)))
+
 	// Controls on separate line
-	help := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#626262")).
-		Render("←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • q: quit")
+	help := HelpStyle.Render("←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • q: quit")
 
 	// Center the navigation line
 	navStyle := lipgloss.NewStyle().Width(n.width).Align(lipgloss.Center)
 	navLine = navStyle.Render(navLine)
 
-	// Join navigation and controls vertically
+	// Join navigation, rule, and controls vertically
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		navLine,
+		rule,
 		help,
 	)
 }
@@ -219,6 +216,12 @@ func (n *Notebook) updateViewportContent() {
 func (n *Notebook) SetContents(contents map[string]string) {
 	n.contents = contents
 	n.updateViewportContent()
+}
+
+// SetIcons overrides the icon set. Useful for tests or callers that resolve
+// icon mode from a higher-level config instead of the SP_ICONS env var.
+func (n *Notebook) SetIcons(icons IconSet) {
+	n.icons = icons
 }
 
 // GetCurrentPage returns the current page date

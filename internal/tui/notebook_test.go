@@ -245,7 +245,7 @@ func TestNotebook_View_WithContent(t *testing.T) {
 	view := notebook.View()
 
 	// Should contain header with current page (pages are sorted in reverse order)
-	assert.Contains(t, view, "📖 Notebook - 2024-01-16")
+	assert.Contains(t, view, "Notebook · 2024-01-16")
 
 	// Should contain navigation controls
 	assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • q: quit")
