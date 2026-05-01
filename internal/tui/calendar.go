@@ -323,6 +323,8 @@ func (c *Calendar) renderDayCell(day time.Time, month time.Month, w, h int) stri
 	p := c.theme.Palette()
 	dayStyle := lipgloss.NewStyle()
 	switch {
+	case cursorMatch:
+		dayStyle = dayStyle.Foreground(p.Highlight).Bold(true).Underline(true)
 	case outOfMonth:
 		dayStyle = dayStyle.Foreground(p.Muted).Faint(true)
 	case hasData:
@@ -333,7 +335,12 @@ func (c *Calendar) renderDayCell(day time.Time, month time.Month, w, h int) stri
 		dayStyle = dayStyle.Foreground(p.Text)
 	}
 
-	lines := []string{dayStyle.Render(dayLabel)}
+	label := dayLabel
+	if cursorMatch {
+		label = "▌" + strings.TrimSpace(dayLabel)
+	}
+
+	lines := []string{dayStyle.Render(label)}
 	if h > minCellHeight && !outOfMonth {
 		if ann := c.cellAnnotation(day, dateStr, innerW); ann != "" {
 			lines = append(lines, ann)
@@ -341,11 +348,6 @@ func (c *Calendar) renderDayCell(day time.Time, month time.Month, w, h int) stri
 	}
 
 	cell := lipgloss.NewStyle().Width(w).Height(h).Padding(0, 1)
-	if cursorMatch {
-		cell = cell.
-			Background(p.Highlight).
-			Foreground(p.CursorFg)
-	}
 	return cell.Render(strings.Join(lines, "\n"))
 }
 
@@ -450,14 +452,23 @@ func (c *Calendar) monthSparkline(first, last time.Time, w int) string {
 	return c.theme.Palette().MutedText.Render(b.String())
 }
 
+// truncate cuts s to at most w display columns, appending an ellipsis
+// when content was dropped. Operates on runes so multi-byte UTF-8 input
+// (any non-ASCII preview line) is sliced safely. Treats every rune as
+// one column; that is approximate for east-asian wides but correct for
+// the latin previews we expect from scratchpad content.
 func truncate(s string, w int) string {
-	if w <= 0 || len(s) <= w {
+	if w <= 0 {
+		return s
+	}
+	runes := []rune(s)
+	if len(runes) <= w {
 		return s
 	}
 	if w == 1 {
 		return "…"
 	}
-	return s[:w-1] + "…"
+	return string(runes[:w-1]) + "…"
 }
 
 func clamp(v, lo, hi int) int {

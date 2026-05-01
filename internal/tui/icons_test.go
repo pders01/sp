@@ -22,15 +22,9 @@ func TestNewIconSetUnicodeFallback(t *testing.T) {
 	}
 }
 
-func TestDefaultIconSetReadsEnv(t *testing.T) {
-	t.Setenv("SP_ICONS", "nerd")
-	if got := DefaultIconSet(); got != nerdIcons {
-		t.Errorf("DefaultIconSet() with SP_ICONS=nerd = %+v, want nerdIcons", got)
-	}
-
-	t.Setenv("SP_ICONS", "unicode")
+func TestDefaultIconSetIsUnicode(t *testing.T) {
 	if got := DefaultIconSet(); got != unicodeIcons {
-		t.Errorf("DefaultIconSet() with SP_ICONS=unicode = %+v, want unicodeIcons", got)
+		t.Errorf("DefaultIconSet() = %+v, want unicodeIcons", got)
 	}
 }
 

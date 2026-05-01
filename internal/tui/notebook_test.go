@@ -9,11 +9,15 @@ import (
 )
 
 func TestNewNotebook(t *testing.T) {
-	pages := []string{"2024-01-15", "2024-01-16", "2024-01-17"}
-	notebook := NewNotebook(pages)
+	input := []string{"2024-01-15", "2024-01-16", "2024-01-17"}
+	original := append([]string(nil), input...)
+	notebook := NewNotebook(input)
 
 	assert.NotNil(t, notebook)
-	assert.Equal(t, pages, notebook.pages)
+	// Caller's slice must stay in its original order (constructor copies).
+	assert.Equal(t, original, input)
+	// Internal pages are sorted descending.
+	assert.Equal(t, []string{"2024-01-17", "2024-01-16", "2024-01-15"}, notebook.pages)
 	assert.Equal(t, 0, notebook.current)
 	assert.Equal(t, 80, notebook.width)
 	assert.Equal(t, 24, notebook.height)
@@ -365,7 +369,7 @@ func TestNotebook_FooterScrolling(t *testing.T) {
 		view := notebook.View()
 
 		// Should always show current page
-		assert.Contains(t, view, pages[i])
+		assert.Contains(t, view, notebook.pages[i])
 
 		// Should show navigation controls
 		assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • Ctrl+t: theme • q: quit")

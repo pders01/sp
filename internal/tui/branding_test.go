@@ -16,8 +16,8 @@ func TestPaletteForLightVsDark(t *testing.T) {
 	if light.Highlight == dark.Highlight {
 		t.Errorf("light and dark Highlight should differ, both = %q", light.Highlight)
 	}
-	if light.CursorFg == dark.CursorFg {
-		t.Errorf("light and dark CursorFg should differ, both = %q", light.CursorFg)
+	if light.Accent == dark.Accent {
+		t.Errorf("light and dark Accent should differ, both = %q", light.Accent)
 	}
 }
 
