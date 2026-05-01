@@ -102,7 +102,16 @@ func runScratchpad(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to list dates: %w", err)
 		}
+		contents := make(map[string]string, len(dates))
+		for _, d := range dates {
+			sp, err := mgr.GetByDate(d)
+			if err != nil {
+				continue
+			}
+			contents[d] = sp.Content
+		}
 		calendar := tui.NewCalendar(dates)
+		calendar.SetContents(contents)
 		p := tea.NewProgram(calendar, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("failed to run calendar TUI: %w", err)
