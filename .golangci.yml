@@ -1,0 +1,43 @@
+linters:
+  enable:
+    - gofmt
+    - revive
+    - govet
+    - errcheck
+    - staticcheck
+    - ineffassign
+    - typecheck
+    - gocritic
+    - gosimple
+    - unused
+    - bodyclose
+    - dupl
+    - misspell
+  # When on golangci-lint v2.x, enable `modernize` here to surface the
+  # Go-idiom upgrades (any, min/max, range-over-int, strings.CutPrefix,
+  # etc.) that gopls IDE quick-fixes already report. Until then, run
+  # `make modernize` to invoke the same analyzer via the gopls CLI.
+
+linters-settings:
+  govet:
+    enable:
+      - shadow
+  dupl:
+    threshold: 100
+  gocritic:
+    enabled-tags:
+      - performance
+      - style
+      - experimental
+    disabled-checks:
+      - commentedOutCode
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - dupl
+        - errcheck
+
+run:
+  timeout: 5m
