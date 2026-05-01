@@ -25,11 +25,13 @@ type Notebook struct {
 	theme    *themeWatcher
 }
 
-// NewNotebook creates a new notebook instance
+// NewNotebook creates a new notebook instance. Pages are copied and
+// sorted descending internally so the caller's slice keeps its order.
 func NewNotebook(pages []string) *Notebook {
-	sort.Sort(sort.Reverse(sort.StringSlice(pages)))
+	owned := append([]string(nil), pages...)
+	sort.Sort(sort.Reverse(sort.StringSlice(owned)))
 	return &Notebook{
-		pages:    pages,
+		pages:    owned,
 		contents: make(map[string]string),
 		current:  0,
 		width:    80,

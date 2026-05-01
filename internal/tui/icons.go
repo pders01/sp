@@ -1,7 +1,5 @@
 package tui
 
-import "os"
-
 // IconSet holds glyphs used across the TUI. Two backends are supported:
 // "nerd" assumes the user's terminal font is patched with Nerd Font glyphs
 // (https://www.nerdfonts.com); "unicode" uses geometric Unicode that renders
@@ -45,10 +43,12 @@ func NewIconSet(mode string) IconSet {
 	return unicodeIcons
 }
 
-// DefaultIconSet returns the icon set selected via the SP_ICONS env var,
-// defaulting to unicode when unset.
+// DefaultIconSet returns the unicode set, used as a safe fallback when
+// no config-driven set has been wired up yet (tests, ad-hoc constructors).
+// Prefer NewIconSet(cfg.UI.Icons) at the call site that actually has the
+// config in hand.
 func DefaultIconSet() IconSet {
-	return NewIconSet(os.Getenv("SP_ICONS"))
+	return unicodeIcons
 }
 
 // withIcon prefixes name with glyph + space when glyph is non-empty,

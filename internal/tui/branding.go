@@ -20,9 +20,6 @@ type Palette struct {
 	Text      lipgloss.Color
 	Muted     lipgloss.Color
 	Error     lipgloss.Color
-	// CursorFg is the foreground color used inside the highlight-tinted
-	// cursor cell so the day number stays legible against Highlight.
-	CursorFg lipgloss.Color
 
 	// Pre-built styles. Computed once per palette construction; views
 	// access these instead of building styles inline.
@@ -47,7 +44,6 @@ func darkPalette() Palette {
 		Text:      lipgloss.Color("#EAEAEA"),
 		Muted:     lipgloss.Color("#94A3B8"),
 		Error:     lipgloss.Color("#EF4444"),
-		CursorFg:  lipgloss.Color("#1A1A2E"),
 	}
 	return withStyles(p)
 }
@@ -63,7 +59,6 @@ func lightPalette() Palette {
 		Text:      lipgloss.Color("#1A1A2E"),
 		Muted:     lipgloss.Color("#64748B"),
 		Error:     lipgloss.Color("#B91C1C"),
-		CursorFg:  lipgloss.Color("#FFFBEB"),
 	}
 	return withStyles(p)
 }

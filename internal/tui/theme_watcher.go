@@ -122,14 +122,19 @@ func (w *themeWatcher) start() {
 	}
 }
 
-// stop cancels watchers and waits for goroutines to drain. Safe to
-// call multiple times.
+// stop cancels watchers, drains their goroutines, and closes the
+// event channel so any pending wait() Cmd unblocks via its !ok path
+// instead of leaking. Safe to call multiple times.
 func (w *themeWatcher) stop() {
 	if w.watchCancel != nil {
 		w.watchCancel()
 		w.watchCancel = nil
 	}
 	w.watchWG.Wait()
+	if w.events != nil {
+		close(w.events)
+		w.events = nil
+	}
 }
 
 // SetStatus stores a transient banner with a TTL; pair with expireCmd
