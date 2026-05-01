@@ -8,6 +8,10 @@ on:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    # GITHUB_TOKEN defaults to read-only contents on tag-triggered runs;
+    # GoReleaser needs contents:write to create the release.
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
