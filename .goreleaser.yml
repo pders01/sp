@@ -58,6 +58,9 @@ brews:
     repository:
       owner: pders01
       name: homebrew-sp
+      # Use a PAT with contents:write on the tap repo; the default
+      # GITHUB_TOKEN can only push to the repo running the workflow.
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     commit_author:
       name: Paul Derscheid
       email: paulderscheid@gmail.com
