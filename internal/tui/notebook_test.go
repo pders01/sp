@@ -23,8 +23,10 @@ func TestNewNotebook(t *testing.T) {
 
 func TestNotebook_Init(t *testing.T) {
 	notebook := NewNotebook([]string{"2024-01-15"})
+	defer notebook.Close()
 	cmd := notebook.Init()
-	assert.Nil(t, cmd)
+	// Init now arms the theme-change watcher.
+	assert.NotNil(t, cmd)
 }
 
 func TestNotebook_Update_WindowSize(t *testing.T) {
@@ -248,7 +250,7 @@ func TestNotebook_View_WithContent(t *testing.T) {
 	assert.Contains(t, view, "Notebook · 2024-01-16")
 
 	// Should contain navigation controls
-	assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • q: quit")
+	assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • Ctrl+t: theme • q: quit")
 
 	// Should contain page indicators
 	assert.Contains(t, view, "2024-01-15")
@@ -366,6 +368,6 @@ func TestNotebook_FooterScrolling(t *testing.T) {
 		assert.Contains(t, view, pages[i])
 
 		// Should show navigation controls
-		assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • q: quit")
+		assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • Ctrl+t: theme • q: quit")
 	}
 }
