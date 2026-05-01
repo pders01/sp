@@ -254,7 +254,7 @@ func TestNotebook_View_WithContent(t *testing.T) {
 	assert.Contains(t, view, "Notebook · 2024-01-16")
 
 	// Should contain navigation controls
-	assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • Ctrl+t: theme • q: quit")
+	assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • enter/e: edit • Ctrl+t: theme • q: quit")
 
 	// Should contain page indicators
 	assert.Contains(t, view, "2024-01-15")
@@ -288,6 +288,54 @@ func TestNotebook_GetCurrentPage(t *testing.T) {
 	// Test empty pages
 	emptyNotebook := NewNotebook([]string{})
 	assert.Equal(t, "", emptyNotebook.GetCurrentPage())
+}
+
+func TestNotebook_EnterSelectsCurrentPage(t *testing.T) {
+	pages := []string{"2024-01-15", "2024-01-16", "2024-01-17"}
+	nb := NewNotebook(pages)
+	defer nb.Close()
+	// Pages sort descending; current=0 -> 2024-01-17.
+	want := nb.pages[nb.current]
+
+	for _, key := range []tea.KeyMsg{
+		{Type: tea.KeyEnter},
+		{Type: tea.KeyRunes, Runes: []rune{'e'}},
+		{Type: tea.KeyRunes, Runes: []rune{'i'}},
+	} {
+		fresh := NewNotebook(pages)
+		model, cmd := fresh.Update(key)
+		fresh = model.(*Notebook)
+		if fresh.GetSelectedDate() != want {
+			t.Errorf("key %v: selected = %q, want %q", key, fresh.GetSelectedDate(), want)
+		}
+		if !fresh.IsQuitting() {
+			t.Errorf("key %v: expected quitting=true", key)
+		}
+		if cmd == nil {
+			t.Errorf("key %v: expected tea.Quit cmd", key)
+		}
+		fresh.Close()
+	}
+}
+
+func TestNotebook_SetCurrentDatePositions(t *testing.T) {
+	pages := []string{"2024-01-15", "2024-01-16", "2024-01-17"}
+	nb := NewNotebook(pages)
+	defer nb.Close()
+	nb.SetCurrentDate("2024-01-15")
+	if got := nb.GetCurrentPage(); got != "2024-01-15" {
+		t.Errorf("after SetCurrentDate, current = %q, want %q", got, "2024-01-15")
+	}
+}
+
+func TestNotebook_SetCurrentDateUnknownIsNoop(t *testing.T) {
+	nb := NewNotebook([]string{"2024-01-15"})
+	defer nb.Close()
+	before := nb.GetCurrentPage()
+	nb.SetCurrentDate("2099-12-31")
+	if got := nb.GetCurrentPage(); got != before {
+		t.Errorf("unknown date moved cursor: was %q, now %q", before, got)
+	}
 }
 
 func TestNotebook_SetIcons(t *testing.T) {
@@ -372,6 +420,6 @@ func TestNotebook_FooterScrolling(t *testing.T) {
 		assert.Contains(t, view, notebook.pages[i])
 
 		// Should show navigation controls
-		assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • Ctrl+t: theme • q: quit")
+		assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • enter/e: edit • Ctrl+t: theme • q: quit")
 	}
 }

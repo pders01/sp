@@ -14,8 +14,8 @@ import (
 )
 
 // Version information - set during build via -ldflags. commit and date
-// are surfaced through the rootCmd long description so they don't get
-// flagged as unused; goreleaser populates them on every release.
+// are surfaced through VersionInfo so they don't get flagged as unused;
+// goreleaser populates them on every release.
 var (
 	version = "dev"
 	commit  = "unknown"
@@ -41,17 +41,16 @@ var rootCmd = &cobra.Command{
 	Use:     "sp",
 	Version: VersionInfo(),
 	Short:   "A daily scratchpad for quick notes and todos",
-	Long: `sp is a CLI/TUI-based scratchpad application for quickly storing notes, 
-todos, and thoughts. It automatically creates a new scratchpad for each day 
+	Long: `sp is a CLI/TUI-based scratchpad application for quickly storing notes,
+todos, and thoughts. It automatically creates a new scratchpad for each day
 and allows you to browse historical entries through a calendar interface.
 
-Features:
-- Daily scratchpad with automatic daily clearing
-- TUI calendar view for browsing historical entries
-- Notebook view for browsing all notes with markdown rendering
-- External editor integration (uses $EDITOR)
-- Markdown support for rich formatting
-- Clean, distraction-free interface`,
+Flow:
+  sp        edit today's page directly
+  sp -n     notebook viewer; Enter/e drills into the editor
+  sp -c     calendar; Enter drills into the notebook at that day, then
+            Enter again drills into the editor. Press 'e' in the calendar
+            to skip the notebook preview and edit immediately.`,
 	RunE: runScratchpad,
 }
 
@@ -83,97 +82,142 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 	}
 	icons := tui.NewIconSet(cfg.UI.Icons)
 
-	if notebookFlag {
-		// Load all scratchpad files
-		dates, lerr := mgr.ListDates()
-		if lerr != nil {
-			return fmt.Errorf("failed to list dates: %w", lerr)
-		}
-		if len(dates) == 0 {
-			fmt.Println("No scratchpad pages found.")
-			return nil
-		}
-		// Sort dates in descending order (most recent first)
-		sort.Sort(sort.Reverse(sort.StringSlice(dates)))
-		// Load content for each date
-		contents := make(map[string]string)
-		for _, d := range dates {
-			sp, gerr := mgr.GetByDate(d)
-			if gerr != nil {
-				contents[d] = fmt.Sprintf("Error loading: %v", gerr)
-			} else {
-				contents[d] = sp.Content
-			}
-		}
-		notebook := tui.NewNotebook(dates)
-		notebook.SetIcons(icons)
-		notebook.SetThemePref(cfg.UI.Theme)
-		notebook.SetContents(contents)
-		defer notebook.Close()
-		p := tea.NewProgram(notebook, tea.WithAltScreen())
-		if _, rerr := p.Run(); rerr != nil {
-			return fmt.Errorf("failed to run notebook TUI: %w", rerr)
-		}
+	pickedDate, ok, err := pickDate(mgr, icons, cfg)
+	if err != nil {
+		return err
+	}
+	if !ok {
 		return nil
 	}
 
-	var date string
-	if calendarFlag {
-		// Show calendar view
-		dates, lerr := mgr.ListDates()
-		if lerr != nil {
-			return fmt.Errorf("failed to list dates: %w", lerr)
-		}
-		contents := make(map[string]string, len(dates))
-		for _, d := range dates {
-			sp, gerr := mgr.GetByDate(d)
-			if gerr != nil {
-				continue
-			}
-			contents[d] = sp.Content
-		}
-		calendar := tui.NewCalendar(dates)
-		calendar.SetIcons(icons)
-		calendar.SetThemePref(cfg.UI.Theme)
-		calendar.SetContents(contents)
-		defer calendar.Close()
-		p := tea.NewProgram(calendar, tea.WithAltScreen())
-		if _, rerr := p.Run(); rerr != nil {
-			return fmt.Errorf("failed to run calendar TUI: %w", rerr)
-		}
-		if calendar.GetSelectedDate() == "" {
-			fmt.Println("No date selected. Exiting.")
-			return nil
-		}
-		date = calendar.GetSelectedDate()
-	} else {
-		// Default: today
-		date = ""
+	return editAndSave(mgr, pickedDate)
+}
+
+// pickDate runs the appropriate TUI chain and returns the date the user
+// committed to. ok is false when the user quit out without picking.
+func pickDate(mgr *scratchpad.Manager, icons tui.IconSet, cfg *config.Config) (date string, ok bool, err error) {
+	switch {
+	case calendarFlag:
+		return runCalendarChain(mgr, icons, cfg)
+	case notebookFlag:
+		return runNotebookChain(mgr, icons, cfg, "")
+	default:
+		// Default flow: edit today.
+		return "", true, nil
+	}
+}
+
+func runCalendarChain(mgr *scratchpad.Manager, icons tui.IconSet, cfg *config.Config) (date string, ok bool, err error) {
+	dates, contents, err := loadAll(mgr)
+	if err != nil {
+		return "", false, err
+	}
+	cal := tui.NewCalendar(dates)
+	cal.SetIcons(icons)
+	cal.SetThemePref(cfg.UI.Theme)
+	cal.SetContents(contents)
+	defer cal.Close()
+
+	if _, rerr := tea.NewProgram(cal, tea.WithAltScreen()).Run(); rerr != nil {
+		return "", false, fmt.Errorf("failed to run calendar TUI: %w", rerr)
 	}
 
+	picked := cal.GetSelectedDate()
+	if picked == "" {
+		fmt.Println("No date selected. Exiting.")
+		return "", false, nil
+	}
+	if cal.IsDirectEdit() {
+		return picked, true, nil
+	}
+	// Drill into the notebook positioned on the picked day.
+	return runNotebookChain(mgr, icons, cfg, picked)
+}
+
+// runNotebookChain runs the notebook view. When startDate is non-empty,
+// the cursor positions on it and the date is added to the page list if
+// missing so brand-new days are reachable.
+func runNotebookChain(mgr *scratchpad.Manager, icons tui.IconSet, cfg *config.Config, startDate string) (date string, ok bool, err error) {
+	dates, contents, err := loadAll(mgr)
+	if err != nil {
+		return "", false, err
+	}
+	if startDate != "" {
+		if _, exists := contents[startDate]; !exists {
+			contents[startDate] = ""
+			dates = append(dates, startDate)
+		}
+	}
+	if len(dates) == 0 {
+		fmt.Println("No scratchpad pages found.")
+		return "", false, nil
+	}
+
+	nb := tui.NewNotebook(dates)
+	nb.SetIcons(icons)
+	nb.SetThemePref(cfg.UI.Theme)
+	nb.SetContents(contents)
+	if startDate != "" {
+		nb.SetCurrentDate(startDate)
+	}
+	defer nb.Close()
+
+	if _, rerr := tea.NewProgram(nb, tea.WithAltScreen()).Run(); rerr != nil {
+		return "", false, fmt.Errorf("failed to run notebook TUI: %w", rerr)
+	}
+
+	picked := nb.GetSelectedDate()
+	if picked == "" {
+		return "", false, nil
+	}
+	return picked, true, nil
+}
+
+// loadAll reads every saved scratchpad and returns dates (descending)
+// plus their contents.
+func loadAll(mgr *scratchpad.Manager) (dates []string, contents map[string]string, err error) {
+	dates, err = mgr.ListDates()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list dates: %w", err)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(dates)))
+
+	contents = make(map[string]string, len(dates))
+	for _, d := range dates {
+		sp, gerr := mgr.GetByDate(d)
+		if gerr != nil {
+			contents[d] = fmt.Sprintf("Error loading: %v", gerr)
+			continue
+		}
+		contents[d] = sp.Content
+	}
+	return dates, contents, nil
+}
+
+// editAndSave opens the picked date (or today, when empty) in $EDITOR
+// and persists changes when the user actually edited something.
+func editAndSave(mgr *scratchpad.Manager, pickedDate string) error {
 	var sp *scratchpad.Scratchpad
-	if date == "" {
+	var err error
+	if pickedDate == "" {
 		sp, err = mgr.GetToday()
 	} else {
-		sp, err = mgr.GetByDate(date)
+		sp, err = mgr.GetByDate(pickedDate)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to load scratchpad: %w", err)
 	}
 
-	// Use external editor
 	ed, err := editor.NewEditor()
 	if err != nil {
 		return fmt.Errorf("failed to initialize editor: %w", err)
 	}
 
-	// Edit the content
 	newContent, err := ed.Edit(sp.Content, sp.Date+".md")
 	if err != nil {
 		return fmt.Errorf("failed to edit scratchpad: %w", err)
 	}
 
-	// Save if content changed
 	if newContent != sp.Content {
 		sp.Content = newContent
 		if err := mgr.Save(sp); err != nil {
@@ -181,6 +225,5 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 		}
 		fmt.Println("Scratchpad saved!")
 	}
-
 	return nil
 }
