@@ -23,9 +23,6 @@ type Palette struct {
 	// CursorFg is the foreground color used inside the highlight-tinted
 	// cursor cell so the day number stays legible against Highlight.
 	CursorFg lipgloss.Color
-	// TileBg is a faint background tint used to mark the current month
-	// tile in the year overview.
-	TileBg lipgloss.Color
 
 	// Pre-built styles. Computed once per palette construction; views
 	// access these instead of building styles inline.
@@ -51,7 +48,6 @@ func darkPalette() Palette {
 		Muted:     lipgloss.Color("#94A3B8"),
 		Error:     lipgloss.Color("#EF4444"),
 		CursorFg:  lipgloss.Color("#1A1A2E"),
-		TileBg:    lipgloss.Color("#16213E"),
 	}
 	return withStyles(p)
 }
@@ -68,7 +64,6 @@ func lightPalette() Palette {
 		Muted:     lipgloss.Color("#64748B"),
 		Error:     lipgloss.Color("#B91C1C"),
 		CursorFg:  lipgloss.Color("#FFFBEB"),
-		TileBg:    lipgloss.Color("#E2E8F0"),
 	}
 	return withStyles(p)
 }
