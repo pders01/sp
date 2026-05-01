@@ -1,0 +1,19 @@
+# sp configuration. Drop this file at ~/.sp/config.toml — every field
+# is optional, missing keys fall back to the defaults shown below.
+
+[ui]
+# Glyph set used in the calendar list and notebook header.
+#   "nerd"    — assumes a Nerd Font is installed
+#   "unicode" — geometric fallbacks that render in any monospace font (default)
+# The SP_ICONS env var still works as an alternative on systems that
+# would rather configure via the shell.
+icons = "unicode"
+
+# Glamour render theme for the notebook view.
+#   "auto"  — follow terminal / OS appearance (default)
+#   "light" — force light style
+#   "dark"  — force dark style
+# Press Ctrl+T inside the notebook to cycle at runtime.
+# Send SIGUSR1 (kill -USR1 <pid>) to re-detect after a manual switch;
+# on macOS the system appearance change is detected automatically.
+theme = "auto"
