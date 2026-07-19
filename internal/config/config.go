@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -14,7 +15,25 @@ import (
 // ~/.sp/config.toml. Missing fields fall back to defaults so a fresh
 // install works without writing a file.
 type Config struct {
-	UI UIConfig `toml:"ui"`
+	UI        UIConfig        `toml:"ui"`
+	Templates TemplatesConfig `toml:"templates"`
+}
+
+// TemplatesConfig controls user-defined template sections. Executable
+// templates require an explicit trust opt-in.
+type TemplatesConfig struct {
+	AllowCommands bool             `toml:"allow_commands"`
+	Items         []TemplateConfig `toml:"items"`
+}
+
+// TemplateConfig adds an opt-in Markdown section to the day-template chooser.
+// File and Command are mutually exclusive; Command is executed directly
+// without a shell and its stdout is treated as Markdown.
+type TemplateConfig struct {
+	ID      string   `toml:"id"`
+	Name    string   `toml:"name"`
+	File    string   `toml:"file"`
+	Command []string `toml:"command"`
 }
 
 // UIConfig holds preferences for the terminal interface.
@@ -63,6 +82,12 @@ func Load(path string) (*Config, error) {
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	for i := range cfg.Templates.Items {
+		file := cfg.Templates.Items[i].File
+		if file != "" && file != "~" && !filepath.IsAbs(file) && !strings.HasPrefix(file, "~/") {
+			cfg.Templates.Items[i].File = filepath.Join(filepath.Dir(path), file)
+		}
 	}
 	if cfg.UI.Icons == "" {
 		cfg.UI.Icons = "unicode"
