@@ -251,19 +251,17 @@ func TestCalendarSetContentsBuildsPreviews(t *testing.T) {
 	}
 }
 
-func TestCalendarWideViewStacksDocumentPreview(t *testing.T) {
+func TestCalendarShortViewHidesDocumentPreview(t *testing.T) {
 	cal := NewCalendar(nil)
 	cal.width = 100
-	cal.height = 24
+	cal.height = 30
+	cal.cursor = time.Date(2026, time.July, 18, 0, 0, 0, 0, time.UTC)
 	date := cal.cursor.Format("2006-01-02")
-	cal.SetContents(map[string]string{date: "# Daily standup\nA second line from the document."})
+	cal.SetContents(map[string]string{date: "# Daily standup\nUnique second document line."})
 
 	out := cal.View()
-	if !strings.Contains(out, "A second line") || !strings.Contains(out, "document.") {
-		t.Errorf("expected wrapped document preview in wide calendar, got: %q", out)
-	}
-	if strings.Contains(out, "│") {
-		t.Errorf("expected a horizontal rather than vertical split, got: %q", out)
+	if strings.Contains(out, "Unique second document line.") {
+		t.Errorf("document preview should be hidden when it has too few rows, got: %q", out)
 	}
 }
 
@@ -288,7 +286,8 @@ func TestCalendarMonthRows(t *testing.T) {
 func TestCalendarTallViewStacksDocumentPreview(t *testing.T) {
 	cal := NewCalendar(nil)
 	cal.width = 80
-	cal.height = 30
+	cal.height = 50
+	cal.cursor = time.Date(2026, time.July, 18, 0, 0, 0, 0, time.UTC)
 	date := cal.cursor.Format("2006-01-02")
 	cal.SetContents(map[string]string{date: "First line\nMore document content"})
 
