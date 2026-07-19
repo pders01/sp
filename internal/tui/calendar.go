@@ -20,11 +20,11 @@ const (
 )
 
 const (
-	minCellWidth       = 6
-	minCellHeight      = 2
-	maxCellHeight      = 6
-	weekHeaderRow      = 1
-	stackedPreviewRows = 6
+	minCellWidth     = 6
+	minCellHeight    = 2
+	maxCellHeight    = 6
+	weekHeaderRow    = 1
+	minPreviewHeight = 10
 )
 
 // Calendar is a full-screen month/year calendar that drills down to a day.
@@ -334,18 +334,16 @@ func (c *Calendar) focusLine() string {
 }
 
 // renderMonthLayout stacks the document preview below the calendar so the
-// full terminal width remains available to both. The calendar grows only as
-// far as useful day-cell height allows; all remaining rows go to the preview.
+// full terminal width remains available to both. The calendar gets its full
+// useful height first; the preview appears only when the remaining space is
+// large enough to show meaningful content.
 func (c *Calendar) renderMonthLayout(width, height int) string {
-	rows := c.monthRows()
-	minCalendarH := weekHeaderRow + rows*minCellHeight
-	if height < minCalendarH+1+stackedPreviewRows {
+	calendarH := weekHeaderRow + c.monthRows()*maxCellHeight
+	previewH := height - calendarH - 1
+	if previewH < minPreviewHeight {
 		return c.renderMonth(width, height)
 	}
 
-	maxCalendarH := weekHeaderRow + rows*maxCellHeight
-	calendarH := clamp(height-stackedPreviewRows-1, minCalendarH, maxCalendarH)
-	previewH := height - calendarH - 1
 	rule := c.theme.Palette().Separator.Render(strings.Repeat("─", max(width, 0)))
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
