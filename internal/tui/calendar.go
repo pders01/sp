@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/pders01/sp/internal/editor"
 )
@@ -19,11 +20,11 @@ const (
 )
 
 const (
-	minCellWidth  = 6
-	minCellHeight = 2
-	maxCellHeight = 6
-	weekRows      = 6
-	weekHeaderRow = 1
+	minCellWidth       = 6
+	minCellHeight      = 2
+	maxCellHeight      = 6
+	weekHeaderRow      = 1
+	stackedPreviewRows = 6
 )
 
 // Calendar is a full-screen month/year calendar that drills down to a day.
@@ -31,6 +32,7 @@ type Calendar struct {
 	icons      IconSet
 	hasData    map[string]bool
 	previews   map[string]string
+	contents   map[string]string
 	cursor     time.Time
 	today      time.Time
 	view       CalendarView
@@ -57,6 +59,7 @@ func NewCalendar(dates []string) *Calendar {
 		icons:    DefaultIconSet(),
 		hasData:  hasData,
 		previews: make(map[string]string),
+		contents: make(map[string]string),
 		cursor:   today,
 		today:    today,
 		view:     ViewMonth,
@@ -83,11 +86,13 @@ func (c *Calendar) SetEditor(ed *editor.Editor, save Saver, load func(date strin
 	c.loader = load
 }
 
-// SetContents stores per-day previews extracted from the given content map.
+// SetContents stores documents and their short per-day annotations.
 // Dates with non-empty content are also marked as "has data".
 func (c *Calendar) SetContents(contents map[string]string) {
+	c.contents = make(map[string]string, len(contents))
 	c.previews = make(map[string]string, len(contents))
 	for date, body := range contents {
+		c.contents[date] = body
 		preview := extractPreview(body)
 		if preview != "" {
 			c.previews[date] = preview
@@ -170,11 +175,15 @@ func (c *Calendar) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	// Reflect the new entry in the calendar's data so cells repaint.
+	delete(c.previews, msg.date)
 	if newContent != "" {
 		c.hasData[msg.date] = true
+		c.contents[msg.date] = newContent
 		if preview := extractPreview(newContent); preview != "" {
 			c.previews[msg.date] = preview
 		}
+	} else {
+		delete(c.contents, msg.date)
 	}
 	c.theme.SetStatus("Saved", 1500*time.Millisecond)
 	return c, c.theme.expireStatusCmd(1500 * time.Millisecond)
@@ -282,7 +291,7 @@ func (c *Calendar) View() string {
 		helpText = "←/h/→/l: month • ↑/k/↓/j: row • H/L: year • enter: open • m: month view • t: today • Ctrl+t: theme • q: quit"
 	default:
 		headerText = withIcon(c.icons.Calendar, fmt.Sprintf("Calendar · %s", c.cursor.Format("2006-01")))
-		body = c.renderMonth(c.width, bodyHeight)
+		body = c.renderMonthLayout(c.width, bodyHeight)
 		helpText = "←/h/→/l: day • ↑/k/↓/j: week • H/L: month • enter: open • e: edit • y: year view • t: today • Ctrl+t: theme • q: quit"
 	}
 
@@ -302,8 +311,8 @@ func (c *Calendar) View() string {
 		Render(body)
 
 	rule := c.theme.Palette().Separator.Render(strings.Repeat("─", max(c.width, 0)))
-	focus := c.theme.Palette().MutedText.Render(c.focusLine())
-	help := c.theme.Palette().Help.Render(helpText)
+	focus := c.theme.Palette().MutedText.Render(truncate(c.focusLine(), c.width))
+	help := c.theme.Palette().Help.Render(truncate(helpText, c.width))
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -324,17 +333,85 @@ func (c *Calendar) focusLine() string {
 	return fmt.Sprintf("Focus: %s (%s)", date, weekday)
 }
 
+// renderMonthLayout stacks the document preview below the calendar so the
+// full terminal width remains available to both. The calendar grows only as
+// far as useful day-cell height allows; all remaining rows go to the preview.
+func (c *Calendar) renderMonthLayout(width, height int) string {
+	rows := c.monthRows()
+	minCalendarH := weekHeaderRow + rows*minCellHeight
+	if height < minCalendarH+1+stackedPreviewRows {
+		return c.renderMonth(width, height)
+	}
+
+	maxCalendarH := weekHeaderRow + rows*maxCellHeight
+	calendarH := clamp(height-stackedPreviewRows-1, minCalendarH, maxCalendarH)
+	previewH := height - calendarH - 1
+	rule := c.theme.Palette().Separator.Render(strings.Repeat("─", max(width, 0)))
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		lipgloss.NewStyle().Width(width).Height(calendarH).Render(c.renderMonth(width, calendarH)),
+		rule,
+		c.renderDocumentPreview(width, previewH),
+	)
+}
+
+// monthRows returns the number of calendar weeks needed by the cursor month.
+func (c *Calendar) monthRows() int {
+	year, month, _ := c.cursor.Date()
+	first := time.Date(year, month, 1, 0, 0, 0, 0, c.cursor.Location())
+	startOffset := (int(first.Weekday()) + 6) % 7
+	days := first.AddDate(0, 1, -1).Day()
+	return (startOffset + days + 6) / 7
+}
+
+func (c *Calendar) renderDocumentPreview(width, height int) string {
+	if width < 1 || height < 1 {
+		return ""
+	}
+
+	date := c.cursor.Format("2006-01-02")
+	title := c.theme.Palette().MutedText.Bold(true).Render(
+		fmt.Sprintf("%s · %s", date, c.cursor.Format("Monday")),
+	)
+	content := c.contents[date]
+	if strings.TrimSpace(content) == "" {
+		content = c.theme.Palette().MutedText.Render("No entry for this day.")
+	} else {
+		renderer, err := glamour.NewTermRenderer(
+			glamour.WithStandardStyle(c.theme.Style()),
+			glamour.WithWordWrap(max(width-4, 1)),
+		)
+		if err == nil {
+			if rendered, renderErr := renderer.Render(content); renderErr == nil {
+				content = strings.Trim(rendered, "\n")
+			}
+		}
+	}
+
+	lines := strings.Split(content, "\n")
+	available := max(height-2, 0)
+	if len(lines) > available {
+		lines = lines[:available]
+	}
+	body := title
+	if available > 0 {
+		body += "\n\n" + strings.Join(lines, "\n")
+	}
+	return lipgloss.NewStyle().Width(width).Height(height).Padding(0, 1).Render(body)
+}
+
 // renderMonth renders a 7-column day grid sized to fill the given area.
 func (c *Calendar) renderMonth(width, height int) string {
 	cellW := width / 7
 	if cellW < minCellWidth {
 		cellW = minCellWidth
 	}
-	cellH := (height - weekHeaderRow) / weekRows
-	cellH = clamp(cellH, minCellHeight, maxCellHeight)
 
 	year, month, _ := c.cursor.Date()
 	first := time.Date(year, month, 1, 0, 0, 0, 0, c.cursor.Location())
+	rowsNeeded := c.monthRows()
+	cellH := (height - weekHeaderRow) / rowsNeeded
+	cellH = clamp(cellH, minCellHeight, maxCellHeight)
 
 	// Monday-based weekday index (0=Mon ... 6=Sun)
 	startOffset := (int(first.Weekday()) + 6) % 7
@@ -348,18 +425,11 @@ func (c *Calendar) renderMonth(width, height int) string {
 	}
 	rows := []string{lipgloss.JoinHorizontal(lipgloss.Top, headerCells...)}
 
-	for week := range weekRows {
+	for week := range rowsNeeded {
 		cells := make([]string, 7)
-		anyInMonth := false
 		for d := range 7 {
 			day := gridStart.AddDate(0, 0, week*7+d)
 			cells[d] = c.renderDayCell(day, month, cellW, cellH)
-			if day.Month() == month {
-				anyInMonth = true
-			}
-		}
-		if !anyInMonth && week > 3 {
-			break
 		}
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, cells...))
 	}
@@ -580,11 +650,12 @@ func (c *Calendar) SetCursor(date string) {
 }
 
 // MarkDate ensures the calendar shows the given day as having data and
-// stores its preview, so the cursor cell repaints after an inline edit
-// or after a notebook returns content for a freshly-created day.
-func (c *Calendar) MarkDate(date, preview string) {
+// stores its document, so both the cell and preview repaint after an edit.
+func (c *Calendar) MarkDate(date, content string) {
 	c.hasData[date] = true
-	if preview != "" {
+	c.contents[date] = content
+	delete(c.previews, date)
+	if preview := extractPreview(content); preview != "" {
 		c.previews[date] = preview
 	}
 }

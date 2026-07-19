@@ -242,9 +242,59 @@ func TestCalendarSetContentsBuildsPreviews(t *testing.T) {
 	if got := cal.previews["2024-03-11"]; got != "Inline thought" {
 		t.Errorf("preview for 2024-03-11 = %q, want %q", got, "Inline thought")
 	}
+	if got := cal.contents["2024-03-10"]; got != "# Daily standup\nNotes..." {
+		t.Errorf("stored content = %q", got)
+	}
 	// SetContents implies hasData when preview non-empty.
 	if !cal.hasData["2024-03-11"] {
 		t.Error("expected hasData[2024-03-11] = true after SetContents")
+	}
+}
+
+func TestCalendarWideViewStacksDocumentPreview(t *testing.T) {
+	cal := NewCalendar(nil)
+	cal.width = 100
+	cal.height = 24
+	date := cal.cursor.Format("2006-01-02")
+	cal.SetContents(map[string]string{date: "# Daily standup\nA second line from the document."})
+
+	out := cal.View()
+	if !strings.Contains(out, "A second line") || !strings.Contains(out, "document.") {
+		t.Errorf("expected wrapped document preview in wide calendar, got: %q", out)
+	}
+	if strings.Contains(out, "│") {
+		t.Errorf("expected a horizontal rather than vertical split, got: %q", out)
+	}
+}
+
+func TestCalendarMonthRows(t *testing.T) {
+	cal := NewCalendar(nil)
+	cases := []struct {
+		date time.Time
+		want int
+	}{
+		{time.Date(2021, time.February, 1, 0, 0, 0, 0, time.UTC), 4},
+		{time.Date(2024, time.March, 1, 0, 0, 0, 0, time.UTC), 5},
+		{time.Date(2020, time.August, 1, 0, 0, 0, 0, time.UTC), 6},
+	}
+	for _, tc := range cases {
+		cal.cursor = tc.date
+		if got := cal.monthRows(); got != tc.want {
+			t.Errorf("monthRows(%s) = %d, want %d", tc.date.Format("2006-01"), got, tc.want)
+		}
+	}
+}
+
+func TestCalendarTallViewStacksDocumentPreview(t *testing.T) {
+	cal := NewCalendar(nil)
+	cal.width = 80
+	cal.height = 30
+	date := cal.cursor.Format("2006-01-02")
+	cal.SetContents(map[string]string{date: "First line\nMore document content"})
+
+	out := cal.View()
+	if !strings.Contains(out, "More document content") {
+		t.Errorf("expected stacked document preview, got: %q", out)
 	}
 }
 
