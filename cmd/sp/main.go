@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -9,6 +10,7 @@ import (
 	"github.com/pders01/sp/internal/config"
 	"github.com/pders01/sp/internal/editor"
 	"github.com/pders01/sp/internal/scratchpad"
+	"github.com/pders01/sp/internal/templates"
 	"github.com/pders01/sp/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -94,7 +96,7 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 }
 
 func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *config.Config) error {
-	dates, contents, err := loadAll(mgr)
+	dates, contents, applied, err := loadAll(mgr)
 	if err != nil {
 		return err
 	}
@@ -120,6 +122,15 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 		mode = tui.ModeNotebook
 	}
 	app := tui.NewApp(cal, nb, mode)
+	definitions, err := templateDefinitions(cfg)
+	if err != nil {
+		return err
+	}
+	options := make([]tui.DayTemplate, 0, len(definitions))
+	for _, definition := range definitions {
+		options = append(options, tui.DayTemplate{ID: definition.ID, Name: definition.Name})
+	}
+	app.SetTemplates(options, applied, makeTemplateApplier(mgr, definitions))
 	defer app.Close()
 
 	if _, rerr := tea.NewProgram(app, tea.WithAltScreen()).Run(); rerr != nil {
@@ -159,16 +170,66 @@ func makeLoader(mgr *scratchpad.Manager) func(string) (string, error) {
 	}
 }
 
-// loadAll reads every saved scratchpad and returns dates (descending)
-// plus their contents.
-func loadAll(mgr *scratchpad.Manager) (dates []string, contents map[string]string, err error) {
+func templateDefinitions(cfg *config.Config) ([]templates.Definition, error) {
+	definitions := templates.Builtins()
+	for _, configured := range cfg.Templates.Items {
+		if len(configured.Command) > 0 && !cfg.Templates.AllowCommands {
+			return nil, fmt.Errorf(
+				"command template %q requires templates.allow_commands = true",
+				configured.Name,
+			)
+		}
+		definitions = append(definitions, templates.Definition{
+			ID:      configured.ID,
+			Name:    configured.Name,
+			File:    configured.File,
+			Command: configured.Command,
+		})
+	}
+	return templates.Normalize(definitions)
+}
+
+func makeTemplateApplier(mgr *scratchpad.Manager, definitions []templates.Definition) tui.TemplateApplier {
+	byID := make(map[string]templates.Definition, len(definitions))
+	for _, definition := range definitions {
+		byID[definition.ID] = definition
+	}
+	return func(ctx context.Context, date string, selections []tui.TemplateSelection) (tui.TemplateApplyResult, error) {
+		sections := make([]templates.Section, 0, len(selections))
+		for _, selection := range selections {
+			definition, ok := byID[selection.ID]
+			if !ok {
+				return tui.TemplateApplyResult{}, fmt.Errorf("unknown template %q", selection.ID)
+			}
+			section, err := templates.RenderContext(ctx, definition, date)
+			if err != nil {
+				return tui.TemplateApplyResult{}, err
+			}
+			section.Force = selection.Force
+			sections = append(sections, section)
+		}
+		if err := ctx.Err(); err != nil {
+			return tui.TemplateApplyResult{}, err
+		}
+		sp, err := mgr.ApplyTemplateSections(date, sections)
+		if err != nil {
+			return tui.TemplateApplyResult{}, err
+		}
+		return tui.TemplateApplyResult{Content: sp.Content, Applied: sp.AppliedTemplates}, nil
+	}
+}
+
+// loadAll reads every saved scratchpad and returns dates (descending), their
+// contents, and template metadata used by the chooser.
+func loadAll(mgr *scratchpad.Manager) (dates []string, contents map[string]string, applied map[string][]string, err error) {
 	dates, err = mgr.ListDates()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to list dates: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to list dates: %w", err)
 	}
 	sort.Sort(sort.Reverse(sort.StringSlice(dates)))
 
 	contents = make(map[string]string, len(dates))
+	applied = make(map[string][]string, len(dates))
 	for _, d := range dates {
 		sp, gerr := mgr.GetByDate(d)
 		if gerr != nil {
@@ -176,8 +237,9 @@ func loadAll(mgr *scratchpad.Manager) (dates []string, contents map[string]strin
 			continue
 		}
 		contents[d] = sp.Content
+		applied[d] = append([]string(nil), sp.AppliedTemplates...)
 	}
-	return dates, contents, nil
+	return dates, contents, applied, nil
 }
 
 // editAndSave opens the picked date (or today, when empty) in $EDITOR
