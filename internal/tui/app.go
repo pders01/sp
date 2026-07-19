@@ -120,7 +120,7 @@ func (a *App) updateNotebook(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// so the pop doesn't feel stale.
 		date, content := a.nb.CurrentContent()
 		if content != "" {
-			a.cal.MarkDate(date, extractPreview(content))
+			a.cal.MarkDate(date, content)
 		}
 		if date != "" {
 			a.cal.SetCursor(date)

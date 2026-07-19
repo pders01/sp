@@ -121,4 +121,7 @@ func TestCalendarFinishEditUpdatesHasData(t *testing.T) {
 	if got := cal.previews["2024-05-04"]; got != "New entry" {
 		t.Errorf("preview = %q, want %q", got, "New entry")
 	}
+	if got := cal.contents["2024-05-04"]; got != "# New entry\n" {
+		t.Errorf("content = %q, want edited document", got)
+	}
 }
