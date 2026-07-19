@@ -53,6 +53,8 @@ func newTemplateChooser(date string) *templateChooser {
 
 func (a *App) SetTemplates(options []DayTemplate, applied map[string][]string, apply TemplateApplier) {
 	a.templates = append([]DayTemplate(nil), options...)
+	a.cal.templatesAvailable = len(options) > 0 && apply != nil
+	a.nb.templatesAvailable = len(options) > 0 && apply != nil
 	a.appliedTemplates = make(map[string]map[string]bool, len(applied))
 	for date, ids := range applied {
 		a.appliedTemplates[date] = make(map[string]bool, len(ids))
@@ -226,7 +228,13 @@ func (a *App) renderTemplateChooser() string {
 	if chooser.applying {
 		lines = append(lines, "", palette.MutedText.Render("Applying templates…"))
 	} else {
-		lines = append(lines, "", palette.Help.Render("↑/k ↓/j: move • space: toggle • enter: apply and edit • esc: cancel • q: quit"))
+		lines = append(lines, "", palette.Help.Render(renderHelp([]helpEntry{
+			{keys: "↑/k ↓/j", label: "move", visible: true},
+			{keys: "space", label: "toggle", visible: true},
+			{keys: "enter", label: "apply and edit", visible: true},
+			{keys: "esc", label: "cancel", visible: true},
+			{keys: "q", label: "quit", visible: true},
+		})))
 	}
 	return lipgloss.NewStyle().Width(width).Height(height).Padding(1, 2).Render(strings.Join(lines, "\n"))
 }

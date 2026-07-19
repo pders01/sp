@@ -29,22 +29,23 @@ const (
 
 // Calendar is a full-screen month/year calendar that drills down to a day.
 type Calendar struct {
-	icons      IconSet
-	hasData    map[string]bool
-	previews   map[string]string
-	contents   map[string]string
-	cursor     time.Time
-	today      time.Time
-	view       CalendarView
-	selected   string
-	directEdit bool
-	quitting   bool
-	width      int
-	height     int
-	theme      *themeWatcher
-	editor     *editor.Editor
-	save       Saver
-	loader     func(date string) (string, error)
+	icons              IconSet
+	hasData            map[string]bool
+	previews           map[string]string
+	contents           map[string]string
+	cursor             time.Time
+	today              time.Time
+	view               CalendarView
+	selected           string
+	directEdit         bool
+	quitting           bool
+	width              int
+	height             int
+	theme              *themeWatcher
+	editor             *editor.Editor
+	save               Saver
+	loader             func(date string) (string, error)
+	templatesAvailable bool
 }
 
 // NewCalendar creates a calendar seeded with the given dates as "has data".
@@ -288,11 +289,31 @@ func (c *Calendar) View() string {
 	case ViewYear:
 		headerText = withIcon(c.icons.Calendar, fmt.Sprintf("Calendar · %d", c.cursor.Year()))
 		body = c.renderYear(c.width, bodyHeight)
-		helpText = "←/h/→/l: month • ↑/k/↓/j: row • H/L: year • enter: open • m: month view • t: today • Ctrl+t: theme • q: quit"
+		helpText = renderHelp([]helpEntry{
+			{keys: "←/h/→/l", label: "month", visible: true},
+			{keys: "↑/k/↓/j", label: "row", visible: true},
+			{keys: "H/L", label: "year", visible: true},
+			{keys: "enter", label: "open", visible: true},
+			{keys: "m", label: "month view", visible: true},
+			{keys: "t", label: "today", visible: true},
+			{keys: "Ctrl+t", label: "theme", visible: true},
+			{keys: "q", label: "quit", visible: true},
+		})
 	default:
 		headerText = withIcon(c.icons.Calendar, fmt.Sprintf("Calendar · %s", c.cursor.Format("2006-01")))
 		body = c.renderMonthLayout(c.width, bodyHeight)
-		helpText = "←/h/→/l: day • ↑/k/↓/j: week • H/L: month • enter: open • e: edit • y: year view • t: today • Ctrl+t: theme • q: quit"
+		helpText = renderHelp([]helpEntry{
+			{keys: "←/h/→/l", label: "day", visible: true},
+			{keys: "↑/k/↓/j", label: "week", visible: true},
+			{keys: "H/L", label: "month", visible: true},
+			{keys: "enter", label: "open", visible: true},
+			{keys: "e", label: "edit", visible: true},
+			{keys: "a", label: "templates", visible: c.templatesAvailable},
+			{keys: "y", label: "year view", visible: true},
+			{keys: "t", label: "today", visible: true},
+			{keys: "Ctrl+t", label: "theme", visible: true},
+			{keys: "q", label: "quit", visible: true},
+		})
 	}
 
 	header := c.theme.Palette().Header.Render(headerText)
