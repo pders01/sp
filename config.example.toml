@@ -17,3 +17,26 @@ icons = "unicode"
 # Send SIGUSR1 (kill -USR1 <pid>) to re-detect after a manual switch;
 # on macOS the system appearance change is detected automatically.
 theme = "auto"
+
+# Optional day-template sections. The built-in "Workday timebox" template is
+# always available. Press "a" on a calendar or notebook day to choose one or
+# more sections; templates are never applied automatically.
+[templates]
+# SECURITY: Commands execute with your user account's filesystem and network
+# permissions. Enable only for scripts you trust completely. The process gets
+# a minimal environment and is limited to 10 seconds and 1 MiB of output, but
+# it is not sandboxed and can still read or modify ~/.sp.
+allow_commands = false
+
+# A Markdown file provides the section body. Relative paths resolve from the
+# directory containing this config file:
+# [[templates.items]]
+# id = "meeting-notes" # optional; generated from name when omitted
+# name = "Meeting notes"
+# file = "~/.sp/templates/meeting.md"
+#
+# Or execute a command directly and use its stdout as Markdown. Scripts receive
+# the selected YYYY-MM-DD date in SP_DATE.
+# [[templates.items]]
+# name = "Issue tracker"
+# command = ["/path/to/issue-template", "--markdown"]

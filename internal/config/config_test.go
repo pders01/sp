@@ -14,6 +14,9 @@ func TestDefault(t *testing.T) {
 	if cfg.UI.Theme != "auto" {
 		t.Errorf("Theme = %q, want %q", cfg.UI.Theme, "auto")
 	}
+	if cfg.Templates.AllowCommands {
+		t.Error("template commands should be disabled by default")
+	}
 }
 
 func TestLoadMissingFileReturnsDefaults(t *testing.T) {
@@ -33,6 +36,18 @@ func TestLoadParsesTOML(t *testing.T) {
 [ui]
 icons = "nerd"
 theme = "dark"
+
+[templates]
+allow_commands = true
+
+[[templates.items]]
+id = "meeting"
+name = "Meeting notes"
+file = "~/.sp/templates/meeting.md"
+
+[[templates.items]]
+name = "Issues"
+command = ["issue-template", "--markdown"]
 `
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -46,6 +61,35 @@ theme = "dark"
 	}
 	if cfg.UI.Theme != "dark" {
 		t.Errorf("Theme = %q, want %q", cfg.UI.Theme, "dark")
+	}
+	if !cfg.Templates.AllowCommands {
+		t.Error("AllowCommands = false, want true")
+	}
+	if len(cfg.Templates.Items) != 2 {
+		t.Fatalf("Templates = %+v", cfg.Templates.Items)
+	}
+	if cfg.Templates.Items[0].ID != "meeting" || cfg.Templates.Items[0].File == "" {
+		t.Errorf("file template = %+v", cfg.Templates.Items[0])
+	}
+	if got := cfg.Templates.Items[1].Command; len(got) != 2 || got[1] != "--markdown" {
+		t.Errorf("command template = %+v", cfg.Templates.Items[1])
+	}
+}
+
+func TestLoadResolvesRelativeTemplateFilesFromConfigDir(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	body := "[[templates.items]]\nname = \"Notes\"\nfile = \"templates/notes.md\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(dir, "templates", "notes.md")
+	if got := cfg.Templates.Items[0].File; got != want {
+		t.Errorf("relative template file = %q, want %q", got, want)
 	}
 }
 

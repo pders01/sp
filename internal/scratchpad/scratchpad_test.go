@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/pders01/sp/internal/templates"
 )
 
 func setupTestManager(t *testing.T) *Manager {
@@ -53,6 +55,75 @@ func TestGetToday(t *testing.T) {
 	}
 	if sp.Date != time.Now().Format("2006-01-02") {
 		t.Errorf("expected today's date, got %q", sp.Date)
+	}
+}
+
+func TestApplyTemplateSectionsAppendsWithoutOverwriting(t *testing.T) {
+	mgr := setupTestManager(t)
+	original := &Scratchpad{Date: "2026-07-19", Content: "# Existing\n", Created: time.Now()}
+	if err := mgr.Save(original); err != nil {
+		t.Fatal(err)
+	}
+	sections := []templates.Section{{ID: "tasks", Title: "Tasks", Body: "- [ ] one"}}
+
+	got, err := mgr.ApplyTemplateSections(original.Date, sections)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "# Existing\n\n## Tasks\n\n- [ ] one\n"
+	if got.Content != want {
+		t.Errorf("content = %q, want %q", got.Content, want)
+	}
+	if len(got.AppliedTemplates) != 1 || got.AppliedTemplates[0] != "tasks" {
+		t.Errorf("applied templates = %v", got.AppliedTemplates)
+	}
+
+	got, err = mgr.ApplyTemplateSections(original.Date, sections)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Content != want {
+		t.Errorf("reapplying changed content to %q", got.Content)
+	}
+
+	// If the user removes the generated section in their editor, an explicit
+	// force selection can restore it without duplicating metadata.
+	got.Content = "# Existing\n"
+	if saveErr := mgr.Save(got); saveErr != nil {
+		t.Fatal(saveErr)
+	}
+	sections[0].Force = true
+	got, err = mgr.ApplyTemplateSections(original.Date, sections)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Content != want {
+		t.Errorf("forced reapply content = %q, want %q", got.Content, want)
+	}
+	if len(got.AppliedTemplates) != 1 {
+		t.Errorf("forced reapply duplicated metadata: %v", got.AppliedTemplates)
+	}
+}
+
+func TestApplyTemplateSectionsPreservesExistingTrailingWhitespace(t *testing.T) {
+	mgr := setupTestManager(t)
+	original := &Scratchpad{
+		Date:    "2026-07-20",
+		Content: "existing content  \n\n\n",
+		Created: time.Now(),
+	}
+	if err := mgr.Save(original); err != nil {
+		t.Fatal(err)
+	}
+	got, err := mgr.ApplyTemplateSections(original.Date, []templates.Section{{
+		ID: "notes", Title: "Notes", Body: "body",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := original.Content + "## Notes\n\nbody\n"
+	if got.Content != want {
+		t.Errorf("content = %q, want byte-preserving append %q", got.Content, want)
 	}
 }
 
