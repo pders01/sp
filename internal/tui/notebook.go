@@ -359,6 +359,15 @@ func (n *Notebook) SetContents(contents map[string]string) {
 	n.updateViewportContent()
 }
 
+// SetPageContent refreshes one page after templates are applied.
+func (n *Notebook) SetPageContent(date, content string) {
+	n.contents[date] = content
+	if len(n.pages) > 0 && n.pages[n.current] == date {
+		n.updateViewportContent()
+		n.viewport.GotoTop()
+	}
+}
+
 // SetIcons overrides the icon set. Useful for tests or callers that resolve
 // icon mode from a higher-level config instead of the SP_ICONS env var.
 func (n *Notebook) SetIcons(icons IconSet) {

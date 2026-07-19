@@ -23,11 +23,15 @@ const (
 // just internal mode flips — no nested tea programs, no terminal
 // re-init flicker between views.
 type App struct {
-	cal      *Calendar
-	nb       *Notebook
-	mode     AppMode
-	canPop   bool
-	quitting bool
+	cal              *Calendar
+	nb               *Notebook
+	mode             AppMode
+	canPop           bool
+	quitting         bool
+	templates        []DayTemplate
+	appliedTemplates map[string]map[string]bool
+	applyTemplates   TemplateApplier
+	templateChooser  *templateChooser
 }
 
 // NewApp builds the router around an already-configured calendar and
@@ -59,6 +63,24 @@ func (a *App) Close() {
 // Update routes the message to the active view, then inspects the
 // view's state machine for drill / pop / quit signals and reacts.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if applied, ok := msg.(templateAppliedMsg); ok {
+		if a.quitting {
+			return a, tea.Quit
+		}
+		return a.finishTemplateApply(applied)
+	}
+	if a.templateChooser != nil {
+		if ws, ok := msg.(tea.WindowSizeMsg); ok {
+			a.cal.Update(ws)
+			a.nb.Update(ws)
+			return a, nil
+		}
+		return a.updateTemplateChooser(msg)
+	}
+	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "a" && a.startTemplateChooser() {
+		return a, nil
+	}
+
 	if a.mode == ModeNotebook || a.mode == ModeCalendar {
 		// Always forward window-size to both views so the inactive one
 		// is rendered correctly the moment we swap.
@@ -144,6 +166,9 @@ func (a *App) updateNotebook(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (a *App) View() string {
 	if a.quitting {
 		return ""
+	}
+	if a.templateChooser != nil {
+		return a.renderTemplateChooser()
 	}
 	switch a.mode {
 	case ModeNotebook:

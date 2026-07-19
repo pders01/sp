@@ -21,6 +21,8 @@ with Go and the [charm.sh](https://charm.sh) toolchain.
   preferences plist
 - Glyph set choice: nerd-font icons or pure-ASCII fallback, set in
   `~/.sp/config.toml`
+- Opt-in day templates: append one or more named Markdown sections from
+  files or script output, with a built-in workday timeboxing helper
 
 ## Installation
 
@@ -84,6 +86,7 @@ notebook.
 | `H` `L`            | jump month / year                     |
 | `Enter`            | drill into the notebook on that day   |
 | `e` `i`            | edit the day immediately (month view) |
+| `a`                | choose template sections for the day  |
 | `m` `y`            | switch to month / year view           |
 | `t`                | reset cursor to today                 |
 | `Ctrl+T`           | cycle theme: auto → light → dark      |
@@ -99,6 +102,7 @@ notebook.
 | `b` `f` `pgup`/`pgdn`| full-page up / down             |
 | `g` `G`              | jump to top / bottom            |
 | `Enter` `e` `i`      | edit current page               |
+| `a`                  | choose template sections         |
 | `Esc` `Backspace`    | pop back to calendar (when -c)  |
 | `Ctrl+T`             | cycle theme                     |
 | `q` `Ctrl+C`         | quit                            |
@@ -112,11 +116,40 @@ defaults shown in `config.example.toml`:
 [ui]
 icons = "unicode"   # or "nerd" if you have a Nerd Font installed
 theme = "auto"      # "auto" | "light" | "dark"
+
+[templates]
+allow_commands = false
+
+[[templates.items]]
+name = "Meeting notes"
+file = "~/.sp/templates/meeting.md"
+
+# Requires allow_commands = true above.
+[[templates.items]]
+name = "Issue tracker"
+command = ["/path/to/issue-template", "--markdown"]
 ```
 
 `auto` resolves via `GLAMOUR_STYLE` → `COLORFGBG` → terminal
 detection → macOS `AppleInterfaceStyle`. Send `SIGUSR1` (`pkill -USR1
 sp`) to re-detect after a manual switch.
+
+Press `a` on a day to open the multi-select template chooser. Markdown files
+and command stdout become separate `##` sections; commands receive the selected
+date in `SP_DATE`. Relative Markdown file paths resolve from the directory that
+contains `config.toml`. Existing content is only appended to, never replaced.
+Applied template IDs are stored in scratchpad JSON metadata to prevent duplicate
+application without adding markers to the Markdown. Select an already-applied
+template again to force a reapply—for example, after manually removing its
+section. The built-in **Workday timebox** template remains opt-in like every
+configured template.
+
+> **Security:** Command templates are disabled unless
+> `templates.allow_commands = true`. Enabling them runs explicitly configured
+> programs with your user account's filesystem and network permissions. They
+> receive a minimal environment and are limited to 10 seconds and 1 MiB of
+> output, but they are not sandboxed and can still read or modify `~/.sp`. Only
+> configure commands you fully trust.
 
 ## Editor support
 
@@ -138,7 +171,8 @@ path keeps the original GUI polling loop).
 ## Data storage
 
 Scratchpads live in `~/.sp/<YYYY-MM-DD>.json`. Each file holds the
-date, content (raw markdown), and creation / modified timestamps.
+date, content (raw markdown), applied-template metadata, and creation / modified
+timestamps.
 
 ## Project layout
 

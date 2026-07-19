@@ -616,6 +616,15 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
+// CursorDate returns the focused date in month view. Year view returns empty
+// because templates apply to a specific day.
+func (c *Calendar) CursorDate() string {
+	if c.view != ViewMonth {
+		return ""
+	}
+	return c.cursor.Format("2006-01-02")
+}
+
 // GetSelectedDate returns the selected date in YYYY-MM-DD form, or empty.
 func (c *Calendar) GetSelectedDate() string { return c.selected }
 
