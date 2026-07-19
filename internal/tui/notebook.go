@@ -28,19 +28,20 @@ type editDoneMsg struct {
 
 // Notebook represents the notebook view
 type Notebook struct {
-	pages    []string
-	contents map[string]string
-	current  int
-	viewport viewport.Model
-	width    int
-	height   int
-	quitting bool
-	popping  bool
-	selected string
-	icons    IconSet
-	theme    *themeWatcher
-	editor   *editor.Editor
-	save     Saver
+	pages              []string
+	contents           map[string]string
+	current            int
+	viewport           viewport.Model
+	width              int
+	height             int
+	quitting           bool
+	popping            bool
+	selected           string
+	icons              IconSet
+	theme              *themeWatcher
+	editor             *editor.Editor
+	save               Saver
+	templatesAvailable bool
 }
 
 // NewNotebook creates a new notebook instance. Pages are copied and
@@ -315,7 +316,18 @@ func (n *Notebook) renderFooter() string {
 	rule := n.theme.Palette().Separator.Render(strings.Repeat("─", max(n.width, 0)))
 
 	// Controls on separate line
-	help := n.theme.Palette().Help.Render("←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • enter/e: edit • esc: back • Ctrl+t: theme • q: quit")
+	help := n.theme.Palette().Help.Render(renderHelp([]helpEntry{
+		{keys: "←/h", label: "prev", visible: true},
+		{keys: "→/l", label: "next", visible: true},
+		{keys: "↑/k", label: "up", visible: true},
+		{keys: "↓/j", label: "down", visible: true},
+		{keys: "Ctrl+u/d", label: "page up/down", visible: true},
+		{keys: "enter/e", label: "edit", visible: true},
+		{keys: "a", label: "templates", visible: n.templatesAvailable},
+		{keys: "esc", label: "back", visible: true},
+		{keys: "Ctrl+t", label: "theme", visible: true},
+		{keys: "q", label: "quit", visible: true},
+	}))
 
 	// Center the navigation line
 	navStyle := lipgloss.NewStyle().Width(n.width).Align(lipgloss.Center)
