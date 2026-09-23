@@ -20,6 +20,7 @@ import (
 type Definition struct {
 	ID      string
 	Name    string
+	Title   string
 	Body    string
 	File    string
 	Command []string
@@ -39,9 +40,10 @@ var workdayTimebox string
 // Builtins returns templates available without configuration.
 func Builtins() []Definition {
 	return []Definition{{
-		ID:   "workday-timebox",
-		Name: "Workday timebox",
-		Body: workdayTimebox,
+		ID:    "workday-timebox",
+		Name:  "Workday timebox",
+		Title: "[Add a brief day summary]",
+		Body:  workdayTimebox,
 	}}
 }
 
@@ -127,7 +129,11 @@ func RenderContext(ctx context.Context, def Definition, date string) (Section, e
 	if body == "" {
 		return Section{}, fmt.Errorf("template %q produced no Markdown", def.Name)
 	}
-	return Section{ID: def.ID, Title: def.Name, Body: body}, nil
+	title := def.Title
+	if title == "" {
+		title = def.Name
+	}
+	return Section{ID: def.ID, Title: title, Body: body}, nil
 }
 
 type limitedBuffer struct {
