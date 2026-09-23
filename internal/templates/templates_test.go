@@ -131,4 +131,10 @@ func TestBuiltinTimebox(t *testing.T) {
 	if !strings.Contains(defs[0].Body, "### Schedule") {
 		t.Error("embedded timebox Markdown is missing its schedule section")
 	}
+	if defs[0].Name != "Workday timebox" || defs[0].Title != "[Add a brief day summary]" {
+		t.Errorf("builtin name/title = %q/%q", defs[0].Name, defs[0].Title)
+	}
+	if strings.Contains(defs[0].Body, "- [ ] 09:00") {
+		t.Error("hourly log slots should not have checkboxes")
+	}
 }
