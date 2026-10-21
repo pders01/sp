@@ -1,6 +1,7 @@
 package scratchpad
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -159,4 +160,86 @@ func TestSaveReportsDirectorySyncFailureAfterReplacement(t *testing.T) {
 		t.Error("published note's Modified was not updated")
 	}
 	assertNoSaveTemps(t, mgr)
+}
+
+func TestDateOperationsRejectInvalidDates(t *testing.T) {
+	for _, date := range []string{
+		"", "../outside", "2024/01/01", `2024\01\01`,
+		"2024-1-01", "2024-01-1", "2023-02-29", "2024-02-30",
+		"2024-13-01", "2024-01-01.new", "2024-01-01\n",
+	} {
+		t.Run(date, func(t *testing.T) {
+			root := t.TempDir()
+			mgr := &Manager{storageDir: filepath.Join(root, "notes")}
+			if err := os.Mkdir(mgr.storageDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			outside := filepath.Join(root, "outside.json")
+			const sentinel = `{"date":"2024-01-01","content":"keep"}`
+			if err := os.WriteFile(outside, []byte(sentinel), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := mgr.GetByDate(date); err == nil {
+				t.Error("GetByDate accepted invalid date")
+			}
+			old := time.Now().Add(-time.Hour)
+			note := &Scratchpad{Date: date, Content: "replacement", Modified: old}
+			if err := mgr.Save(note); err == nil {
+				t.Error("Save accepted invalid date")
+			}
+			if !note.Modified.Equal(old) {
+				t.Error("invalid date changed Modified")
+			}
+			if err := mgr.Delete(date); err == nil {
+				t.Error("Delete accepted invalid date")
+			}
+			data, err := os.ReadFile(outside)
+			if err != nil || string(data) != sentinel {
+				t.Errorf("invalid date modified a file outside storage: %q, %v", data, err)
+			}
+			entries, err := os.ReadDir(mgr.storageDir)
+			if err != nil || len(entries) != 0 {
+				t.Errorf("invalid date created files: %v, %v", entries, err)
+			}
+		})
+	}
+}
+
+func TestGetByDateRejectsMismatchedStoredDate(t *testing.T) {
+	mgr := setupTestManager(t)
+	path := filepath.Join(mgr.storageDir, "2024-01-01.json")
+	for _, date := range []string{"", "2024-01-02", "../outside"} {
+		data, err := json.Marshal(Scratchpad{Date: date, Content: "keep"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := mgr.GetByDate("2024-01-01"); err == nil {
+			t.Errorf("GetByDate accepted stored date %q for another filename", date)
+		}
+	}
+}
+
+func TestListDatesIgnoresInvalidNamesAndDirectories(t *testing.T) {
+	mgr := setupTestManager(t)
+	for _, name := range []string{
+		"2024-02-29.json", "2024-01-01.json", "2023-02-29.json",
+		"2024-1-01.json", "2024-01-01.new.json", "config.json", ".sp-abcd.tmp",
+	} {
+		if err := os.WriteFile(filepath.Join(mgr.storageDir, name), []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(mgr.storageDir, "2024-03-01.json"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	got, err := mgr.ListDates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, ",") != "2024-01-01,2024-02-29" {
+		t.Errorf("ListDates = %v, want only valid note filenames", got)
+	}
 }
