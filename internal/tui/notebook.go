@@ -14,7 +14,7 @@ import (
 )
 
 // Saver persists an edited scratchpad. Returning a non-nil error
-// surfaces a transient banner inside the view but does not exit it.
+// surfaces an error inside the view but does not exit it.
 type Saver func(date string, content string) error
 
 // editDoneMsg is dispatched after tea.ExecProcess has handed control
@@ -138,31 +138,38 @@ func (n *Notebook) startEdit(date string) tea.Cmd {
 }
 
 // finishEdit reads the edited buffer, persists changes, and refreshes
-// the rendered viewport. Errors surface as transient status banners.
+// the rendered viewport. Failures retain the buffer and show its path
+// without a timeout; cleanup happens only after success or an unchanged edit.
 func (n *Notebook) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
-	if msg.cleanup != nil {
-		defer msg.cleanup()
+	fail := func(stage string, err error) (tea.Model, tea.Cmd) {
+		text := fmt.Sprintf("%s: %v", stage, err)
+		if msg.path != "" {
+			text += fmt.Sprintf("; buffer path: %s", msg.path)
+		}
+		n.theme.SetStatus(text, 0)
+		return n, nil
 	}
 	if msg.err != nil {
-		n.flashError(fmt.Sprintf("editor: %v", msg.err))
-		return n, n.theme.expireStatusCmd(2 * time.Second)
+		return fail("editor", msg.err)
 	}
 	newContent, rerr := editor.ReadEdited(msg.path)
 	if rerr != nil {
-		n.flashError(fmt.Sprintf("read: %v", rerr))
-		return n, n.theme.expireStatusCmd(2 * time.Second)
+		return fail("read", rerr)
 	}
-	if newContent == n.contents[msg.date] {
-		return n, nil
+	var cmd tea.Cmd
+	if newContent != n.contents[msg.date] {
+		if serr := n.save(msg.date, newContent); serr != nil {
+			return fail("save", serr)
+		}
+		n.contents[msg.date] = newContent
+		n.theme.SetStatus("Saved", 1500*time.Millisecond)
+		n.updateViewportContent()
+		cmd = n.theme.expireStatusCmd(1500 * time.Millisecond)
 	}
-	n.contents[msg.date] = newContent
-	if serr := n.save(msg.date, newContent); serr != nil {
-		n.flashError(fmt.Sprintf("save: %v", serr))
-		return n, n.theme.expireStatusCmd(2 * time.Second)
+	if msg.cleanup != nil {
+		msg.cleanup()
 	}
-	n.theme.SetStatus("Saved", 1500*time.Millisecond)
-	n.updateViewportContent()
-	return n, n.theme.expireStatusCmd(1500 * time.Millisecond)
+	return n, cmd
 }
 
 func (n *Notebook) flashError(text string) {

@@ -137,11 +137,14 @@ func (w *themeWatcher) stop() {
 	}
 }
 
-// SetStatus stores a transient banner with a TTL; pair with expireCmd
-// to clear it from the model's Update loop.
+// SetStatus stores a banner. A positive TTL can be paired with expireStatusCmd;
+// a nonpositive TTL keeps the banner until it is replaced by another status.
 func (w *themeWatcher) SetStatus(msg string, ttl time.Duration) {
 	w.statusText = msg
-	w.statusExpiry = time.Now().Add(ttl)
+	w.statusExpiry = time.Time{}
+	if ttl > 0 {
+		w.statusExpiry = time.Now().Add(ttl)
+	}
 }
 
 // StatusText returns the active banner string, or "" when none.
