@@ -16,6 +16,9 @@ func setupTestManager(t *testing.T) *Manager {
 }
 
 func TestNewManager(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	mgr, err := NewManager()
 	if err != nil {
 		t.Fatalf("NewManager failed: %v", err)
