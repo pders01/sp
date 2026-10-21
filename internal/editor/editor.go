@@ -27,10 +27,9 @@ func NewEditor() (*Editor, error) {
 
 // Prepare builds the *exec.Cmd that opens content in the user's editor
 // alongside the temp-file path that holds the buffered content and a
-// cleanup func to remove that file. Callers wait for the command to
-// finish (either by Run-ing it or by handing it to tea.ExecProcess),
-// then call ReadEdited(path) to fetch the saved content before
-// invoking cleanup.
+// cleanup func to remove that file. Callers use RunPrepared, or hand the command
+// to tea.ExecProcess and read it with ReadEdited. Invoke cleanup only after
+// persistence succeeds or the edit is unchanged, retaining the buffer on error.
 func (e *Editor) Prepare(content string) (cmd *exec.Cmd, path string, cleanup func(), err error) {
 	tmpFile, err := os.CreateTemp("", "sp-*.md")
 	if err != nil {
@@ -72,51 +71,17 @@ func ReadEdited(path string) (string, error) {
 	return string(data), nil
 }
 
-// Edit opens content in the user's preferred editor. The filename
-// argument is reserved for future use (so the temp file can carry a
-// meaningful suffix); right now we always use sp-*.md.
-func (e *Editor) Edit(content, _ string) (string, error) {
-	// Create temporary file
-	tmpFile, err := os.CreateTemp("", "sp-*.md")
-	if err != nil {
-		return "", fmt.Errorf("failed to create temp file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	// Write content to temp file
-	if _, werr := tmpFile.WriteString(content); werr != nil {
-		return "", fmt.Errorf("failed to write to temp file: %w", werr)
-	}
-	tmpFile.Close()
-
-	// Build command. Copy e.args so we don't mutate the editor's slice.
-	args := make([]string, 0, len(e.args)+1)
-	args = append(args, e.args...)
-	args = append(args, tmpFile.Name())
-	cmd := exec.Command(e.command, args...)
-
-	// Set up I/O
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	// For GUI editors, we need to wait for the file to be modified
+// RunPrepared runs a command returned by Prepare and reads its edited buffer.
+// The caller owns cleanup so the buffer can survive a subsequent save failure.
+// Detached GUI editors retain the synchronous flow's existing polling behavior.
+func (e *Editor) RunPrepared(cmd *exec.Cmd, path string) (string, error) {
 	if e.isGUI {
-		return e.editGUI(cmd, tmpFile.Name())
+		return e.editGUI(cmd, path)
 	}
-
-	// For terminal editors, run in foreground
-	if rerr := cmd.Run(); rerr != nil {
-		return "", fmt.Errorf("editor failed: %w", rerr)
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("editor failed: %w", err)
 	}
-
-	// Read back the content
-	data, rerr := os.ReadFile(tmpFile.Name())
-	if rerr != nil {
-		return "", fmt.Errorf("failed to read edited file: %w", rerr)
-	}
-
-	return string(data), nil
+	return ReadEdited(path)
 }
 
 // editGUI handles GUI editors by waiting for file modification

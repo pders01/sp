@@ -1,6 +1,7 @@
 package scratchpad
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,11 +20,20 @@ type Scratchpad struct {
 	AppliedTemplates []string  `json:"applied_templates,omitempty"`
 	Created          time.Time `json:"created"`
 	Modified         time.Time `json:"modified"`
+
+	// Snapshot of the on-disk version this value was loaded from. New values
+	// expect an absent file; successful saves advance the snapshot.
+	revision [sha256.Size]byte
+	exists   bool
 }
 
 // ErrDurabilityUnconfirmed means the replacement succeeded, but syncing its
 // directory failed. The new note is visible; it has not been rolled back.
 var ErrDurabilityUnconfirmed = errors.New("scratchpad replaced, but crash durability could not be confirmed")
+
+// ErrConflict means a note changed or disappeared since it was loaded.
+// Callers must retain unsaved edits and reload rather than overwrite it.
+var ErrConflict = errors.New("scratchpad changed since it was loaded")
 
 // Manager handles scratchpad operations
 type Manager struct {
@@ -81,6 +91,8 @@ func (m *Manager) GetByDate(date string) (*Scratchpad, error) {
 	if scratchpad.Date != date {
 		return nil, fmt.Errorf("scratchpad date %q does not match requested date %q", scratchpad.Date, date)
 	}
+	scratchpad.revision = sha256.Sum256(data)
+	scratchpad.exists = true
 	return &scratchpad, nil
 }
 
@@ -88,7 +100,8 @@ func (m *Manager) GetByDate(date string) (*Scratchpad, error) {
 // rename is atomic and the directory is synced afterward. Other platforms use
 // os.Rename without a directory-sync or atomic-replacement guarantee.
 // Modified changes only once replacement succeeds, including when the result is
-// ErrDurabilityUnconfirmed. Save does not detect concurrent edits.
+// ErrDurabilityUnconfirmed. Cooperating SP writers check the loaded revision
+// under a short per-note lock; stale writes return ErrConflict.
 func (m *Manager) Save(scratchpad *Scratchpad) error {
 	return m.save(scratchpad, syncDirectory)
 }
@@ -101,6 +114,24 @@ func (m *Manager) save(scratchpad *Scratchpad, syncDir func(string) error) error
 	}
 	if err := validateDate(scratchpad.Date); err != nil {
 		return err
+	}
+	lock, err := lockNote(m.storageDir, scratchpad.Date)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+
+	filename := filepath.Join(m.storageDir, scratchpad.Date+".json")
+	current, err := os.ReadFile(filename)
+	switch {
+	case os.IsNotExist(err):
+		if scratchpad.exists {
+			return fmt.Errorf("%w: %s was deleted", ErrConflict, scratchpad.Date)
+		}
+	case err != nil:
+		return fmt.Errorf("failed to check scratchpad revision: %w", err)
+	case !scratchpad.exists || sha256.Sum256(current) != scratchpad.revision:
+		return fmt.Errorf("%w: %s", ErrConflict, scratchpad.Date)
 	}
 	pending := *scratchpad
 	pending.Modified = time.Now()
@@ -127,13 +158,14 @@ func (m *Manager) save(scratchpad *Scratchpad, syncDir func(string) error) error
 		return fmt.Errorf("failed to close temporary scratchpad: %w", err)
 	}
 
-	filename := filepath.Join(m.storageDir, scratchpad.Date+".json")
 	if err := os.Rename(tmp.Name(), filename); err != nil {
 		return fmt.Errorf("failed to replace scratchpad file: %w", err)
 	}
 
 	// Publication has happened even if the durability check below fails.
 	scratchpad.Modified = pending.Modified
+	scratchpad.revision = sha256.Sum256(data)
+	scratchpad.exists = true
 	if err := syncDir(m.storageDir); err != nil {
 		return fmt.Errorf("%w: sync storage directory: %w", ErrDurabilityUnconfirmed, err)
 	}
@@ -210,6 +242,11 @@ func (m *Manager) Delete(date string) error {
 	if err := validateDate(date); err != nil {
 		return err
 	}
+	lock, err := lockNote(m.storageDir, date)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
 	filename := filepath.Join(m.storageDir, date+".json")
 	return os.Remove(filename)
 }

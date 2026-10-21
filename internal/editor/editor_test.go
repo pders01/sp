@@ -78,6 +78,53 @@ func TestGetFallbackEditors(t *testing.T) {
 	}
 }
 
+func TestRunPreparedRetainsBuffer(t *testing.T) {
+	for _, mode := range []string{"success", "failure"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("SP_EDITOR_HELPER", mode)
+			ed := &Editor{
+				command: os.Args[0],
+				args:    []string{"-test.run=^TestEditorHelperProcess$", "--"},
+			}
+			cmd, path, cleanup, err := ed.Prepare("original")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(cleanup)
+			got, err := ed.RunPrepared(cmd, path)
+			if (err != nil) != (mode == "failure") {
+				t.Errorf("RunPrepared error = %v, mode = %s", err, mode)
+			}
+			if mode == "success" && got != "edited" {
+				t.Errorf("edited content = %q", got)
+			}
+			data, readErr := os.ReadFile(path)
+			if readErr != nil || string(data) != "edited" {
+				t.Errorf("editor buffer not retained: %q, %v", data, readErr)
+			}
+			cleanup()
+			if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+				t.Errorf("explicit cleanup did not remove buffer: %v", statErr)
+			}
+		})
+	}
+}
+
+// Re-execute the test binary as a noninteractive editor fixture.
+func TestEditorHelperProcess(t *testing.T) {
+	mode := os.Getenv("SP_EDITOR_HELPER")
+	if mode == "" {
+		return
+	}
+	if err := os.WriteFile(os.Args[len(os.Args)-1], []byte("edited"), 0o600); err != nil {
+		os.Exit(2)
+	}
+	if mode == "failure" {
+		os.Exit(3)
+	}
+	os.Exit(0)
+}
+
 func TestDetectEditorWithEnv(t *testing.T) {
 	// Test with EDITOR environment variable
 	originalEditor := os.Getenv("EDITOR")

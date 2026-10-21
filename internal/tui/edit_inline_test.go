@@ -59,15 +59,19 @@ func TestNotebookFinishEditPersistsChanges(t *testing.T) {
 	nb.SetContents(map[string]string{"2024-01-01": "# Old\n"})
 
 	saved := map[string]string{}
-	nb.save = func(date, content string) error {
+	nb.save = func(date, original, content string) error {
+		if original != "# Old\n" {
+			t.Errorf("original content = %q", original)
+		}
 		saved[date] = content
 		return nil
 	}
 
 	cleaned := false
 	model, _ := nb.Update(editDoneMsg{
-		date: "2024-01-01",
-		path: tmpFile,
+		date:     "2024-01-01",
+		original: "# Old\n",
+		path:     tmpFile,
 		cleanup: func() {
 			cleaned = true
 			if err := os.Remove(tmpFile); err != nil {
@@ -109,14 +113,15 @@ func TestNotebookFinishEditPreservesBufferOnFailure(t *testing.T) {
 			defer nb.Close()
 			nb.SetContents(map[string]string{date: "# Old\n"})
 			saveCalls := 0
-			nb.save = func(_, _ string) error {
+			nb.save = func(_, _, _ string) error {
 				saveCalls++
 				return errors.New("disk full")
 			}
 			cleaned := false
 			msg := editDoneMsg{
-				date: date,
-				path: path,
+				date:     date,
+				original: "# Old\n",
+				path:     path,
 				cleanup: func() {
 					cleaned = true
 					if err := os.Remove(path); err != nil {
@@ -176,8 +181,11 @@ func TestNotebookFinishEditRetriesAfterSaveFailure(t *testing.T) {
 	defer nb.Close()
 	nb.SetContents(map[string]string{date: "# Old\n"})
 	saveCalls := 0
-	nb.save = func(gotDate, content string) error {
+	nb.save = func(gotDate, original, content string) error {
 		saveCalls++
+		if original != "# Old\n" {
+			t.Errorf("retry original = %q", original)
+		}
 		if gotDate != date || content != "# Updated\n" {
 			t.Errorf("save(%q, %q)", gotDate, content)
 		}
@@ -191,8 +199,9 @@ func TestNotebookFinishEditRetriesAfterSaveFailure(t *testing.T) {
 	}
 	cleaned := 0
 	msg := editDoneMsg{
-		date: date,
-		path: path,
+		date:     date,
+		original: "# Old\n",
+		path:     path,
 		cleanup: func() {
 			cleaned++
 			if err := os.Remove(path); err != nil {
@@ -228,13 +237,14 @@ func TestNotebookFinishEditCleansUnchangedBuffer(t *testing.T) {
 	nb := NewNotebook([]string{date})
 	defer nb.Close()
 	nb.SetContents(map[string]string{date: "# Old\n"})
-	nb.save = func(_, _ string) error {
+	nb.save = func(_, _, _ string) error {
 		t.Error("unchanged buffer should not be saved")
 		return nil
 	}
 	_, cmd := nb.Update(editDoneMsg{
-		date: date,
-		path: path,
+		date:     date,
+		original: "# Old\n",
+		path:     path,
 		cleanup: func() {
 			if err := os.Remove(path); err != nil {
 				t.Errorf("cleanup: %v", err)
@@ -278,7 +288,7 @@ func TestCalendarFinishEditUpdatesHasData(t *testing.T) {
 
 	cal := NewCalendar(nil)
 	defer cal.Close()
-	cal.save = func(_, _ string) error { return nil }
+	cal.save = func(_, _, _ string) error { return nil }
 
 	model, _ := cal.Update(editDoneMsg{
 		date: "2024-05-04",

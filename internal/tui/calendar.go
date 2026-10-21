@@ -157,22 +157,24 @@ func (c *Calendar) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (c *Calendar) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
-	if msg.cleanup != nil {
-		defer msg.cleanup()
+	fail := func(stage string, err error) (tea.Model, tea.Cmd) {
+		text := fmt.Sprintf("%s: %v", stage, err)
+		if msg.path != "" {
+			text += fmt.Sprintf("; buffer path: %s", msg.path)
+		}
+		c.theme.SetStatus(text, 0)
+		return c, nil
 	}
 	if msg.err != nil {
-		c.theme.SetStatus(fmt.Sprintf("editor: %v", msg.err), 2*time.Second)
-		return c, c.theme.expireStatusCmd(2 * time.Second)
+		return fail("editor", msg.err)
 	}
 	newContent, rerr := editor.ReadEdited(msg.path)
 	if rerr != nil {
-		c.theme.SetStatus(fmt.Sprintf("read: %v", rerr), 2*time.Second)
-		return c, c.theme.expireStatusCmd(2 * time.Second)
+		return fail("read", rerr)
 	}
-	if c.save != nil {
-		if serr := c.save(msg.date, newContent); serr != nil {
-			c.theme.SetStatus(fmt.Sprintf("save: %v", serr), 2*time.Second)
-			return c, c.theme.expireStatusCmd(2 * time.Second)
+	if c.save != nil && newContent != msg.original {
+		if serr := c.save(msg.date, msg.original, newContent); serr != nil {
+			return fail("save", serr)
 		}
 	}
 	// Reflect the new entry in the calendar's data so cells repaint.
@@ -185,6 +187,9 @@ func (c *Calendar) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
 		}
 	} else {
 		delete(c.contents, msg.date)
+	}
+	if msg.cleanup != nil {
+		msg.cleanup()
 	}
 	c.theme.SetStatus("Saved", 1500*time.Millisecond)
 	return c, c.theme.expireStatusCmd(1500 * time.Millisecond)
@@ -706,7 +711,7 @@ func (c *Calendar) startEdit(date string) tea.Cmd {
 		return c.theme.expireStatusCmd(2 * time.Second)
 	}
 	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
-		return editDoneMsg{date: date, path: path, cleanup: cleanup, err: execErr}
+		return editDoneMsg{date: date, original: content, path: path, cleanup: cleanup, err: execErr}
 	})
 }
 

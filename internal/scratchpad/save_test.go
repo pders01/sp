@@ -58,7 +58,7 @@ func TestSaveReplacesExistingNote(t *testing.T) {
 }
 
 func TestSaveFailureLeavesModifiedUnchanged(t *testing.T) {
-	for _, stage := range []string{"marshal", "create", "rename"} {
+	for _, stage := range []string{"marshal", "create", "read"} {
 		t.Run(stage, func(t *testing.T) {
 			mgr := setupTestManager(t)
 			old := time.Now().Add(-time.Hour)
@@ -69,8 +69,8 @@ func TestSaveFailureLeavesModifiedUnchanged(t *testing.T) {
 				note.Created = time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)
 			case "create":
 				mgr.storageDir = filepath.Join(mgr.storageDir, "missing")
-			case "rename":
-				// Replacing a nonempty directory fails without relying on permissions.
+			case "read":
+				// A directory cannot be read as a note when checking its revision.
 				target := filepath.Join(mgr.storageDir, note.Date+".json")
 				if err := os.Mkdir(target, 0o700); err != nil {
 					t.Fatal(err)
@@ -89,7 +89,7 @@ func TestSaveFailureLeavesModifiedUnchanged(t *testing.T) {
 				t.Errorf("failed save changed Modified from %v to %v", old, note.Modified)
 			}
 			assertNoSaveTemps(t, mgr)
-			if stage == "rename" {
+			if stage == "read" {
 				data, err := os.ReadFile(filepath.Join(mgr.storageDir, note.Date+".json", "sentinel"))
 				if err != nil || string(data) != "keep" {
 					t.Errorf("failed replacement changed original target: %q, %v", data, err)
@@ -158,6 +158,11 @@ func TestSaveReportsDirectorySyncFailureAfterReplacement(t *testing.T) {
 	}
 	if !note.Modified.After(previousModified) {
 		t.Error("published note's Modified was not updated")
+	}
+	// A published revision must remain usable even when directory sync failed.
+	note.Content = "next edit"
+	if err := mgr.Save(note); err != nil {
+		t.Errorf("save after unconfirmed durability = %v", err)
 	}
 	assertNoSaveTemps(t, mgr)
 }
