@@ -111,7 +111,7 @@ func TestEditAndSaveRecovery(t *testing.T) {
 
 // Run as the editor; the conflict case saves through a second SP process while
 // the first process still holds its original edit snapshot.
-func TestCLIEditorHelperProcess(t *testing.T) {
+func TestCLIEditorHelperProcess(_ *testing.T) {
 	mode := os.Getenv("SP_CLI_EDITOR_HELPER")
 	if mode == "" {
 		return

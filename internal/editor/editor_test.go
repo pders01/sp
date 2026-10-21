@@ -111,7 +111,7 @@ func TestRunPreparedRetainsBuffer(t *testing.T) {
 }
 
 // Re-execute the test binary as a noninteractive editor fixture.
-func TestEditorHelperProcess(t *testing.T) {
+func TestEditorHelperProcess(_ *testing.T) {
 	mode := os.Getenv("SP_EDITOR_HELPER")
 	if mode == "" {
 		return
