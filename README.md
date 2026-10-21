@@ -174,6 +174,17 @@ Scratchpads live in `~/.sp/<YYYY-MM-DD>.json`. Each file holds the
 date, content (raw markdown), applied-template metadata, and creation / modified
 timestamps.
 
+Saves write and sync a private temporary file in the same directory before
+replacing the note. On Unix, replacement is atomic and the containing directory
+is synced afterward. If that last sync fails, the error explicitly reports that
+the note **was replaced**, but its survival across a system crash could not be
+confirmed; it does not imply that the old version was restored. Other platforms
+use Go's `os.Rename` without a directory-sync or atomic-replacement guarantee.
+
+This is not concurrent-edit protection: two instances editing the same day can
+still overwrite each other's changes. Atomic replacement prevents partial files,
+not stale edits.
+
 ## Project layout
 
 ```

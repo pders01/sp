@@ -2,6 +2,7 @@ package scratchpad
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,10 @@ type Scratchpad struct {
 	Created          time.Time `json:"created"`
 	Modified         time.Time `json:"modified"`
 }
+
+// ErrDurabilityUnconfirmed means the replacement succeeded, but syncing its
+// directory failed. The new note is visible; it has not been rolled back.
+var ErrDurabilityUnconfirmed = errors.New("scratchpad replaced, but crash durability could not be confirmed")
 
 // Manager handles scratchpad operations
 type Manager struct {
@@ -73,20 +78,56 @@ func (m *Manager) GetByDate(date string) (*Scratchpad, error) {
 	return &scratchpad, nil
 }
 
-// Save saves a scratchpad to disk
+// Save writes a replacement file before renaming it over the note. On Unix the
+// rename is atomic and the directory is synced afterward. Other platforms use
+// os.Rename without a directory-sync or atomic-replacement guarantee.
+// Modified changes only once replacement succeeds, including when the result is
+// ErrDurabilityUnconfirmed. Save does not detect concurrent edits.
 func (m *Manager) Save(scratchpad *Scratchpad) error {
-	scratchpad.Modified = time.Now()
+	return m.save(scratchpad, syncDirectory)
+}
 
-	data, err := json.MarshalIndent(scratchpad, "", "  ")
+// The sync callback lets tests exercise a failure after publication without
+// requiring a failing filesystem or changing global state.
+func (m *Manager) save(scratchpad *Scratchpad, syncDir func(string) error) error {
+	if scratchpad == nil {
+		return errors.New("cannot save a nil scratchpad")
+	}
+	pending := *scratchpad
+	pending.Modified = time.Now()
+
+	data, err := json.MarshalIndent(&pending, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal scratchpad: %w", err)
 	}
 
-	filename := filepath.Join(m.storageDir, scratchpad.Date+".json")
-	if err := os.WriteFile(filename, data, 0o644); err != nil {
-		return fmt.Errorf("failed to write scratchpad file: %w", err)
+	tmp, err := os.CreateTemp(m.storageDir, ".sp-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary scratchpad: %w", err)
+	}
+	defer os.Remove(tmp.Name())
+	defer tmp.Close() // Ensures closure on early returns.
+
+	if _, err := tmp.Write(data); err != nil {
+		return fmt.Errorf("failed to write temporary scratchpad: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		return fmt.Errorf("failed to sync temporary scratchpad: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("failed to close temporary scratchpad: %w", err)
 	}
 
+	filename := filepath.Join(m.storageDir, scratchpad.Date+".json")
+	if err := os.Rename(tmp.Name(), filename); err != nil {
+		return fmt.Errorf("failed to replace scratchpad file: %w", err)
+	}
+
+	// Publication has happened even if the durability check below fails.
+	scratchpad.Modified = pending.Modified
+	if err := syncDir(m.storageDir); err != nil {
+		return fmt.Errorf("%w: sync storage directory: %w", ErrDurabilityUnconfirmed, err)
+	}
 	return nil
 }
 
