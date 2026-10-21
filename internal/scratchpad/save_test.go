@@ -1,6 +1,7 @@
 package scratchpad
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -112,11 +113,11 @@ func TestSaveMarshalFailurePreservesOriginal(t *testing.T) {
 	}
 	note.Content = "replacement"
 	note.Created = time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)
-	if err := mgr.Save(note); err == nil {
+	if saveErr := mgr.Save(note); saveErr == nil {
 		t.Fatal("expected marshal failure")
 	}
 	after, err := os.ReadFile(path)
-	if err != nil || string(after) != string(before) {
+	if err != nil || !bytes.Equal(after, before) {
 		t.Errorf("failed save changed original: %q, error = %v", after, err)
 	}
 	assertNoSaveTemps(t, mgr)

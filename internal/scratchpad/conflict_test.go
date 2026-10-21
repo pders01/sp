@@ -19,12 +19,12 @@ func TestSaveRejectsStaleRevision(t *testing.T) {
 	}
 	previousModified := stale.Modified
 	note.Content = "other writer"
-	if err := mgr.Save(note); err != nil {
-		t.Fatal(err)
+	if saveErr := mgr.Save(note); saveErr != nil {
+		t.Fatal(saveErr)
 	}
 	stale.Content = "my edits"
-	if err := mgr.Save(stale); !errors.Is(err, ErrConflict) {
-		t.Fatalf("stale Save = %v, want ErrConflict", err)
+	if saveErr := mgr.Save(stale); !errors.Is(saveErr, ErrConflict) {
+		t.Fatalf("stale Save = %v, want ErrConflict", saveErr)
 	}
 	if !stale.Modified.Equal(previousModified) || stale.Content != "my edits" {
 		t.Error("conflict mutated the unsaved note")
