@@ -13,17 +13,18 @@ import (
 	"github.com/pders01/sp/internal/editor"
 )
 
-// Saver persists an edited scratchpad. Returning a non-nil error
-// surfaces an error inside the view but does not exit it.
-type Saver func(date string, content string) error
+// Saver persists an edited scratchpad after checking the text originally handed
+// to the editor. Returning an error keeps the buffer and does not exit the view.
+type Saver func(date, original, content string) error
 
 // editDoneMsg is dispatched after tea.ExecProcess has handed control
 // back from the external editor.
 type editDoneMsg struct {
-	date    string
-	path    string
-	cleanup func()
-	err     error
+	date     string
+	original string
+	path     string
+	cleanup  func()
+	err      error
 }
 
 // Notebook represents the notebook view
@@ -41,6 +42,7 @@ type Notebook struct {
 	theme              *themeWatcher
 	editor             *editor.Editor
 	save               Saver
+	loader             func(date string) (string, error)
 	templatesAvailable bool
 }
 
@@ -66,14 +68,14 @@ func (n *Notebook) SetThemePref(pref string) {
 	n.theme.SetPref(pref)
 }
 
-// SetEditor wires the external editor and a save callback. With both
-// set, Enter / e / i suspend the TUI, run the editor via
-// tea.ExecProcess, persist changes, and resume the notebook with the
-// updated content. With either unset, those keys remain a quit-with-
-// selected fallback so the caller can run the editor itself.
-func (n *Notebook) SetEditor(ed *editor.Editor, save Saver) {
+// SetEditor wires the external editor and a save callback. An optional loader
+// refreshes the note before editing so a stale preview does not seed stale edits.
+// Enter / e / i suspend the TUI via tea.ExecProcess and resume after saving.
+// Without an editor or saver, those keys fall back to quit-with-selected.
+func (n *Notebook) SetEditor(ed *editor.Editor, save Saver, load func(date string) (string, error)) {
 	n.editor = ed
 	n.save = save
+	n.loader = load
 }
 
 // Init initializes the notebook
@@ -127,13 +129,24 @@ func (n *Notebook) startEdit(date string) tea.Cmd {
 	if n.editor == nil || n.save == nil {
 		return nil
 	}
-	cmd, path, cleanup, err := n.editor.Prepare(n.contents[date])
+	original := n.contents[date]
+	if n.loader != nil {
+		content, err := n.loader(date)
+		if err != nil {
+			n.flashError(fmt.Sprintf("load: %v", err))
+			return n.theme.expireStatusCmd(2 * time.Second)
+		}
+		original = content
+		n.contents[date] = content
+		n.updateViewportContent()
+	}
+	cmd, path, cleanup, err := n.editor.Prepare(original)
 	if err != nil {
 		n.flashError(fmt.Sprintf("editor prepare: %v", err))
 		return n.theme.expireStatusCmd(2 * time.Second)
 	}
 	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
-		return editDoneMsg{date: date, path: path, cleanup: cleanup, err: execErr}
+		return editDoneMsg{date: date, original: original, path: path, cleanup: cleanup, err: execErr}
 	})
 }
 
@@ -157,8 +170,8 @@ func (n *Notebook) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
 		return fail("read", rerr)
 	}
 	var cmd tea.Cmd
-	if newContent != n.contents[msg.date] {
-		if serr := n.save(msg.date, newContent); serr != nil {
+	if newContent != msg.original {
+		if serr := n.save(msg.date, msg.original, newContent); serr != nil {
 			return fail("save", serr)
 		}
 		n.contents[msg.date] = newContent

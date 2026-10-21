@@ -115,7 +115,7 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 	nb.SetIcons(icons)
 	nb.SetThemePref(cfg.UI.Theme)
 	nb.SetContents(contents)
-	nb.SetEditor(ed, makeSaver(mgr))
+	nb.SetEditor(ed, makeSaver(mgr), makeLoader(mgr))
 
 	mode := tui.ModeCalendar
 	if notebookFlag && !calendarFlag {
@@ -150,10 +150,13 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 }
 
 func makeSaver(mgr *scratchpad.Manager) tui.Saver {
-	return func(date, content string) error {
+	return func(date, original, content string) error {
 		sp, err := mgr.GetByDate(date)
 		if err != nil {
 			return err
+		}
+		if sp.Content != original {
+			return fmt.Errorf("%w: %s; reload before retrying", scratchpad.ErrConflict, date)
 		}
 		sp.Content = content
 		return mgr.Save(sp)
@@ -258,17 +261,22 @@ func editAndSave(mgr *scratchpad.Manager, ed *editor.Editor, pickedDate string) 
 		return fmt.Errorf("failed to load scratchpad: %w", err)
 	}
 
-	newContent, err := ed.Edit(sp.Content, sp.Date+".md")
+	cmd, path, cleanup, err := ed.Prepare(sp.Content)
 	if err != nil {
-		return fmt.Errorf("failed to edit scratchpad: %w", err)
+		return fmt.Errorf("failed to prepare editor: %w", err)
+	}
+	newContent, err := ed.RunPrepared(cmd, path)
+	if err != nil {
+		return fmt.Errorf("failed to edit scratchpad: %w; buffer path: %s", err, path)
 	}
 
 	if newContent != sp.Content {
 		sp.Content = newContent
 		if err := mgr.Save(sp); err != nil {
-			return fmt.Errorf("failed to save scratchpad: %w", err)
+			return fmt.Errorf("failed to save scratchpad: %w; buffer path: %s", err, path)
 		}
 		fmt.Println("Scratchpad saved!")
 	}
+	cleanup()
 	return nil
 }

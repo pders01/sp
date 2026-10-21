@@ -182,9 +182,19 @@ the note **was replaced**, but its survival across a system crash could not be
 confirmed; it does not imply that the old version was restored. Other platforms
 use Go's `os.Rename` without a directory-sync or atomic-replacement guarantee.
 
-This is not concurrent-edit protection: two instances editing the same day can
-still overwrite each other's changes. Atomic replacement prevents partial files,
-not stale edits.
+SP refuses stale writes rather than silently overwriting another instance's
+changes. Notes retain their loaded revision; saves check it under a short
+per-day OS lock. The TUI also carries the editor's original text through the save
+callback and reloads the current note before opening the editor. Lock files
+(`.sp-YYYY-MM-DD.lock`) remain in the storage directory; their locks are released
+when the handle closes or the process exits. Do not delete them while SP runs.
+
+On an edit conflict or editor/save failure, the CLI, notebook, and calendar keep
+the edited Markdown buffer and report its path. Copy or merge that buffer into
+the current note before retrying; SP does not merge automatically. These recovery
+files live in the OS temporary directory, so they are not permanent backups.
+Locks coordinate cooperating SP processes, not arbitrary programs that write
+JSON files directly.
 
 ## Project layout
 
