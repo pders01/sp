@@ -172,7 +172,8 @@ path keeps the original GUI polling loop).
 
 Scratchpads live in `~/.sp/<YYYY-MM-DD>.json`. Each file holds the
 date, content (raw markdown), applied-template metadata, and creation / modified
-timestamps.
+timestamps. Only regular files named with a valid `YYYY-MM-DD.json` date are
+listed as pages; a loaded page's stored date must match its filename.
 
 Saves write and sync a private temporary file in the same directory before
 replacing the note. On Unix, replacement is atomic and the containing directory

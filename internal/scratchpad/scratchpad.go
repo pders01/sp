@@ -45,7 +45,7 @@ func NewManager() (*Manager, error) {
 	return &Manager{storageDir: storageDir}, nil
 }
 
-// GetToday returns today's scratchpad, creating it if it doesn't exist
+// GetToday returns today's scratchpad, or a new unsaved page if none exists.
 func (m *Manager) GetToday() (*Scratchpad, error) {
 	today := time.Now().Format("2006-01-02")
 	return m.GetByDate(today)
@@ -53,6 +53,9 @@ func (m *Manager) GetToday() (*Scratchpad, error) {
 
 // GetByDate returns a scratchpad for a specific date
 func (m *Manager) GetByDate(date string) (*Scratchpad, error) {
+	if err := validateDate(date); err != nil {
+		return nil, err
+	}
 	filename := filepath.Join(m.storageDir, date+".json")
 
 	data, err := os.ReadFile(filename)
@@ -75,6 +78,9 @@ func (m *Manager) GetByDate(date string) (*Scratchpad, error) {
 		return nil, fmt.Errorf("failed to parse scratchpad file: %w", err)
 	}
 
+	if scratchpad.Date != date {
+		return nil, fmt.Errorf("scratchpad date %q does not match requested date %q", scratchpad.Date, date)
+	}
 	return &scratchpad, nil
 }
 
@@ -92,6 +98,9 @@ func (m *Manager) Save(scratchpad *Scratchpad) error {
 func (m *Manager) save(scratchpad *Scratchpad, syncDir func(string) error) error {
 	if scratchpad == nil {
 		return errors.New("cannot save a nil scratchpad")
+	}
+	if err := validateDate(scratchpad.Date); err != nil {
+		return err
 	}
 	pending := *scratchpad
 	pending.Modified = time.Now()
@@ -184,8 +193,11 @@ func (m *Manager) ListDates() ([]string, error) {
 
 	var dates []string
 	for _, file := range files {
-		if filepath.Ext(file.Name()) == ".json" {
-			date := file.Name()[:len(file.Name())-5] // Remove .json extension
+		if !file.Type().IsRegular() || filepath.Ext(file.Name()) != ".json" {
+			continue
+		}
+		date := strings.TrimSuffix(file.Name(), ".json")
+		if validateDate(date) == nil {
 			dates = append(dates, date)
 		}
 	}
@@ -195,6 +207,17 @@ func (m *Manager) ListDates() ([]string, error) {
 
 // Delete removes a scratchpad for a specific date
 func (m *Manager) Delete(date string) error {
+	if err := validateDate(date); err != nil {
+		return err
+	}
 	filename := filepath.Join(m.storageDir, date+".json")
 	return os.Remove(filename)
+}
+
+func validateDate(date string) error {
+	parsed, err := time.Parse(time.DateOnly, date)
+	if err != nil || parsed.Format(time.DateOnly) != date {
+		return fmt.Errorf("invalid scratchpad date %q: expected a valid YYYY-MM-DD date", date)
+	}
+	return nil
 }
