@@ -575,10 +575,10 @@ func (c *Calendar) renderMonthTile(year int, month time.Month, w, h int) string 
 	titleLine := titleStyle.Render(titleText)
 
 	var summary string
-	switch {
-	case count == 0:
+	switch count {
+	case 0:
 		summary = p.MutedText.Render("no entries")
-	case count == 1:
+	case 1:
 		summary = lipgloss.NewStyle().Foreground(p.Accent).Render("1 entry")
 	default:
 		summary = lipgloss.NewStyle().Foreground(p.Accent).Render(fmt.Sprintf("%d entries", count))

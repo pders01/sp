@@ -97,9 +97,10 @@ func TestEditAndSaveRecovery(t *testing.T) {
 				t.Fatal(loadErr)
 			}
 			want := "original"
-			if mode == "success" {
+			switch mode {
+			case "success":
 				want = "edited"
-			} else if mode == "conflict" {
+			case "conflict":
 				want = "other writer"
 			}
 			if got.Content != want {

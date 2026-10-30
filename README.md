@@ -35,7 +35,7 @@ brew install sp
 
 ### Build from source
 
-Requires Go 1.24 or later.
+Requires Go 1.25.13 or later.
 
 ```sh
 git clone https://github.com/pders01/sp.git

@@ -1,48 +1,47 @@
+version: "2"
 linters:
   enable:
-    - gofmt
-    - revive
-    - govet
-    - errcheck
-    - staticcheck
-    - ineffassign
-    - typecheck
-    - gocritic
-    - gosimple
-    - unused
     - bodyclose
     - dupl
+    - gocritic
     - misspell
-  # When on golangci-lint v2.x, enable `modernize` here to surface the
-  # Go-idiom upgrades (any, min/max, range-over-int, strings.CutPrefix,
-  # etc.) that gopls IDE quick-fixes already report. Until then, run
-  # `make modernize` to invoke the same analyzer via the gopls CLI.
-
-linters-settings:
-  govet:
-    enable:
-      - shadow
-  dupl:
-    threshold: 100
-  gocritic:
-    enabled-tags:
-      - performance
-      - style
-      - experimental
-    disabled-checks:
-      - commentedOutCode
-      # Palette and IconSet are intentionally value-typed: they are
-      # read on every render and the values cache pre-built styles,
-      # so passing a pointer would just add an extra dereference per
-      # access without any allocation savings.
-      - hugeParam
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - dupl
-        - errcheck
-
-run:
-  timeout: 5m
+    - revive
+  settings:
+    dupl:
+      threshold: 100
+    gocritic:
+      disabled-checks:
+        - commentedOutCode
+        - hugeParam
+      enabled-tags:
+        - performance
+        - style
+        - experimental
+    govet:
+      enable:
+        - shadow
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - dupl
+          - errcheck
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
