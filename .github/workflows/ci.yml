@@ -8,56 +8,62 @@ on:
 
 jobs:
   test:
-    name: Test
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go-version: ['1.25.13']
-
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: ${{ matrix.go-version }}
-
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-
-    - name: Download dependencies
-      run: go mod download
-
-    - name: Run unit tests
-      run: go test -v -race -coverprofile=coverage.out ./internal/...
-
+        go-version-file: go.mod
+    - name: Run unit tests and race detector
+      run: go test -v -race -coverprofile=coverage.out ./...
+    - name: Private terminal integration (synthetic stores only)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        mkdir -p .privacy-adversarial
+        go build -o .privacy-adversarial/sp-validation ./cmd/sp
+        python3 scripts/privacy-terminal/main.py --binary .privacy-adversarial/sp-validation
+    - name: Bounded privacy fuzz checks
+      if: runner.os == 'Linux'
+      shell: bash
+      env:
+        GOMAXPROCS: '2'
+      run: |
+        for target in FuzzDecodeRecord FuzzStrictJSONCanonicalRoundtrip FuzzAppendBullets FuzzValidateAgeEnvelope; do
+          go test ./internal/scratchpad -run='^$' -fuzz="^${target}$" -fuzztime=5s -parallel=2
+        done
     - name: Upload coverage to Codecov
-      if: matrix.go-version == '1.25.13'
+      if: runner.os == 'Linux'
       uses: codecov/codecov-action@v3
       with:
         file: ./coverage.out
         flags: unittests
         name: codecov-umbrella
 
+  vulnerabilities:
+    name: Reachable dependency vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+    - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
       with:
-        go-version: '1.25.13'
-
+        go-version-file: go.mod
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v8
       with:
@@ -70,32 +76,23 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: ['1.25.13']
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
       with:
-        go-version: ${{ matrix.go-version }}
-
+        go-version-file: go.mod
     - name: Build (Unix)
       if: runner.os != 'Windows'
       run: go build -v -o sp ./cmd/sp
-
     - name: Build (Windows)
       if: runner.os == 'Windows'
       run: go build -v -o sp.exe ./cmd/sp
-
     - name: Upload artifact (Unix)
       if: runner.os != 'Windows'
       uses: actions/upload-artifact@v4
       with:
         name: sp-${{ matrix.os }}
         path: sp
-
     - name: Upload artifact (Windows)
       if: runner.os == 'Windows'
       uses: actions/upload-artifact@v4
