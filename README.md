@@ -3,16 +3,28 @@
 CLI/TUI scratchpad for daily notes, todos, and quick thoughts. Built
 with Go and the [charm.sh](https://charm.sh) toolchain.
 
+> **Opt-in privacy (unreleased):** existing notes stay plaintext until you
+> explicitly enable it. Privacy encrypts every private day (including today),
+> while shared agent history deliberately remains plaintext. Read the
+> [privacy guide, migration instructions, and security limits](docs/privacy.md)
+> before enabling. See the [test results and remaining gaps](docs/privacy-validation.md):
+> automated tests pass, but the live model-driven trial was provider-blocked.
+> This is not an independent security audit. **Old SP versions are unsafe for
+> privacy stores:** stop all instances and use only a privacy-aware build.
+
 ## Features
 
 - Daily scratchpad: a fresh page per day, kept on disk forever
+- Explicitly opt-in private-note encryption, with separately displayed shared
+  contributions in the same daily file and a locked append CLI for tools
 - Three view modes that drill into one another:
   - Year / month calendar with per-day previews and entry sparklines
   - Notebook viewer with glamour-rendered markdown, scrubbable across
     pages
-  - External editor (`$EDITOR`) for actually writing
+  - External editor (`$EDITOR`) for writing in legacy plaintext mode;
+    built-in in-memory private editing in privacy mode
 - One semantic rule across the TUI: **Enter goes deeper**
-- Inline editing: hand the editor to `tea.ExecProcess`, save on exit,
+- Legacy external editing: hand the editor to `tea.ExecProcess`, save on exit,
   resume the same view with a refreshed render — no shell hop between
   edits
 - Light / dark palette swap driven by your terminal: `Ctrl+T` toggles
@@ -35,7 +47,9 @@ brew install sp
 
 ### Build from source
 
-Requires Go 1.25.13 or later.
+Requires Go **1.25.13 or later**. The patched minimum is security-related: the
+previous Go 1.24 baseline and older Markdown/text dependencies have reachable
+advisories. See the [validation follow-up](docs/privacy-validation.md).
 
 ```sh
 git clone https://github.com/pders01/sp.git
@@ -52,11 +66,30 @@ go build -o sp ./cmd/sp
 ## Usage
 
 ```sh
-sp          # open today's page in $EDITOR
+sp          # open today's page ($EDITOR in legacy plaintext mode)
 sp -n       # notebook viewer; Enter / e / i opens the editor
 sp -c       # calendar; Enter drills into the notebook on that day
 sp --version
 ```
+
+### Opt-in privacy usage (privacy-aware builds)
+
+```sh
+sp privacy enable   # interactive warnings, confirmation, passphrase twice; migrate
+sp privacy status   # check remaining legacy plaintext dates; enable again to resume
+sp privacy recover <recovery-file> # interactively review encrypted recovery; no auto-merge
+sp append 2026-01-15 --section 'Agent notes' --source 'local-helper' -- '- Public task'
+sp shared 2026-01-15 # shared-only read; no private unlock
+```
+
+In privacy mode, `u` opens a masked TUI unlock prompt; `Enter`/`e` edits privately
+in memory (calendar `Enter` opens the notebook first). External editors are not
+enabled for privacy editing in the initial version. Unlock lasts only in that
+process. Never put a passphrase/private key in arguments, environment, or config.
+Back up `privacy.json` with the notes: losing the passphrase or wrapped identity
+means losing the private writing. Shared bullets and source labels are public,
+self-reported data, not authenticated authorship. No disable, passphrase-rotation,
+or MCP workflow is promised yet. See the [full guide](docs/privacy.md).
 
 ### Flow
 
@@ -76,6 +109,9 @@ updated content. Pop from notebook back to calendar with `Esc`/
 notebook.
 
 ### Key reference
+
+The tables below describe navigation; privacy-aware builds also provide `u` for
+masked unlock. Private previews are not automatically decrypted across history.
 
 #### Calendar
 
@@ -153,7 +189,11 @@ configured template.
 
 ## Editor support
 
-`sp` resolves the editor via `$EDITOR`, then `$VISUAL`, then
+**Legacy plaintext mode only:** privacy mode uses the built-in in-memory editor,
+not an external editor. External editor plugins, swap files, and backups have no
+privacy guarantee. See [private editing and recovery](docs/privacy.md#edit-failures-recovery-and-backups).
+
+In legacy mode, `sp` resolves the editor via `$EDITOR`, then `$VISUAL`, then
 platform-specific fallbacks (vim, nvim, nano, micro, emacs, code,
 etc.).
 
@@ -170,13 +210,22 @@ path keeps the original GUI polling loop).
 
 ## Data storage
 
-Scratchpads live in `~/.sp/<YYYY-MM-DD>.json`. Each file holds the
-date, content (raw markdown), applied-template metadata, and creation / modified
-timestamps. Only regular files named with a valid `YYYY-MM-DD.json` date are
-listed as pages; a loaded page's stored date must match its filename.
+Scratchpads live in `~/.sp/<YYYY-MM-DD>.json`. In legacy mode each file holds
+plaintext Markdown, date, applied-template metadata, and creation / modified
+timestamps. Privacy mode uses one version-2 file per day: an age-encrypted private
+payload and plaintext `agent.content` with append provenance. Global
+`~/.sp/privacy.json` holds the passphrase-wrapped identity and must be backed up
+with the notes. Dates, file sizes, filesystem timestamps, and shared history
+remain visible. Encryption does not prevent deletion, rollback, public-metadata
+tampering, or unrestricted same-user malware. See the [storage and threat
+model](docs/privacy.md#storage-and-cryptography).
 
-Saves write and sync a private temporary file in the same directory before
-replacing the note. On Unix, replacement is atomic and the containing directory
+Only regular files named with a valid `YYYY-MM-DD.json` date are listed as pages;
+a loaded page's stored date must match its filename.
+
+Saves write and sync a permission-restricted temporary file in the same directory
+before replacing the note. Encrypted private writes stage only ciphertext;
+legacy writes still stage plaintext. On Unix, replacement is atomic and the containing directory
 is synced afterward. If that last sync fails, the error explicitly reports that
 the note **was replaced**, but its survival across a system crash could not be
 confirmed; it does not imply that the old version was restored. Other platforms
@@ -186,13 +235,16 @@ SP refuses stale writes rather than silently overwriting another instance's
 changes. Notes retain their loaded revision; saves check it under a short
 per-day OS lock. The TUI also carries the editor's original text through the save
 callback and reloads the current note before opening the editor. Lock files
-(`.sp-YYYY-MM-DD.lock`) remain in the storage directory; their locks are released
+(`.sp-YYYY-MM-DD.lock` and `.sp-privacy.lock`) remain in the storage directory; their locks are released
 when the handle closes or the process exits. Do not delete them while SP runs.
 
-On an edit conflict or editor/save failure, the CLI, notebook, and calendar keep
-the edited Markdown buffer and report its path. Copy or merge that buffer into
-the current note before retrying; SP does not merge automatically. These recovery
-files live in the OS temporary directory, so they are not permanent backups.
+In legacy mode, on an edit conflict or editor/save failure, the CLI, notebook,
+and calendar keep the edited Markdown buffer and report its path. Copy or merge
+that buffer into the current note before retrying; SP does not merge
+automatically. These recovery files live in the OS temporary directory, so they
+are not permanent backups. Privacy mode instead attempts encrypted recovery
+using the public recipient; if recovery fails, keep the editor open to retain
+the in-memory text and retry. See [recovery instructions](docs/privacy.md#edit-failures-recovery-and-backups).
 Locks coordinate cooperating SP processes, not arbitrary programs that write
 JSON files directly.
 
@@ -227,14 +279,20 @@ sp/
 make build       # ./sp
 make test        # all packages
 make test-race   # race detector
+make privacy-terminal # POSIX PTY enable/edit/recover checks; synthetic stores only
+make privacy-fuzz     # bounded parser/append fuzz campaigns
+make vuln             # reachable dependency advisories
 make coverage    # writes coverage.html
 make lint        # golangci-lint (fall back to go vet)
 make modernize   # gopls source.fixAll
 make ci          # deps + lint + test + build
 ```
 
-CI matrix runs on Linux, macOS, and Windows; lint pinned to
-`golangci-lint v1.64.8`. See `RELEASE.md` for the GoReleaser flow.
+CI runs runtime tests and builds on Linux, macOS, and Windows, with synthetic
+terminal checks on Unix, bounded fuzzing, and a reachable-vulnerability gate.
+Lint is pinned to `golangci-lint v2.5.0` (v2 configuration for Go 1.25 support).
+Workflow configuration is not evidence that a remote run has passed.
+See `RELEASE.md` for the GoReleaser flow.
 
 ## License
 
