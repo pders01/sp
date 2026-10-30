@@ -46,6 +46,7 @@ type Calendar struct {
 	save               Saver
 	loader             func(date string) (string, error)
 	templatesAvailable bool
+	privacyEnabled     bool
 }
 
 // NewCalendar creates a calendar seeded with the given dates as "has data".
@@ -313,6 +314,7 @@ func (c *Calendar) View() string {
 			{keys: "H/L", label: "month", visible: true},
 			{keys: "enter", label: "open", visible: true},
 			{keys: "e", label: "edit", visible: true},
+			{keys: "u", label: "unlock private", visible: c.privacyEnabled},
 			{keys: "a", label: "templates", visible: c.templatesAvailable},
 			{keys: "y", label: "year view", visible: true},
 			{keys: "t", label: "today", visible: true},
