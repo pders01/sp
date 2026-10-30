@@ -1,4 +1,4 @@
-.PHONY: all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench
+.PHONY: all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal privacy-fuzz vuln
 
 # Variables
 BINARY_NAME=sp
@@ -107,6 +107,22 @@ mod-update:
 	@go get -u ./...
 	@go mod tidy
 	@echo "Dependencies updated"
+
+## privacy-terminal: Exercise private enable/edit/recover in a POSIX terminal using synthetic stores only
+privacy-terminal:
+	@mkdir -p .privacy-adversarial
+	@go build -o .privacy-adversarial/sp-validation $(MAIN_PATH)
+	@python3 scripts/privacy-terminal/main.py --binary .privacy-adversarial/sp-validation
+
+## privacy-fuzz: Run four bounded parser/append fuzz campaigns (20 seconds each)
+privacy-fuzz:
+	@set -e; for target in FuzzDecodeRecord FuzzStrictJSONCanonicalRoundtrip FuzzAppendBullets FuzzValidateAgeEnvelope; do \
+		GOMAXPROCS=2 go test ./internal/scratchpad -run='^$$' -fuzz="^$${target}$$" -fuzztime=20s -parallel=2; \
+	done
+
+## vuln: Check reachable dependency advisories using the selected project toolchain
+vuln:
+	@GOTOOLCHAIN=$$(go env GOVERSION) go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
 
 ## check: Run all checks (lint, test, build)
 check: lint test build
