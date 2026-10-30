@@ -2,13 +2,15 @@ package scratchpad
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+
+	"filippo.io/age"
 
 	"github.com/pders01/sp/internal/templates"
 )
@@ -20,11 +22,13 @@ type Scratchpad struct {
 	AppliedTemplates []string  `json:"applied_templates,omitempty"`
 	Created          time.Time `json:"created"`
 	Modified         time.Time `json:"modified"`
+	Agent            AgentArea `json:"agent,omitempty"`
 
 	// Snapshot of the on-disk version this value was loaded from. New values
 	// expect an absent file; successful saves advance the snapshot.
 	revision [sha256.Size]byte
 	exists   bool
+	disk     *diskRecord
 }
 
 // ErrDurabilityUnconfirmed means the replacement succeeded, but syncing its
@@ -37,7 +41,14 @@ var ErrConflict = errors.New("scratchpad changed since it was loaded")
 
 // Manager handles scratchpad operations
 type Manager struct {
-	storageDir string
+	storageDir        string
+	keyMu             sync.RWMutex
+	identity          *age.X25519Identity
+	keyMetadata       [sha256.Size]byte
+	recoveryRecipient string // Public key pinned by unlock; survives Lock for safe recovery.
+	// Remember observation across Lock so disappearing metadata cannot silently
+	// opt this manager out, even if no encrypted daily page exists yet.
+	observedPrivacy [sha256.Size]byte
 }
 
 // NewManager creates a new scratchpad manager
@@ -47,12 +58,15 @@ func NewManager() (*Manager, error) {
 		return nil, fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	storageDir := filepath.Join(homeDir, ".sp")
-	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+	return NewManagerAt(filepath.Join(homeDir, ".sp"))
+}
+
+// NewManagerAt opens a store without enabling privacy or migrating any notes.
+func NewManagerAt(dir string) (*Manager, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("failed to create storage directory: %w", err)
 	}
-
-	return &Manager{storageDir: storageDir}, nil
+	return &Manager{storageDir: dir}, nil
 }
 
 // GetToday returns today's scratchpad, or a new unsaved page if none exists.
@@ -66,9 +80,18 @@ func (m *Manager) GetByDate(date string) (*Scratchpad, error) {
 	if err := validateDate(date); err != nil {
 		return nil, err
 	}
+	// Reads inspect this page rather than rescanning the whole legacy archive.
+	// Saves still perform the full orphan-ciphertext check before plaintext writes.
+	metadata, _, err := m.readMetadata()
+	if err != nil {
+		return nil, err
+	}
+	if metadata != nil && !m.IsUnlocked() {
+		return nil, ErrLocked
+	}
 	filename := filepath.Join(m.storageDir, date+".json")
 
-	data, err := os.ReadFile(filename)
+	data, err := readBounded(filename, maxDocumentSize)
 	if os.IsNotExist(err) {
 		// Create new scratchpad for this date
 		scratchpad := &Scratchpad{
@@ -83,17 +106,18 @@ func (m *Manager) GetByDate(date string) (*Scratchpad, error) {
 		return nil, fmt.Errorf("failed to read scratchpad file: %w", err)
 	}
 
-	var scratchpad Scratchpad
-	if err := json.Unmarshal(data, &scratchpad); err != nil {
-		return nil, fmt.Errorf("failed to parse scratchpad file: %w", err)
+	record, err := decodeRecord(data, date)
+	if err != nil {
+		return nil, err
 	}
-
-	if scratchpad.Date != date {
-		return nil, fmt.Errorf("scratchpad date %q does not match requested date %q", scratchpad.Date, date)
+	scratchpad, err := m.openRecord(record)
+	if err != nil {
+		return nil, err
 	}
 	scratchpad.revision = sha256.Sum256(data)
 	scratchpad.exists = true
-	return &scratchpad, nil
+	scratchpad.disk = record
+	return scratchpad, nil
 }
 
 // Save writes a replacement file before renaming it over the note. On Unix the
@@ -109,11 +133,27 @@ func (m *Manager) Save(scratchpad *Scratchpad) error {
 // The sync callback lets tests exercise a failure after publication without
 // requiring a failing filesystem or changing global state.
 func (m *Manager) save(scratchpad *Scratchpad, syncDir func(string) error) error {
+	return m.saveInternal(scratchpad, syncDir, false)
+}
+
+func (m *Manager) saveInternal(scratchpad *Scratchpad, syncDir func(string) error, migrating bool) error {
 	if scratchpad == nil {
 		return errors.New("cannot save a nil scratchpad")
 	}
 	if err := validateDate(scratchpad.Date); err != nil {
 		return err
+	}
+	storeLock, err := lockNote(m.storageDir, "privacy")
+	if err != nil {
+		return err
+	}
+	defer storeLock.Close()
+	enabled, err := m.PrivacyEnabled()
+	if err != nil {
+		return err
+	}
+	if enabled && !m.IsUnlocked() {
+		return ErrLocked
 	}
 	lock, err := lockNote(m.storageDir, scratchpad.Date)
 	if err != nil {
@@ -122,7 +162,7 @@ func (m *Manager) save(scratchpad *Scratchpad, syncDir func(string) error) error
 	defer lock.Close()
 
 	filename := filepath.Join(m.storageDir, scratchpad.Date+".json")
-	current, err := os.ReadFile(filename)
+	current, err := readBounded(filename, maxDocumentSize)
 	switch {
 	case os.IsNotExist(err):
 		if scratchpad.exists {
@@ -133,43 +173,29 @@ func (m *Manager) save(scratchpad *Scratchpad, syncDir func(string) error) error
 	case !scratchpad.exists || sha256.Sum256(current) != scratchpad.revision:
 		return fmt.Errorf("%w: %s", ErrConflict, scratchpad.Date)
 	}
+	if len(current) != 0 {
+		if _, decodeErr := decodeRecord(current, scratchpad.Date); decodeErr != nil {
+			return decodeErr
+		}
+	}
 	pending := *scratchpad
-	pending.Modified = time.Now()
-
-	data, err := json.MarshalIndent(&pending, "", "  ")
+	if !migrating {
+		pending.Modified = time.Now()
+	}
+	data, record, err := m.encodeScratchpad(&pending, enabled)
 	if err != nil {
-		return fmt.Errorf("failed to marshal scratchpad: %w", err)
+		return err
 	}
-
-	tmp, err := os.CreateTemp(m.storageDir, ".sp-*.tmp")
-	if err != nil {
-		return fmt.Errorf("failed to create temporary scratchpad: %w", err)
-	}
-	defer os.Remove(tmp.Name())
-	defer tmp.Close() // Ensures closure on early returns.
-
-	if _, err := tmp.Write(data); err != nil {
-		return fmt.Errorf("failed to write temporary scratchpad: %w", err)
-	}
-	if err := tmp.Sync(); err != nil {
-		return fmt.Errorf("failed to sync temporary scratchpad: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("failed to close temporary scratchpad: %w", err)
-	}
-
-	if err := os.Rename(tmp.Name(), filename); err != nil {
-		return fmt.Errorf("failed to replace scratchpad file: %w", err)
-	}
-
-	// Publication has happened even if the durability check below fails.
-	scratchpad.Modified = pending.Modified
-	scratchpad.revision = sha256.Sum256(data)
-	scratchpad.exists = true
-	if err := syncDir(m.storageDir); err != nil {
-		return fmt.Errorf("%w: sync storage directory: %w", ErrDurabilityUnconfirmed, err)
-	}
-	return nil
+	_, err = publish(filename, data, false, func(dir string) error {
+		// Publication advances the revision before the durability check, even
+		// when that check fails (callers may inspect the note in the callback).
+		scratchpad.Modified = pending.Modified
+		scratchpad.revision = sha256.Sum256(data)
+		scratchpad.exists = true
+		scratchpad.disk = record
+		return syncDir(dir)
+	})
+	return err
 }
 
 // ApplyTemplateSections appends previously unused template sections to date.
