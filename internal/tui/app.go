@@ -32,6 +32,7 @@ type App struct {
 	appliedTemplates map[string]map[string]bool
 	applyTemplates   TemplateApplier
 	templateChooser  *templateChooser
+	privacy          *privacyState
 }
 
 // NewApp builds the router around an already-configured calendar and
@@ -44,6 +45,19 @@ func NewApp(cal *Calendar, nb *Notebook, mode AppMode) *App {
 		mode:   mode,
 		canPop: mode == ModeCalendar,
 	}
+}
+
+// SetSharedContents projects shared contributions alongside legacy private
+// writing without changing the text handed to the external editor.
+func (a *App) SetSharedContents(contents map[string]string) {
+	a.nb.sharedContents = make(map[string]string, len(contents))
+	for date, content := range contents {
+		a.nb.sharedContents[date] = content
+		if a.cal.contents[date] == "" && content != "" {
+			a.cal.MarkDate(date, content)
+		}
+	}
+	a.nb.updateViewportContent()
 }
 
 // Init kicks off both sub-views' watchers up front. They only emit
@@ -63,6 +77,15 @@ func (a *App) Close() {
 // Update routes the message to the active view, then inspects the
 // view's state machine for drill / pop / quit signals and reacts.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if a.privacy != nil && a.templateChooser == nil {
+		if size, ok := msg.(tea.WindowSizeMsg); ok {
+			a.cal.Update(size)
+			a.nb.Update(size)
+		}
+		if handled, cmd := a.updatePrivacy(msg); handled {
+			return a, cmd
+		}
+	}
 	if applied, ok := msg.(templateAppliedMsg); ok {
 		if a.quitting {
 			return a, tea.Quit
@@ -128,10 +151,15 @@ func (a *App) drillToNotebook(date string) {
 	a.nb.AddPage(date)
 	a.nb.SetCurrentDate(date)
 	a.mode = ModeNotebook
+	a.refreshPrivatePage()
 }
 
 func (a *App) updateNotebook(msg tea.Msg) (tea.Model, tea.Cmd) {
+	previousDate := a.nb.GetCurrentPage()
 	_, cmd := a.nb.Update(msg)
+	if a.nb.GetCurrentPage() != previousDate {
+		a.refreshPrivatePage()
+	}
 
 	switch {
 	case a.nb.IsPopping():
@@ -166,6 +194,9 @@ func (a *App) updateNotebook(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (a *App) View() string {
 	if a.quitting {
 		return ""
+	}
+	if view, active := a.privacyView(); active {
+		return view
 	}
 	if a.templateChooser != nil {
 		return a.renderTemplateChooser()

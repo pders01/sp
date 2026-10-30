@@ -13,10 +13,9 @@ import (
 
 func testManager(t *testing.T) *scratchpad.Manager {
 	t.Helper()
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	mgr, err := scratchpad.NewManager()
+	dir := t.TempDir()
+	t.Setenv("SP_CLI_STORAGE", dir)
+	mgr, err := scratchpad.NewManagerAt(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +126,7 @@ func TestCLIEditorHelperProcess(_ *testing.T) {
 		}
 	}
 	if mode == "conflict" {
-		mgr, err := scratchpad.NewManager()
+		mgr, err := scratchpad.NewManagerAt(os.Getenv("SP_CLI_STORAGE"))
 		if err != nil {
 			os.Exit(2)
 		}

@@ -44,6 +44,10 @@ type Notebook struct {
 	save               Saver
 	loader             func(date string) (string, error)
 	templatesAvailable bool
+	privacyEnabled     bool
+	privatePage        *PrivatePage
+	privateDate        string
+	sharedContents     map[string]string
 }
 
 // NewNotebook creates a new notebook instance. Pages are copied and
@@ -343,6 +347,7 @@ func (n *Notebook) renderFooter() string {
 		{keys: "↓/j", label: "down", visible: true},
 		{keys: "Ctrl+u/d", label: "page up/down", visible: true},
 		{keys: "enter/e", label: "edit", visible: true},
+		{keys: "u", label: "unlock private", visible: n.privacyEnabled},
 		{keys: "a", label: "templates", visible: n.templatesAvailable},
 		{keys: "esc", label: "back", visible: true},
 		{keys: "Ctrl+t", label: "theme", visible: true},
@@ -369,6 +374,15 @@ func (n *Notebook) updateViewportContent() {
 		return
 	}
 	content := n.contents[n.pages[n.current]]
+	if n.privacyEnabled {
+		page := PrivatePage{Shared: content, Locked: true}
+		if n.privatePage != nil && n.privateDate == n.pages[n.current] {
+			page = *n.privatePage
+		}
+		content = renderPrivatePage(page)
+	} else if shared := n.sharedContents[n.pages[n.current]]; shared != "" {
+		content = renderPrivatePage(PrivatePage{Private: content, Shared: shared})
+	}
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(n.theme.Style()),
 		glamour.WithWordWrap(n.width-4),

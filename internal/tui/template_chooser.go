@@ -153,6 +153,14 @@ func (a *App) finishTemplateApply(msg templateAppliedMsg) (tea.Model, tea.Cmd) {
 	for _, id := range msg.result.Applied {
 		a.appliedTemplates[msg.date][id] = true
 	}
+	if a.privacy != nil {
+		// Template output is private; never feed it into shared calendar caches.
+		a.cal.hasData[msg.date] = true
+		a.nb.AddPage(msg.date)
+		a.refreshPrivatePage()
+		editCmd := a.startPrivateEdit(msg.date)
+		return a, editCmd
+	}
 	a.cal.MarkDate(msg.date, msg.result.Content)
 	a.nb.SetPageContent(msg.date, msg.result.Content)
 

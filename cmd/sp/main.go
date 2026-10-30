@@ -53,12 +53,14 @@ Flow:
   sp -c     calendar; Enter drills into the notebook at that day, then
             Enter again drills into the editor. Press 'e' in the calendar
             to skip the notebook preview and edit immediately.`,
+	Args: cobra.NoArgs,
 	RunE: runScratchpad,
 }
 
 func init() {
 	rootCmd.Flags().BoolVarP(&calendarFlag, "calendar", "c", false, "Open calendar view to select a date")
 	rootCmd.Flags().BoolVarP(&notebookFlag, "notebook", "n", false, "Open notebook view to browse all notes")
+	rootCmd.AddCommand(newPrivacyCommand(scratchpad.NewManager), newAppendCommand(scratchpad.NewManager), newSharedCommand(scratchpad.NewManager))
 }
 
 func Execute() {
@@ -73,6 +75,20 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize scratchpad manager: %w", err)
 	}
+	defer mgr.Lock()
+	private, err := mgr.PrivacyEnabled()
+	if err != nil {
+		return fmt.Errorf("failed to inspect privacy settings: %w", err)
+	}
+	if private {
+		status, err := mgr.PrivacyStatus()
+		if err != nil {
+			return fmt.Errorf("failed to inspect privacy status: %w", err)
+		}
+		if len(status.PlaintextDates) > 0 {
+			fmt.Fprintln(os.Stderr, "sp: WARNING: plaintext pages remain; stop old sp instances and run sp privacy enable to finish migration. See sp privacy status.")
+		}
+	}
 
 	cfg := config.Default()
 	if path, perr := config.DefaultPath(); perr == nil {
@@ -84,6 +100,14 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 	}
 	icons := tui.NewIconSet(cfg.UI.Icons)
 
+	// Encrypted pages must never pass through an external editor or its
+	// plaintext temporary files, including during editor resolution.
+	if private {
+		if !calendarFlag && !notebookFlag {
+			return editPrivateAndSave(mgr, "")
+		}
+		return runApp(mgr, nil, icons, cfg)
+	}
 	ed, eerr := editor.NewEditor()
 	if eerr != nil {
 		return fmt.Errorf("failed to initialize editor: %w", eerr)
@@ -96,6 +120,10 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 }
 
 func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *config.Config) error {
+	private, err := mgr.PrivacyEnabled()
+	if err != nil {
+		return err
+	}
 	dates, contents, applied, err := loadAll(mgr)
 	if err != nil {
 		return err
@@ -109,19 +137,36 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 	cal.SetIcons(icons)
 	cal.SetThemePref(cfg.UI.Theme)
 	cal.SetContents(contents)
-	cal.SetEditor(ed, makeSaver(mgr), makeLoader(mgr))
+	if !private {
+		cal.SetEditor(ed, makeSaver(mgr), makeLoader(mgr))
+	}
 
 	nb := tui.NewNotebook(dates)
 	nb.SetIcons(icons)
 	nb.SetThemePref(cfg.UI.Theme)
 	nb.SetContents(contents)
-	nb.SetEditor(ed, makeSaver(mgr), makeLoader(mgr))
+	if !private {
+		nb.SetEditor(ed, makeSaver(mgr), makeLoader(mgr))
+	}
 
 	mode := tui.ModeCalendar
 	if notebookFlag && !calendarFlag {
 		mode = tui.ModeNotebook
 	}
 	app := tui.NewApp(cal, nb, mode)
+	if private {
+		app.SetPrivacy(makePrivacyHooks(mgr))
+	} else {
+		sharedContents := make(map[string]string, len(dates))
+		for _, d := range dates {
+			shared, readErr := mgr.ReadShared(d)
+			if readErr != nil {
+				continue // Legacy loadAll already retains the per-page error preview.
+			}
+			sharedContents[d] = shared.Content
+		}
+		app.SetSharedContents(sharedContents)
+	}
 	definitions, err := templateDefinitions(cfg)
 	if err != nil {
 		return err
@@ -134,7 +179,16 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 	defer app.Close()
 
 	if _, rerr := tea.NewProgram(app, tea.WithAltScreen()).Run(); rerr != nil {
+		if recoveryErr := app.RecoverPrivateEdit(); recoveryErr != nil {
+			return fmt.Errorf("failed to run TUI: %w; %v", rerr, recoveryErr)
+		}
 		return fmt.Errorf("failed to run TUI: %w", rerr)
+	}
+
+	if private {
+		// The private TUI owns its in-memory editor and recovery flow. Never
+		// fall back to an external editor, even if it exits with a selection.
+		return nil
 	}
 
 	// Fallback path for unwired editor: app exits with calendar's
@@ -198,21 +252,30 @@ func makeTemplateApplier(mgr *scratchpad.Manager, definitions []templates.Defini
 		byID[definition.ID] = definition
 	}
 	return func(ctx context.Context, date string, selections []tui.TemplateSelection) (tui.TemplateApplyResult, error) {
+		private, err := mgr.PrivacyEnabled()
+		if err != nil {
+			return tui.TemplateApplyResult{}, err
+		}
+		if private && !mgr.IsUnlocked() {
+			// Check before rendering: command templates must not run while
+			// private notes are locked, even if command execution is trusted.
+			return tui.TemplateApplyResult{}, scratchpad.ErrLocked
+		}
 		sections := make([]templates.Section, 0, len(selections))
 		for _, selection := range selections {
 			definition, ok := byID[selection.ID]
 			if !ok {
 				return tui.TemplateApplyResult{}, fmt.Errorf("unknown template %q", selection.ID)
 			}
-			section, err := templates.RenderContext(ctx, definition, date)
-			if err != nil {
-				return tui.TemplateApplyResult{}, err
+			section, renderErr := templates.RenderContext(ctx, definition, date)
+			if renderErr != nil {
+				return tui.TemplateApplyResult{}, renderErr
 			}
 			section.Force = selection.Force
 			sections = append(sections, section)
 		}
-		if err := ctx.Err(); err != nil {
-			return tui.TemplateApplyResult{}, err
+		if contextErr := ctx.Err(); contextErr != nil {
+			return tui.TemplateApplyResult{}, contextErr
 		}
 		sp, err := mgr.ApplyTemplateSections(date, sections)
 		if err != nil {
@@ -225,6 +288,10 @@ func makeTemplateApplier(mgr *scratchpad.Manager, definitions []templates.Defini
 // loadAll reads every saved scratchpad and returns dates (descending), their
 // contents, and template metadata used by the chooser.
 func loadAll(mgr *scratchpad.Manager) (dates []string, contents map[string]string, applied map[string][]string, err error) {
+	private, err := mgr.PrivacyEnabled()
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	dates, err = mgr.ListDates()
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to list dates: %w", err)
@@ -234,6 +301,15 @@ func loadAll(mgr *scratchpad.Manager) (dates []string, contents map[string]strin
 	contents = make(map[string]string, len(dates))
 	applied = make(map[string][]string, len(dates))
 	for _, d := range dates {
+		if private {
+			// Never decrypt the archive for previews, even after unlocking.
+			shared, err := mgr.ReadShared(d)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("failed to load shared page %s: %w", d, err)
+			}
+			contents[d] = shared.Content
+			continue
+		}
 		sp, gerr := mgr.GetByDate(d)
 		if gerr != nil {
 			contents[d] = fmt.Sprintf("Error loading: %v", gerr)
@@ -250,8 +326,14 @@ func loadAll(mgr *scratchpad.Manager) (dates []string, contents map[string]strin
 // for the bare `sp` flow and as a fallback when the TUI couldn't wire
 // the editor inline.
 func editAndSave(mgr *scratchpad.Manager, ed *editor.Editor, pickedDate string) error {
+	private, err := mgr.PrivacyEnabled()
+	if err != nil {
+		return err
+	}
+	if private {
+		return fmt.Errorf("private notes require the built-in in-memory editor")
+	}
 	var sp *scratchpad.Scratchpad
-	var err error
 	if pickedDate == "" {
 		sp, err = mgr.GetToday()
 	} else {
