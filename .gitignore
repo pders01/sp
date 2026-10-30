@@ -24,6 +24,9 @@ profile.cov
 go.work
 go.work.sum
 
+# Disposable, synthetic privacy attack fixtures and binaries
+.privacy-adversarial/
+
 # env file
 .env
 
@@ -31,4 +34,4 @@ go.work.sum
 # .idea/
 # .vscode/
 
-sp
+/sp
