@@ -149,6 +149,14 @@ Strict JSON rejects malformed UTF-8, unpaired escaped UTF-16 surrogates, duplica
 or aliased field names, and unsupported fields rather than silently normalizing
 or discarding them. This is not a race-free filesystem security boundary.
 
+On Unix, SP requests restrictive file modes (`0600` for published files and
+`0700` for newly created store directories). On Windows, Go's permission bits
+do not describe NTFS access-control lists: files/directories inherit host ACLs,
+and SP does not configure or validate an owner-only DACL. Restrict the store
+using Windows permissions as appropriate. Encryption is not a replacement for
+host access controls, and a `FileMode` such as `0666` does not establish that a
+Windows file is readable by everyone.
+
 These field names reflect the current implementation, not a stable direct-write
 API. Do not build a direct JSON writer against this description; use the
 supported CLI. Shared append locks the entire read-modify-write operation,

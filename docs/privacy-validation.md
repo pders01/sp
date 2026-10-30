@@ -152,6 +152,21 @@ bounded Linux fuzzing, and a reachable-advisory gate. **Those workflow changes
 have not been run remotely in this session**; configuration is not passing-CI
 evidence.
 
+## Windows CI follow-up
+
+User-supplied logs from CI run `41132250043` showed two Windows failures:
+PowerShell split an unquoted coverage argument and Go treated `.out` as a package;
+the migration test also interpreted Windows `FileMode` bits as Unix permissions.
+The workflow now quotes the entire coverage flag, and the POSIX permission-bit
+assertion runs only on non-Windows hosts. Migration, ciphertext/non-disclosure,
+regular-file, wrong-passphrase, and metadata-preservation assertions still run
+on Windows. Go's `0666` mode does not validate or describe an NTFS DACL; see the
+[platform permission limits](privacy.md#storage-and-cryptography).
+
+The supplied log contains many passing Windows runtime tests, but the overall
+run failed. A successful rerun is still required; cross-compilation or a Unix
+run after these fixes must not be reported as a Windows CI pass.
+
 ## Platform-validation boundary
 
 A follow-up attempt to inspect local Docker configuration was denied by the

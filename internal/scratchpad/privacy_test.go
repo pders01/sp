@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -119,7 +120,13 @@ func TestPrivacyOptInAndMigration(t *testing.T) {
 		if statErr != nil {
 			t.Fatal(statErr)
 		}
-		if info.Mode().Perm()&0o077 != 0 {
+		if !info.Mode().IsRegular() {
+			t.Fatalf("%s is not a regular file", name)
+		}
+		// Windows FileMode reports read/write attributes, not NTFS ACLs.
+		// Keep migration/non-disclosure checks above on every platform, but
+		// only assert POSIX group/other permission bits where meaningful.
+		if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 			t.Fatalf("%s permissions %o", name, info.Mode().Perm())
 		}
 	}
