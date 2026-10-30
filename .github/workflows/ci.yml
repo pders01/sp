@@ -21,7 +21,7 @@ jobs:
       with:
         go-version-file: go.mod
     - name: Run unit tests and race detector
-      run: go test -v -race -coverprofile=coverage.out ./...
+      run: go test -v -race '-coverprofile=coverage.out' ./...
     - name: Private terminal integration (synthetic stores only)
       if: runner.os != 'Windows'
       shell: bash

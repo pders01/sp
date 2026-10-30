@@ -223,10 +223,11 @@ model](docs/privacy.md#storage-and-cryptography).
 Only regular files named with a valid `YYYY-MM-DD.json` date are listed as pages;
 a loaded page's stored date must match its filename.
 
-Saves write and sync a permission-restricted temporary file in the same directory
-before replacing the note. Encrypted private writes stage only ciphertext;
-legacy writes still stage plaintext. On Unix, replacement is atomic and the containing directory
-is synced afterward. If that last sync fails, the error explicitly reports that
+Saves write and sync a temporary file in the same directory before replacing the
+note. Files request mode `0600` on Unix; Windows access depends on inherited ACLs,
+not Go's POSIX-style mode bits. Encrypted private writes stage only ciphertext;
+legacy writes still stage plaintext. On Unix, replacement is atomic and the
+containing directory is synced afterward. If that last sync fails, the error explicitly reports that
 the note **was replaced**, but its survival across a system crash could not be
 confirmed; it does not imply that the old version was restored. Other platforms
 use Go's `os.Rename` without a directory-sync or atomic-replacement guarantee.
