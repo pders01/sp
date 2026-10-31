@@ -29,7 +29,7 @@ def study(theme):
         result += [""] * max(0, rows - len(result) - len(bottom))
         result += bottom
         assert len(result) <= rows
-        return {"id": f"{name}-{theme}-{cols}x{rows}", "title": title + " · CONCEPT", "group": "proposed — not implemented",
+        return {"id": f"{name}-{theme}-{cols}x{rows}", "title": title + " · CONCEPT", "group": "historical concept — not a production capture",
                 "theme": theme, "cols": cols, "rows": rows, "ansi": "\n".join(result), "kind": "concept"}
 
     note = [
@@ -126,7 +126,7 @@ def main():
     frames = study("dark") + study("light")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(frames, indent=2) + "\n")
-    print(f"Wrote {len(frames)} static concepts (not implemented) to {args.output}")
+    print(f"Wrote {len(frames)} historical concepts (not production captures) to {args.output}")
 
 
 if __name__ == "__main__":

@@ -1,208 +1,174 @@
-# SP visual design pass
+# SP visual redesign
 
-**Status: audit and proposed direction, not an implemented redesign.**
+**Status: implemented and locally validated.** The original concepts are retained
+as historical design studies; the screenshots in this section are actual current
+production `View()` output from synthetic fixtures.
 
-The goal is a quiet daily notebook, not a vault administration interface with a
-notebook bolted on. Encryption should change access and save guarantees, not the
-product's visual language.
+The product remains a quiet daily notebook. Encryption changes access and save
+guarantees, not the product's visual language. The redesign does not settle the
+separate Neovim/private-editor integration decision.
 
-## What was captured
+## Current implementation
 
-- **170 production-model frame captures**: 39 TUI scenes in dark/light at 100×30,
-  plus encrypted-state variants at 80×24 and 56×16.
-- **28 hand-composed concepts**: 14 proposed states in dark/light, including a
-  compact notebook. These are explicitly labelled CONCEPT, not application output.
-- All writing, updates, errors, paths and secrets are synthetic. No real store,
-  editor configuration, crypto job, clipboard or external editor is involved.
-- Images render production ANSI into a fixed-cell grid. They are **not desktop
-  screenshots or live-PTY recordings**. Cursor animation, native terminal fonts,
-  keyboard interaction and screen-reader usability are not validated by them.
-- The baseline is the UI after `5c5620d`. No production behavior, keys, storage,
-  privacy guarantee or editor integration was changed for this study.
+- One primary daily note. Shared updates are a separate **read-only** view,
+  opened with `c` only when updates exist. No competing private/agent headings.
+- **Left/h = earlier saved day; Right/l = later saved day.** The date strip reads
+  in that same chronological direction. Today-first startup and date-keyed
+  reading positions are retained.
+- Consistent `sp / location` chrome, teal Markdown headings, two-cell document
+  inset, quieter metadata and compact default actions. Expanded help is grouped.
+- The same appearance reaches unlock, writing, recovery, comparison, templates,
+  date forms and help. Bare private editing/recovery uses the configured theme.
+- Save policy stays visible. Short outcomes retain complete F1 details and exit
+  recovery reporting. Failed recovery tells the user to keep the editor open.
 
-The individual captures and filterable local galleries are generated under:
+### Daily note and shared updates
 
-- `.privacy-adversarial/design-review/current/index.html` — production views
-- `.privacy-adversarial/design-review/concepts/index.html` — proposed direction
-
-This review's original baseline is also retained locally under
-`.privacy-adversarial/design-review/before/`. The curated images below are checked
-in; the large generated galleries are ignored and reproducible.
-
-```sh
-make design-capture                         # Go, Python 3, ImageMagick
-# Optional: an explicit installed/downloaded monospace font for consistent output.
-SP_DESIGN_CAPTURE_FONT=/path/to/Mono.ttf make design-capture
-python3 -B -m unittest discover -s scripts/design-capture
-```
-
-The checked-in images use JetBrains Mono, obtained from the
-[font's public repository](https://github.com/JetBrains/JetBrainsMono). The font
-file is not bundled, installed or downloaded by the capture target. Font choice
-changes rasterization, not the captured View() output.
-
-## The two product decisions
-
-### 1. One daily page, shared updates secondary
-
-**Recommendation:** make the note the primary document. Remove the competing
-“Private notes” heading from ordinary reading. Show a quiet storage/session badge
-in the common header instead of explaining the storage schema inside the note.
-
-When contributions exist, show **Shared updates available** with one explicit
-viewer action. Open them as a secondary, read-only view; return restores the
-note's reading position. Do not show an empty heading or an empty updates view.
-Do not call updates “new” unless the app actually tracks read state.
-
-The secondary view clearly says **Not encrypted** and explains self-reported
-source labels there, where that distinction matters. Shared updates remain
-reachable while the note is locked. The concept's `c` action is a proposal and
-is **not currently wired**.
-
-This is a presentation change, **not** a proposal to combine stored documents,
-append private writing into shared text, or pass a combined document to an editor.
-Keep the independent Markdown renderers and private-only edit buffer. A simpler
-alternative is a collapsed inline updates area; the dedicated secondary view is
-recommended because it keeps the normal notebook quieter and its footer stable.
-
-| Current production frame | Proposed direction — not implemented |
+| Before | Implemented |
 | --- | --- |
-| ![Current mixed notebook](assets/before-notebook.png) | ![Proposed daily page](assets/proposed-notebook.png) |
+| ![Previous competing note sections](assets/before-notebook.png) | ![Current primary daily page](assets/implemented-notebook.png) |
 
-![Proposed shared updates view — not implemented](assets/proposed-updates.png)
+![Current read-only shared updates](assets/implemented-updates.png)
 
-### 2. Earlier left, later right
+The secondary view explicitly says **Not encrypted** and that source labels are
+self-reported. It is available while locked without unlocking, loading private
+writing, or invoking editing/template/date/publication actions. Esc/c returns to
+the note's position; help closes before the pane beneath it. Opening updates does
+not mark them “read” or create metadata writes.
 
-**Recommendation:** Left/h goes to an earlier saved day; Right/l goes to a later
-saved day. Display the date strip in that same chronological direction.
-
-The calendar already maps Right to moving forward. The notebook currently does
-the opposite: dates descend left-to-right and Right means older. Keeping two
-opposite spatial models is harder to learn than either one alone. Newest-first
-is sensible for a vertical feed, but less natural for horizontal page turning.
-
-Preserve today-first startup, existing saved-day navigation, first/last bounds,
-direct date selection and per-date reading positions. This is a deliberate
-navigation contract change, not a cosmetic label edit. The concepts show the
-recommended mapping; **the application still uses its existing mapping**.
-
-## Why the encrypted screens feel unrelated
-
-The issue is not that SP avoids Charm. It already uses Bubble Tea, Lip Gloss,
-Glamour, Bubbles viewport and Bubbles textinput.
-
-The concrete inconsistencies are:
-
-- `internal/tui/privacy.go`: editor help and conflict review receive `Palette{}`;
-  editor title, caption, position and controls mostly render as unstyled strings.
-- `internal/tui/notebook_render.go`: equally prominent personal/shared headings
-  repeat the header's lock state and compete with the note's own heading.
-- `internal/tui/privacy.go` and `date_jump.go`: forms have different spacing and
-  nearly empty full-screen layouts, with instructions scattered near the top.
-- `internal/tui/notebook.go`: the date strip, rule and wrapping control list
-  consume several rows and repeat quit/back choices.
-- Standard Glamour heading colors introduce a purple block and bright blue that
-  do not share the application's calmer teal hierarchy.
-- Save/recovery errors can become a long, visually weak status line. Distinct
-  outcomes need distinct visible summaries, not just more explanatory words.
-
-### A common shell, not more decorative boxes
-
-Use the same structure in every mode:
-
-1. **Header:** small `sp / location`, selected day, compact session/storage state.
-2. **Body:** a consistent two-cell inset; writing is the visual priority.
-3. **Outcome/position:** stable, subordinate metadata; errors stay prominent.
-4. **Footer:** three to five useful actions; expanded bindings remain in help.
-
-Keep the existing teal identity, warm selected-date accent and plain terminal
-background. Avoid rainbow controls, ASCII-art locks, nested borders and large
-privacy banners. Color reinforces explicit words; it never carries state alone.
-“Encrypted” describes storage/save policy, not an absence of plaintext memory.
+Storage and edit ownership are unchanged: private and shared Markdown are not
+concatenated, merged into one editor buffer, or projected into each other's
+caches. Locking also clears a hidden private viewport while shared updates remain
+on screen. Saved-empty, absent and shared-only personal-note states stay distinct.
 
 ### Writing and unlocking
 
-| Current production frame | Proposed direction — not implemented |
+| Before | Implemented |
 | --- | --- |
-| ![Current private editor](assets/before-editor.png) | ![Proposed writer](assets/proposed-editor.png) |
-| ![Current unlock form](assets/before-unlock.png) | ![Proposed unlock form](assets/proposed-unlock.png) |
+| ![Previous private editor](assets/before-editor.png) | ![Current themed writer](assets/implemented-editor.png) |
+| ![Previous unlock form](assets/before-unlock.png) | ![Current themed unlock form](assets/implemented-unlock.png) |
 
-Do not headline implementation details such as “Built-in editor.” Keep the
-relevant guarantee available in help, and keep the actual save policy visible.
-The writer sketch is a chrome/layout study, **not a decision to replace Neovim or
-expand the custom editor into an IDE**. The unresolved editor-integration/privacy
-contract remains separate.
+The writer no longer headlines implementation details such as “Built-in editor.”
+Its lossless custom input, exact Markdown bytes, memory-only history, find/input
+isolation and encrypted recovery safeguards are unchanged. F1 exposes full
+technical details. Appearance changes never rewrite configuration or note bytes.
 
-Use Bubbles textinput/spinner/help/key where they fit; use Lip Gloss consistently
-for the shared shell. Keep the lossless private input adapter unless a replacement
-passes exact-byte, CRLF/tab/grapheme, history, input-isolation and no-file tests.
-A component substitution is not automatically a usability or privacy improvement.
+The unlock form measures its field, current error and actions together. An
+unsupported size shows a resize hint and cannot submit an invisible field;
+masked input is retained until a supported resize or explicit cancellation.
+Busy/cancelling states keep their scope and wait for owned cryptographic work.
 
-## View-by-view direction
+### Calendar, forms, recovery and review
 
-| View family | Main change |
+| Month | Year |
 | --- | --- |
-| Month | Keep the spatial calendar; reduce repeated focus/date text. Selection dominates, previews are secondary. Private history remains undecrypted. |
-| Year | Keep the grid/activity overview. Quiet empty months, retain an understandable full-month timeline legend. |
-| Notebook | One daily page; no repeated private-section title. Chronological date strip and one secondary updates affordance. |
-| Empty notebook | “Start today's note” plus a clear action, in the same shell—not a top-left diagnostic dump. |
-| Locked notebook | A calm locked state in the notebook, not a separate product. Preserve access to available shared updates. |
-| Shared updates | Explicit read-only secondary context. Not encrypted; source labels self-reported; never editable as private text. |
-| Unlock/retry | Contextual form, visible focus, one sentence about session scope. An incorrect secret clears safely; errors sit beside the field. |
-| Unlock/busy/cancel | Same form shell. Spinner for unknown-duration work, not invented percentages. Cancellation still waits before locking. |
-| Private writer/find | Common header/footer/palette; quiet line/column metadata. Preserve literal text and find's isolated input ownership. |
-| Save/recovery failure | Short persistent outcome and next action, with complete error/path in F1 and retained exit reporting. “Recovery failed—keep editor open” must not be understated. |
-| Conflict review | A purpose-built saved/draft comparison with a visible selected action. Keep quoted controls, explicit Enter authorization and a further real save. |
-| Recovery | Persistent encrypted/plaintext save policy; explicit replacement scope. Never hide plaintext saving behind generic “private” branding. |
-| Templates | One clear selection list, quieter history badges. Keep **saves now before editing**, append-again semantics and cancellation-after-publication truthfulness visible. |
-| Date jump | Reuse the form shell. Short exact-format label and error; selection only, never saving. |
-| Help | Shared themed shell, grouped by Move / Write / Session. Full errors remain scrollable. F1 remains the typing-context help key. |
-| Small terminals | Preserve the hierarchy, reduce optional chrome first, then use the existing truthful resize fallback. No hidden controls or clipped recovery policy. |
+| ![Current month calendar](assets/implemented-calendar.png) | ![Current year calendar](assets/implemented-year.png) |
 
-![Proposed plaintext recovery — not implemented](assets/proposed-recovery-light.png)
+The calendar prioritizes useful prose before growing mostly empty day cells.
+Narrow layouts retain a smaller excerpt when possible; complete grids and
+full-month activity summaries remain intact. Private history is never decrypted
+for calendar previews, even when the session is unlocked.
 
-![Proposed compact light notebook — not implemented](assets/proposed-compact-light.png)
+| Templates | Date form |
+| --- | --- |
+| ![Current template chooser](assets/implemented-templates.png) | ![Current date form](assets/implemented-date.png) |
 
-## Implementation order
+Templates still make **SAVE NOW before editing** explicit. Editor cancellation
+does not undo insertion. Selection, applied history and append-again remain
+separate; cancellation waits for the actual publication outcome, not an invented
+rollback. Date navigation remains exact-format selection, never a save.
 
-- [x] Inventory and inspect all primary TUI families and key encrypted states.
-- [x] Produce reproducible baseline captures and labelled visual concepts.
-- [ ] **Shared visual primitives:** palette propagation, consistent chrome,
-  branded Markdown and form/error hierarchy. No key/storage changes in this unit.
-- [ ] **Chronological navigation:** change keys, footer order and help together;
-  retain startup, bounds and date-keyed positions. Validate real keyboard use.
-- [ ] **Secondary shared updates:** an explicit read-only viewer state with
-  no automatic unlock, private-cache projection or publication side effects.
-- [ ] **Review/help/template refinement:** improve grouping and short outcomes
-  while preserving existing confirmation, cancellation and durability semantics.
-- [ ] Re-capture the same fixtures after each implementation batch, compare at
-  common/narrow sizes, then validate live PTYs and both native themes.
+| Saved/draft comparison | Compact plaintext recovery |
+| --- | --- |
+| ![Current safe comparison](assets/implemented-review.png) | ![Current plaintext recovery](assets/implemented-recovery-light.png) |
 
-Test the design with concrete tasks: go from October 31 to the prior entry;
-open an agent's update without unlocking; unlock and return to the intended
-operation; identify whether a failed save published; identify a plaintext
-recovery save; cancel without losing the only copy of a draft.
+Comparison quotes source lines rather than interpreting note-originated controls.
+The selected action remains visible while scrolling; physical Enter authorizes
+it, and replacement still requires a real save. Recovery persistently distinguishes
+**Saving encrypted** from **Saving as plaintext**, preserves shared updates and
+the source artifact, and checks the reviewed policy at publication.
 
-These are usability tasks, not completed accessibility/user-research sign-off.
-CLI enable/disable/status are text command flows, not covered by the TUI image
-atlas; their warnings and confirmations require a separate live-terminal pass.
+![Current grouped help](assets/implemented-help.png)
 
-## Validation of the capture tools
+## Full view atlas
 
-Full `go test ./...` and `go vet ./...` pass. The opt-in exporter also passes under
-`-race`, checks dimensions and deterministic output, and rejects leaked synthetic
-passphrase text. Six Python unit tests cover ANSI color/reset/links/cell positions,
-concept bounds and explicit production/concept labelling. `make design-capture`
-successfully regenerates both galleries. These are tooling checks, not validation
-of the proposed runtime interactions.
+The original audit exported **170 frames across 39 scenes**. The implemented
+atlas now exports **402 frames across 53 scenes**, in dark/light at 100×30,
+80×24 and 56×16, with additional 40×12 variants for encrypted/error states.
+All 402 current frames have individual PNGs and a filterable local gallery.
+
+- `.privacy-adversarial/design-review/current/index.html` — **current application**
+- `.privacy-adversarial/design-review/concepts/index.html` — historical static concepts
+- `.privacy-adversarial/design-review/before/index.html` — original local baseline
+
+The current atlas includes primary/secondary/empty/locked/unlocked/unavailable
+notes, ordinary and encrypted calendars, unlock input/retry/busy/cancellation,
+writer/find/help/conflict/save/recovery/durability failures, both recovery save
+policies, template selection/history/retry/pending work, date validation and help.
+
+Images render actual production ANSI in a fixed-cell grid; they are **not native
+desktop screenshots or live-PTY recordings**. All writing, errors, paths and
+secrets are synthetic. The exporter uses no real store, editor configuration,
+watchers, clipboard, crypto job or external editor. Static concepts are labelled
+CONCEPT, not application output. The checked-in images use JetBrains Mono from
+its [public font repository](https://github.com/JetBrains/JetBrainsMono); the font
+file is not bundled or downloaded by the target.
+
+```sh
+make design-capture                 # Go, Python 3, ImageMagick
+SP_DESIGN_CAPTURE_FONT=/path/to/Mono.ttf make design-capture
+python3 -B -m unittest discover -s scripts/design-capture
+make design-terminal                # real synthetic POSIX PTY flows
+```
+
+The atlas is deliberately larger than the original concept subset. PNG generation
+is bounded to four ImageMagick processes by default and may take several minutes.
+The frame export is independent of the PNG renderer. Original hand-composed
+concept images remain in `assets/proposed-*.png` for historical comparison.
+
+## Completed implementation plan
+
+- [x] Inventory and inspect primary TUI families and encrypted states.
+- [x] Produce reproducible baseline captures and labelled concepts.
+- [x] Shared visual primitives, palette propagation, branded Markdown and forms.
+- [x] Chronological keys, pager and help; retain startup, bounds and positions.
+- [x] Read-only secondary updates with no implicit private action/publication.
+- [x] Review/help/template refinement with existing authorization and durability.
+- [x] Re-capture all scenes and validate actual dark/light, ordinary/narrow PTYs.
+
+Key implementation paths: `layout.go`, `markdown.go`, `private_view.go`,
+`shared_updates.go`, `notebook*.go`, `calendar.go`, `date_jump.go`,
+`template_chooser.go`, `draft_review.go`, and `key_help.go` in `internal/tui/`.
+
+## Validation and limits
+
+- Full `go test ./...`, `go test -race ./...`, `go vet ./...` and build pass.
+  The opt-in exporter also passes under race; all frames stay within bounds and
+  never expose the synthetic passphrase. Six Python capture-tool tests pass.
+- **11 privacy-terminal checks**, **7 UX-terminal workflow groups**, and **4
+  design-terminal cases** pass. The latter exercises actual dark/light terminals
+  at 100×30 and 56×16: chronological arrows/vi keys, locked shared access, action
+  isolation, reading continuity, relocking, theme/help and unchanged store bytes.
+- Those PTY suites tested candidate SHA256
+  `66f48da4436924971a1464e4450276e398f798aede46a13eb8a4c95f13ddecbb`.
+  Fixtures: `terminal-8310617f7b547ee5`, `ux-terminal-b3de89c7f3019043`, and
+  `design-terminal-b39d8d38b2860f0e` under `.privacy-adversarial/`. No transcript
+  was saved; no real notes/editor configuration were accessed.
+- Review found and tests cover two additional edge cases: a newer draft after an
+  unconfirmed publication must be explicitly unsaved; a cramped unlock form must
+  not accept a hidden field. Calendar captures also prompted a more useful prose
+  budget. Static review is not an independent security audit.
+- Windows amd64 cross-compilation passes, **not native execution**. Native GUI,
+  Windows runtime, accessibility/user research, independent crypto/dependency
+  review and release/publication verification remain separate outstanding gates.
+  Existing lint remains blocked by the installed v1/v2 configuration mismatch.
+
+The 40 earlier UX fixes remain implemented. Storage/privacy guarantees were not
+weakened; no plaintext-editor fallback or mandatory-Neovim decision was introduced.
 
 ## Design references
 
 - [Nielsen's usability heuristics](https://www.nngroup.com/articles/ten-usability-heuristics/):
   natural mapping, consistency, visible status, user control and minimalist design.
 - [Bubbles v0.18 components](https://github.com/charmbracelet/bubbles/tree/v0.18.0):
-  reference the version this project actually uses, not a speculative upgrade.
-
-The structural proposals need a product decision; checked UX fixes in `TODO.md`
-remain implemented. This study does not erase those fixes or mark the redesign
-as shipped.
+  reference the project's actual version, not a speculative component upgrade.

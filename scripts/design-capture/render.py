@@ -6,6 +6,7 @@ or live-PTY screenshots. No browser, external fonts, packages, or real store.
 """
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import html
 import json
 import os
@@ -126,7 +127,7 @@ def render(frame, output, font):
     path = output / (frame["id"] + ".mvg")
     commands.append("pop graphic-context")
     path.write_text("\n".join(commands), encoding="utf-8")
-    subprocess.run(["magick", "-size", f"{width}x{height}", "mvg:" + str(path), str(path.with_suffix(".png"))], check=True)
+    subprocess.run(["magick", "-limit", "thread", "1", "-size", f"{width}x{height}", "mvg:" + str(path), str(path.with_suffix(".png"))], check=True)
     (output / (frame["id"] + ".ansi")).write_text(frame["ansi"], encoding="utf-8")
     (output / (frame["id"] + ".txt")).write_text(ESCAPE.sub("", frame["ansi"]), encoding="utf-8")
     path.unlink()
@@ -152,15 +153,15 @@ h2{font-size:16px;margin:0}p{color:#a5b2b5}select{padding:8px;background:#202b30
 main{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,470px),1fr));gap:24px}
 article{background:#182126;border:1px solid #2c3a41;border-radius:8px;padding:16px}article p{font-size:13px;margin:4px 0 12px}
 img{width:100%;display:block;border-radius:4px}.text{font-size:12px;color:#6cd5c9}article[hidden]{display:none}
-</style><header><nav><a class="text" href="../current/index.html">Current UI</a> · <a class="text" href="../concepts/index.html">Proposed concepts (not implemented)</a></nav><h1>SP · visual inventory</h1><p>Actual production View() output from fixed synthetic fixtures.
+</style><header><nav><a class="text" href="../current/index.html">Current UI</a> · <a class="text" href="../concepts/index.html">Historical concepts</a></nav><h1>SP · visual inventory</h1><p>Actual production View() output from fixed synthetic fixtures.
 Fixed-cell rendered frame captures, not native terminal/desktop screenshots. No real notes or user editor configuration.</p>
 <label>Theme <select id="theme"><option value="">Both</option><option>dark</option><option>light</option></select></label>
 <label>Area <select id="group"><option value="">All views</option>""" + options + """</select></label></header><main>""" + "\n".join(cards) + """</main>
 <script>const themeFilter=document.getElementById('theme'),groupFilter=document.getElementById('group');for(const s of document.querySelectorAll('select'))s.onchange=()=>{for(const a of document.querySelectorAll('article'))a.hidden=(themeFilter.value&&a.dataset.theme!==themeFilter.value)||(groupFilter.value&&a.dataset.group!==groupFilter.value)}</script>"""
     if kind == "concept":
-        page = page.replace("SP · visual inventory", "SP · proposed direction — not implemented")
+        page = page.replace("SP · visual inventory", "SP · historical design concepts")
         page = page.replace("Actual production View() output from fixed synthetic fixtures.\nFixed-cell rendered frame captures, not native terminal/desktop screenshots. No real notes or user editor configuration.",
-                            "Hand-composed design concepts, not production screens. Navigation and content presentation shown here are proposals, not implemented behavior. All text is synthetic.")
+                            "Hand-composed design concepts, not production screens. The application now implements this direction; these historical static illustrations are not production captures. All text is synthetic.")
     (output / "index.html").write_text(page, encoding="utf-8")
 
 
@@ -170,6 +171,7 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--font", default=os.environ.get("SP_DESIGN_CAPTURE_FONT"), help="ImageMagick font name/file; defaults to SP_DESIGN_CAPTURE_FONT or an installed font")
     parser.add_argument("--kind", choices=["production", "concept"], default="production")
+    parser.add_argument("--workers", type=int, choices=range(1, 9), default=4, help="bounded parallel ImageMagick processes (default 4)")
     args = parser.parse_args()
     frames = json.loads(args.frames.read_text())
     if not isinstance(frames, list):
@@ -182,13 +184,16 @@ def main():
             raise RuntimeError("No font available; pass --font explicitly")
         font = next((candidate for candidate in choices if "mono" in candidate.lower()), choices[0])
     args.output.mkdir(parents=True, exist_ok=True)
+    if len({frame["id"] for frame in frames}) != len(frames):
+        raise ValueError("duplicate frame id")
     for frame in frames:
         if not re.fullmatch(r"[a-z0-9-]+", frame["id"]):
             raise ValueError("invalid frame id")
-        render(frame, args.output, font)
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        list(pool.map(lambda frame: render(frame, args.output, font), frames))
     gallery(frames, args.output, args.kind)
     print(json.dumps({"frames": len(frames), "gallery": str(args.output / "index.html"), "font": font,
-                      "scope": "static proposed concepts; not implemented" if args.kind == "concept" else "synthetic production model frames; fixed-cell PNG render, not native screenshots"}, indent=2))
+                      "scope": "historical static concepts; not production captures" if args.kind == "concept" else "synthetic production model frames; fixed-cell PNG render, not native screenshots"}, indent=2))
 
 
 if __name__ == "__main__":

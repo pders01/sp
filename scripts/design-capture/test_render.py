@@ -46,7 +46,7 @@ class RenderTests(unittest.TestCase):
             page = (Path(directory) / "index.html").read_text()
             self.assertIn("not production screens", page)
             self.assertNotIn("Actual production View()", page)
-            self.assertIn("not implemented behavior", page)
+            self.assertIn("not production captures", page)
 
 
 if __name__ == "__main__":
