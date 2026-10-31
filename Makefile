@@ -1,4 +1,4 @@
-.PHONY: all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal ux-terminal privacy-fuzz vuln
+.PHONY: all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal ux-terminal design-capture privacy-fuzz vuln
 
 # Variables
 BINARY_NAME=sp
@@ -119,6 +119,14 @@ ux-terminal:
 	@mkdir -p .privacy-adversarial
 	@go build -o .privacy-adversarial/sp-ux-validation $(MAIN_PATH)
 	@python3 scripts/ux-terminal/main.py --binary .privacy-adversarial/sp-ux-validation
+
+## design-capture: Render synthetic TUI frames and separate static design concepts (ImageMagick required)
+design-capture:
+	@mkdir -p .privacy-adversarial/design-review/current
+	@SP_DESIGN_CAPTURE_DIR="$(CURDIR)/.privacy-adversarial/design-review/current" go test ./internal/tui -run '^TestDesignCapture$$' -count=1
+	@python3 scripts/design-capture/render.py --frames .privacy-adversarial/design-review/current/frames.json --output .privacy-adversarial/design-review/current
+	@python3 scripts/design-capture/concepts.py --output .privacy-adversarial/design-review/concepts/frames.json
+	@python3 scripts/design-capture/render.py --frames .privacy-adversarial/design-review/concepts/frames.json --output .privacy-adversarial/design-review/concepts --kind concept
 
 ## privacy-fuzz: Run four bounded parser/append fuzz campaigns (20 seconds each)
 privacy-fuzz:

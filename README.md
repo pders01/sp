@@ -385,6 +385,7 @@ make test        # all packages
 make test-race   # race detector
 make privacy-terminal # POSIX PTY enable/edit/recover checks; synthetic stores only
 make ux-terminal      # integrated reader/editor/template/privacy UX; synthetic stores only
+make design-capture   # synthetic view PNGs and labelled design concepts; ImageMagick required
 make privacy-fuzz     # bounded parser/append fuzz campaigns
 make vuln             # reachable dependency advisories
 make coverage    # writes coverage.html
@@ -398,6 +399,10 @@ terminal checks on Unix, bounded fuzzing, and a reachable-vulnerability gate.
 Lint is pinned to `golangci-lint v2.5.0` (v2 configuration for Go 1.25 support).
 Workflow configuration is not evidence that a remote run has passed.
 See `RELEASE.md` for the GoReleaser flow.
+
+The [visual design study](docs/design/2026-10-31/README.md) compares current
+screens with a proposed calmer notebook, secondary shared updates, and
+chronological navigation. Concepts are not implemented application behavior.
 
 ## License
 

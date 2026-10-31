@@ -30,6 +30,10 @@ go.work.sum
 # env file
 .env
 
+# Python development-tool caches
+__pycache__/
+*.py[cod]
+
 # Editor/IDE
 # .idea/
 # .vscode/
