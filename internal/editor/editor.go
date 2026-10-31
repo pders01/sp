@@ -64,6 +64,13 @@ func (e *Editor) IsGUI() bool { return e.isGUI }
 
 // ReadEdited reads the content the editor wrote to path.
 func ReadEdited(path string) (string, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect edited file: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("edited buffer must be a regular file, not a symlink")
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read edited file: %w", err)

@@ -171,6 +171,16 @@ func (a *App) startPrivateEdit(date string) tea.Cmd {
 	}
 	a.privacy.editor = newPrivateEditor(date, page.Private, a.privacy.hooks.Save, a.privacy.hooks.Recover)
 	a.privacy.editor.onRecovery = a.trackRecovery
+	a.privacy.editor.load = func(date string) (string, error) {
+		page, err := a.privacy.hooks.Load(date)
+		if err != nil {
+			return "", err
+		}
+		if page.Locked {
+			return "", scratchpad.ErrLocked
+		}
+		return page.Private, nil
+	}
 	a.privacy.editor.resize(a.nb.width, a.nb.height)
 	return a.privacy.editor.Init()
 }
@@ -455,6 +465,9 @@ type privateEditor struct {
 	keyHelp       *keyHelp
 	recoveries    []scratchpad.RecoveryReference
 	onRecovery    func(scratchpad.RecoveryReference)
+	load          func(string) (string, error)
+	conflicted    bool
+	review        *draftReview
 }
 
 func newPrivateEditor(date, original string, save Saver, sealRecovery func(string, string) (string, error)) *privateEditor {
@@ -490,6 +503,9 @@ func (e *privateEditor) resize(width, height int) {
 	if e.keyHelp != nil {
 		e.keyHelp.resize(width, height)
 	}
+	if e.review != nil {
+		e.review.viewer.resize(width, height)
+	}
 }
 
 func (e *privateEditor) recovery() (string, error) {
@@ -497,6 +513,9 @@ func (e *privateEditor) recovery() (string, error) {
 		return "", errors.New("encrypted recovery is unavailable; keep this editor open")
 	}
 	path, err := e.recover(e.date, e.input.Value())
+	if path == "" && err == nil {
+		err = errors.New("recovery returned no artifact path; keep this editor open")
+	}
 	if path != "" {
 		ref := scratchpad.RecoveryReference{Date: e.date, Path: path, Encrypted: true}
 		found := false
@@ -518,6 +537,31 @@ func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if size, ok := msg.(tea.WindowSizeMsg); ok {
 		e.resize(size.Width, size.Height)
 	}
+	if e.review != nil {
+		if key, ok := msg.(tea.KeyMsg); ok {
+			switch e.review.choice(key) {
+			case 'x':
+				e.review = nil
+			case 'd':
+				e.original = e.review.current
+				e.conflicted, e.unconfirmed = false, false
+				e.review = nil
+				e.status = "Draft selected as replacement. Ctrl+S replaces the reviewed private Markdown; shared contributions are retained."
+			case 'r':
+				path, err := e.recovery()
+				if err != nil {
+					e.review.failure(privateRecoveryError(path, err).Error())
+					return e, nil
+				}
+				e.original = e.review.current
+				e.input.SetValue(e.original)
+				e.conflicted, e.unconfirmed = false, false
+				e.review = nil
+				e.status = "Reloaded saved text; previous draft retained in encrypted recovery: " + path
+			}
+		}
+		return e, nil
+	}
 	if e.keyHelp != nil {
 		if key, ok := msg.(tea.KeyMsg); ok && e.keyHelp.update(key) {
 			e.keyHelp = nil
@@ -532,8 +576,18 @@ func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return e, nil
 		}
 		switch key.Type {
+		case tea.KeyF2:
+			e.confirm = false
+			if e.conflicted {
+				e.openConflictReview()
+			}
+			return e, nil
 		case tea.KeyCtrlS:
 			e.confirm = false
+			if e.conflicted {
+				e.status = "Conflict remains. Press F2 to compare saved text and the retained draft before retrying."
+				return e, nil
+			}
 			if e.input.err != "" {
 				e.status = e.input.err
 				return e, nil
@@ -558,6 +612,7 @@ func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				e.original = e.input.Value()
 				e.unconfirmed, e.published = true, true
 			}
+			e.conflicted = errors.Is(err, scratchpad.ErrConflict) && !e.published
 			path, recoveryErr := e.recovery()
 			e.status = fmt.Sprintf("Save failed: %v", err)
 			if e.published {
@@ -567,6 +622,9 @@ func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				e.status += "; encrypted recovery: " + path
 			} else {
 				e.status += fmt.Sprintf("; %v. Keep this editor open.", privateRecoveryError(path, recoveryErr))
+			}
+			if e.conflicted {
+				e.status += "; F2: compare/reload before retrying"
 			}
 			return e, nil
 		case tea.KeyEsc, tea.KeyCtrlC:
@@ -609,11 +667,15 @@ func (e *privateEditor) View() string {
 	if e.done {
 		return ""
 	}
+	if e.review != nil {
+		return e.review.viewer.view(Palette{})
+	}
 	if e.keyHelp != nil {
 		return e.keyHelp.view(Palette{})
 	}
 	controls := wrappedHelp([]helpEntry{
 		{keys: "Ctrl+S", label: "save/return", visible: true},
+		{keys: "F2", label: "review conflict", visible: e.conflicted},
 		{keys: "Esc", label: "cancel", visible: true},
 		{keys: "F1", label: "help", visible: true},
 	}, e.width)
@@ -640,14 +702,21 @@ func (e *privateEditor) View() string {
 }
 
 // EditPrivate opens a standalone in-memory editor for the bare sp flow.
-func EditPrivate(date, original string, save Saver, sealRecovery func(date, content string) (string, error)) error {
-	return runPrivateEditor(newPrivateEditor(date, original, save, sealRecovery))
+func EditPrivate(date, original string, save Saver, sealRecovery func(date, content string) (string, error), load ...func(string) (string, error)) error {
+	model := newPrivateEditor(date, original, save, sealRecovery)
+	if len(load) > 0 {
+		model.load = load[0]
+	}
+	return runPrivateEditor(model)
 }
 
 // EditRecoveredPrivate keeps the current note as the conflict baseline while
 // presenting recovered text for deliberate review and replacement.
-func EditRecoveredPrivate(date, current, recovered string, save Saver, sealRecovery func(string, string) (string, error)) error {
+func EditRecoveredPrivate(date, current, recovered string, save Saver, sealRecovery func(string, string) (string, error), load ...func(string) (string, error)) error {
 	model := newPrivateEditor(date, current, save, sealRecovery)
+	if len(load) > 0 {
+		model.load = load[0]
+	}
 	model.input.SetValue(recovered)
 	model.status = "Recovery: saving replaces the current private Markdown; shared contributions are retained."
 	return runPrivateEditor(model)

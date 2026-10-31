@@ -41,7 +41,7 @@ func completeExternalEdit(msg editDoneMsg, save Saver) externalEditResult {
 		return fail("read", err)
 	}
 	result := externalEditResult{content: content, status: "No changes."}
-	if content != msg.original {
+	if content != msg.original || msg.unconfirmed {
 		if save == nil {
 			return fail("save", errors.New("saving is unavailable"))
 		}

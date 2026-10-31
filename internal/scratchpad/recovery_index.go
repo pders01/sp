@@ -12,6 +12,8 @@ import (
 	"unicode/utf8"
 )
 
+const maxRecoveryReferenceSize = 16 << 10
+
 // RecoveryReference contains public discovery metadata, never recovered text.
 // A reference is not proof of a valid recovery or an existing temporary buffer.
 // Listed external paths are never opened, followed, or executed automatically.
@@ -43,6 +45,9 @@ func (m *Manager) RecordBufferRecovery(date, path string) error {
 	data, err := json.Marshal(RecoveryReference{Date: date, Path: path})
 	if err != nil {
 		return err
+	}
+	if len(data) > maxRecoveryReferenceSize {
+		return errors.New("retained buffer metadata exceeds discovery size limit")
 	}
 	lock, err := lockNote(m.storageDir, "recovery-index")
 	if err != nil {
@@ -103,7 +108,7 @@ func (m *Manager) ListRecoveries() ([]RecoveryReference, error) {
 			continue
 		}
 		var ref RecoveryReference
-		data, readErr := readBounded(filepath.Join(m.storageDir, name), 16384)
+		data, readErr := readBounded(filepath.Join(m.storageDir, name), maxRecoveryReferenceSize)
 		if readErr == nil {
 			readErr = strictJSON(data, &ref)
 		}

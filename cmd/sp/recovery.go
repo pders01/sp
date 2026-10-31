@@ -1,8 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"path/filepath"
+	"time"
 
+	"github.com/pders01/sp/internal/config"
+	"github.com/pders01/sp/internal/editor"
 	"github.com/pders01/sp/internal/scratchpad"
 	"github.com/pders01/sp/internal/tui"
 	"github.com/spf13/cobra"
@@ -17,12 +22,22 @@ func recordRetainedBuffer(mgr *scratchpad.Manager, date, path string, cause erro
 
 func newRecoverCommand(factory managerFactory) *cobra.Command {
 	var list bool
+	var plaintextDate string
 	cmd := &cobra.Command{
-		Use:   "recover <recovery-file> | --list",
-		Short: "List recovery paths or unlock encrypted recovery for review",
+		Use:   "recover <file> [--plaintext-date YYYY-MM-DD] | --list",
+		Short: "List or review recovery before saving",
 		Args: func(cmd *cobra.Command, args []string) error {
 			if list {
+				if cmd.Flags().Changed("plaintext-date") {
+					return errors.New("--list cannot be combined with --plaintext-date")
+				}
 				return cobra.NoArgs(cmd, args)
+			}
+			if cmd.Flags().Changed("plaintext-date") {
+				parsed, err := time.Parse(time.DateOnly, plaintextDate)
+				if err != nil || parsed.Format(time.DateOnly) != plaintextDate {
+					return errors.New("--plaintext-date must be YYYY-MM-DD")
+				}
 			}
 			return cobra.ExactArgs(1)(cmd, args)
 		},
@@ -41,6 +56,31 @@ func newRecoverCommand(factory managerFactory) *cobra.Command {
 					tui.WriteRecoveryReport(cmd.OutOrStdout(), refs)
 				}
 				return listErr
+			}
+			if cmd.Flags().Changed("plaintext-date") {
+				mgr, err := factory()
+				if err != nil {
+					return err
+				}
+				defer mgr.Lock()
+				private, err := mgr.PrivacyEnabled()
+				if err != nil {
+					return err
+				}
+				if private {
+					return errors.New("plaintext buffer review is unavailable while privacy is enabled; use encrypted recovery")
+				}
+				path, err := filepath.Abs(args[0])
+				if err != nil {
+					return err
+				}
+				ed, err := editor.NewEditor()
+				if err != nil {
+					return err
+				}
+				cfg := config.Default()
+				return runApp(mgr, ed, tui.NewIconSet(cfg.UI.Icons), cfg,
+					scratchpad.RecoveryReference{Date: plaintextDate, Path: path})
 			}
 			prompt, err := newTerminalPrompt(cmd.InOrStdin(), cmd.ErrOrStderr())
 			if err != nil {
@@ -68,9 +108,10 @@ func newRecoverCommand(factory managerFactory) *cobra.Command {
 				return err
 			}
 			fmt.Fprintln(cmd.ErrOrStderr(), "Review recovered text before saving: this replaces private Markdown, not an automatic merge. The recovery file is retained.")
-			return tui.EditRecoveredPrivate(recovery.Date, current.Content, recovery.Content, makeSaver(mgr), mgr.SealRecovery)
+			return tui.EditRecoveredPrivate(recovery.Date, current.Content, recovery.Content, makeSaver(mgr), mgr.SealRecovery, makeLoader(mgr))
 		},
 	}
 	cmd.Flags().BoolVar(&list, "list", false, "List recovery paths without unlocking or reading note text")
+	cmd.Flags().StringVar(&plaintextDate, "plaintext-date", "", "Review a legacy plaintext buffer for this date (privacy must be disabled)")
 	return cmd
 }

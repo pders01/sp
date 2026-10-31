@@ -77,6 +77,19 @@ func TestRecoveryDiscoveryIsLockedMetadataOnlyAndReportsPartialErrors(t *testing
 	}
 }
 
+func TestRecoveryIndexRejectsMetadataTooLargeToDiscover(t *testing.T) {
+	m, err := NewManagerAt(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// This path is metadata only; neither recording nor listing opens it.
+	// JSON escaping must not produce a record larger than its reader accepts.
+	path := filepath.Join(t.TempDir(), strings.Repeat("<", 4000))
+	if err := m.RecordBufferRecovery("2026-01-01", path); err == nil {
+		t.Fatal("recorded oversized metadata that cannot be discovered")
+	}
+}
+
 func TestRecoveryIndexRejectsInvalidInputAndNeverDeletesBuffer(t *testing.T) {
 	m, err := NewManagerAt(t.TempDir())
 	if err != nil {

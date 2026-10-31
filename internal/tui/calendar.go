@@ -57,6 +57,8 @@ type Calendar struct {
 	onRecovery         func(scratchpad.RecoveryReference)
 	onConsumed         func(date, path string)
 	keyHelp            *keyHelp
+	drafts             map[string]editDoneMsg
+	review             *externalDraftReview
 }
 
 // NewCalendar creates a calendar seeded with the given dates as "has data".
@@ -70,6 +72,7 @@ func NewCalendar(dates []string) *Calendar {
 	return &Calendar{
 		icons:        DefaultIconSet(),
 		hasData:      hasData,
+		drafts:       make(map[string]editDoneMsg),
 		previews:     make(map[string]string),
 		contents:     make(map[string]string),
 		privateDates: make(map[string]bool),
@@ -151,6 +154,9 @@ func (c *Calendar) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if c.keyHelp != nil {
 			c.keyHelp.resize(c.width, c.height)
 		}
+		if c.review != nil {
+			c.review.viewer.resize(c.width, c.height)
+		}
 		return c, nil
 	case themeChangedMsg:
 		var cmds []tea.Cmd
@@ -166,6 +172,9 @@ func (c *Calendar) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editDoneMsg:
 		return c.finishEdit(msg)
 	case tea.KeyMsg:
+		if c.review != nil {
+			return c.updateDraftReview(msg)
+		}
 		if c.keyHelp != nil {
 			if c.keyHelp.update(msg) {
 				c.keyHelp = nil
@@ -187,12 +196,15 @@ func (c *Calendar) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	if result.err != nil {
+		rememberExternalFailure(c.drafts, msg, result)
+		result.status += "; e: review/retry retained draft"
 		if msg.path != "" && c.onRecovery != nil {
 			c.onRecovery(scratchpad.RecoveryReference{Date: msg.date, Path: msg.path})
 		}
 		c.theme.SetStatus(result.status, 0)
 		return c, nil
 	}
+	delete(c.drafts, msg.date)
 	if c.onConsumed != nil {
 		c.onConsumed(msg.date, msg.path)
 	}
@@ -311,6 +323,9 @@ func (c *Calendar) shiftPeriod(years, months int) {
 
 // View renders the calendar full-screen.
 func (c *Calendar) View() string {
+	if c.review != nil {
+		return c.review.viewer.view(c.theme.Palette())
+	}
 	if c.quitting {
 		return ""
 	}
@@ -329,7 +344,7 @@ func (c *Calendar) View() string {
 	header := viewHeader(withIcon(c.icons.Calendar, title), c.theme.StatusText(), palette, c.width)
 	help := palette.Help.Render(wrappedHelp([]helpEntry{
 		{keys: "enter", label: "open", visible: true},
-		{keys: "e", label: "edit", visible: !year},
+		{keys: "e", label: c.editLabel(), visible: !year},
 		{keys: "u", label: "unlock", visible: c.privacyEnabled},
 		{keys: "a", label: "templates", visible: !year && c.templatesAvailable},
 		{keys: "?/F1", label: "help", visible: true},
@@ -738,14 +753,16 @@ func (c *Calendar) startEdit(date string) tea.Cmd {
 	} else if c.HasData(date) || content != "" {
 		c.MarkDate(date, content)
 	}
-	cmd, path, cleanup, perr := c.editor.Prepare(content)
+	if draft, ok := c.drafts[date]; ok {
+		c.review = reviewExternalDraft(draft, content, c.width, c.height)
+		return func() tea.Msg { return nil }
+	}
+	cmd, perr := prepareExternalDraft(c.editor, date, content, content, false, c.onRecovery)
 	if perr != nil {
 		c.theme.SetStatus(fmt.Sprintf("editor prepare: %v", perr), 2*time.Second)
 		return c.theme.expireStatusCmd(2 * time.Second)
 	}
-	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
-		return editDoneMsg{date: date, original: content, path: path, cleanup: cleanup, err: execErr}
-	})
+	return cmd
 }
 
 // IsQuitting reports whether the calendar is exiting.

@@ -35,7 +35,7 @@ type App struct {
 	templateChooser  *templateChooser
 	privacy          *privacyState
 	recoveries       []scratchpad.RecoveryReference
-	recoveryWarnings []string
+	recoveryWarnings map[string]string
 	recordRecovery   func(date, path string) error
 	forgetRecovery   func(date, path string) error
 }
@@ -52,6 +52,7 @@ func NewApp(cal *Calendar, nb *Notebook, mode AppMode) *App {
 		appliedTemplates: make(map[string]map[string]bool),
 	}
 	nb.canPop = app.canPop
+	nb.drafts = cal.drafts // A failed draft follows its date across both views.
 	cal.onChange, nb.onChange = app.noteChanged, app.noteChanged
 	cal.onLoad, nb.onLoad = app.noteLoaded, app.noteLoaded
 	cal.onRecovery, nb.onRecovery = app.trackRecovery, app.trackRecovery
@@ -122,10 +123,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// application-level template shortcut can act on the underlying view.
 	if _, key := msg.(tea.KeyMsg); key && a.templateChooser == nil &&
 		(a.privacy == nil || (a.privacy.editor == nil && a.privacy.prompt == nil)) {
-		if a.mode == ModeCalendar && a.cal.keyHelp != nil {
+		if a.mode == ModeCalendar && (a.cal.keyHelp != nil || a.cal.review != nil) {
 			return a.updateCalendar(msg)
 		}
-		if a.mode == ModeNotebook && a.nb.keyHelp != nil {
+		if a.mode == ModeNotebook && (a.nb.keyHelp != nil || a.nb.review != nil) {
 			return a.updateNotebook(msg)
 		}
 	}

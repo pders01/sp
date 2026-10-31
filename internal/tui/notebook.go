@@ -22,11 +22,12 @@ type Saver func(date, original, content string) error
 // editDoneMsg is dispatched after tea.ExecProcess has handed control
 // back from the external editor.
 type editDoneMsg struct {
-	date     string
-	original string
-	path     string
-	cleanup  func()
-	err      error
+	date        string
+	original    string
+	path        string
+	cleanup     func()
+	err         error
+	unconfirmed bool // Retry must confirm a published replacement, even unchanged.
 }
 
 // Notebook represents the notebook view
@@ -56,6 +57,8 @@ type Notebook struct {
 	onConsumed         func(date, path string)
 	canPop             bool
 	keyHelp            *keyHelp
+	drafts             map[string]editDoneMsg
+	review             *externalDraftReview
 }
 
 // NewNotebook creates a new notebook instance. Pages are copied and
@@ -66,6 +69,7 @@ func NewNotebook(pages []string) *Notebook {
 	return &Notebook{
 		pages:    owned,
 		contents: make(map[string]string),
+		drafts:   make(map[string]editDoneMsg),
 		current:  0,
 		width:    80,
 		height:   24,
@@ -112,6 +116,9 @@ func (n *Notebook) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if n.keyHelp != nil {
 			n.keyHelp.resize(n.width, n.height)
 		}
+		if n.review != nil {
+			n.review.viewer.resize(n.width, n.height)
+		}
 		return n, nil
 	case themeChangedMsg:
 		var cmds []tea.Cmd
@@ -128,6 +135,9 @@ func (n *Notebook) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editDoneMsg:
 		return n.finishEdit(msg)
 	case tea.KeyMsg:
+		if n.review != nil {
+			return n.updateDraftReview(msg)
+		}
 		if n.keyHelp != nil {
 			if n.keyHelp.update(msg) {
 				n.keyHelp = nil
@@ -162,14 +172,16 @@ func (n *Notebook) startEdit(date string) tea.Cmd {
 			n.updateViewportContent()
 		}
 	}
-	cmd, path, cleanup, err := n.editor.Prepare(original)
+	if draft, ok := n.drafts[date]; ok {
+		n.review = reviewExternalDraft(draft, original, n.width, n.height)
+		return func() tea.Msg { return nil }
+	}
+	cmd, err := prepareExternalDraft(n.editor, date, original, original, false, n.onRecovery)
 	if err != nil {
 		n.flashError(fmt.Sprintf("editor prepare: %v", err))
 		return n.theme.expireStatusCmd(2 * time.Second)
 	}
-	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
-		return editDoneMsg{date: date, original: original, path: path, cleanup: cleanup, err: execErr}
-	})
+	return cmd
 }
 
 // finishEdit reads the edited buffer, persists changes, and refreshes
@@ -185,12 +197,15 @@ func (n *Notebook) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	if result.err != nil {
+		rememberExternalFailure(n.drafts, msg, result)
+		result.status += "; e: review/retry retained draft"
 		if msg.path != "" && n.onRecovery != nil {
 			n.onRecovery(scratchpad.RecoveryReference{Date: msg.date, Path: msg.path})
 		}
 		n.theme.SetStatus(result.status, 0)
 		return n, nil
 	}
+	delete(n.drafts, msg.date)
 	if n.onConsumed != nil {
 		n.onConsumed(msg.date, msg.path)
 	}
@@ -264,6 +279,9 @@ func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // View renders the notebook
 func (n *Notebook) View() string {
+	if n.review != nil {
+		return n.review.viewer.view(n.theme.Palette())
+	}
 	if n.quitting {
 		return ""
 	}
@@ -354,7 +372,7 @@ func (n *Notebook) renderFooter() string {
 	help := n.theme.Palette().Help.Render(wrappedHelp([]helpEntry{
 		{keys: "←/→", label: "newer/older", visible: true},
 		{keys: "↑/↓", label: "scroll", visible: true},
-		{keys: "enter/e", label: "edit", visible: true},
+		{keys: "enter/e", label: n.editLabel(), visible: true},
 		{keys: "u", label: "unlock", visible: n.privacyEnabled},
 		{keys: "a", label: "templates", visible: n.templatesAvailable},
 		{keys: "esc", label: back, visible: true},

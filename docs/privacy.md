@@ -299,6 +299,24 @@ If recovery publication also fails, retain the running editor: it keeps the
 in-memory text so you can retry rather than silently discarding it. Do not exit
 or terminate the process assuming an on-disk recovery exists.
 
+For a private save conflict, repeated Ctrl+S attempts are blocked until review.
+Press **F2** to compare the current saved text with the in-memory draft. Select
+`d` (use the draft as a replacement) or `r` (reload saved text), then confirm with
+a separate **physical Enter**. A letter alone or literal/bracketed-paste Enter
+text does not authorize the action. Draft replacement still requires Ctrl+S afterward and checks for
+further concurrent changes. Reloading first seals the exact draft in encrypted
+recovery; if that fails, SP keeps the draft/editor open. Escape closes review
+without changing either note. Comparison text never enters public view caches.
+
+Legacy plaintext buffers can be explicitly reviewed across processes with
+`sp privacy recover --plaintext-date YYYY-MM-DD <buffer-file>`. This refuses
+privacy-enabled stores before resolving an external editor or reading the
+buffer. It opens a comparison, not an automatic import; confirming the draft
+opens a fresh editor buffer and a successful editor return attempts replacement.
+The old failed buffer remains intact. Missing/nonregular buffers cannot authorize
+a draft replacement; saved text can still be reloaded. No listed path is opened
+automatically, and no automatic merging or plaintext fallback is introduced.
+
 An encrypted recovery file is not a successful note save, automatic merge, or
 permanent backup. Preserve it with the associated global metadata and resolve
 the underlying conflict or storage failure. Recovery requires the matching

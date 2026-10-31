@@ -77,5 +77,5 @@ func editPrivateAndSave(mgr *scratchpad.Manager, pickedDate string) error {
 	if err != nil {
 		return fmt.Errorf("failed to load private scratchpad: %w", err)
 	}
-	return tui.EditPrivate(page.Date, page.Content, makeSaver(mgr), mgr.SealRecovery)
+	return tui.EditPrivate(page.Date, page.Content, makeSaver(mgr), mgr.SealRecovery, makeLoader(mgr))
 }

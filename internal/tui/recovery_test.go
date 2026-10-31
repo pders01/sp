@@ -52,6 +52,31 @@ func TestPrivateRecoveryReportTracksPublishedButUnconfirmedPaths(t *testing.T) {
 	}
 }
 
+func TestRecoveryIndexWarningsRetryAndClearWhenBufferIsConsumed(t *testing.T) {
+	app := newTestApp(ModeNotebook)
+	defer app.Close()
+	calls := 0
+	app.SetRecoveryRecorder(func(string, string) error {
+		calls++
+		if calls == 1 {
+			return errors.New("transient index error")
+		}
+		return nil
+	}, func(string, string) error { return nil })
+	ref := scratchpad.RecoveryReference{Date: "2026-01-01", Path: "/synthetic/sp-buffer.md"}
+	app.trackRecovery(ref)
+	app.trackRecovery(ref)
+	if calls != 2 || len(app.recoveries) != 1 || len(app.recoveryWarnings) != 0 {
+		t.Fatal("index retry duplicated artifact or retained an obsolete warning")
+	}
+	app.consumedRecovery(ref.Date, ref.Path)
+	var out bytes.Buffer
+	app.ReportRecoveries(&out)
+	if out.Len() != 0 {
+		t.Fatalf("consumed buffer was reported as retained: %q", out.String())
+	}
+}
+
 func TestRecoveryReportQuotesControlCharacters(t *testing.T) {
 	var out bytes.Buffer
 	WriteRecoveryReport(&out, []scratchpad.RecoveryReference{{Date: "2026-01-01", Path: "/synthetic/\x1b[31m\nfile", Encrypted: true}})

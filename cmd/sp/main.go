@@ -134,7 +134,7 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 	return runApp(mgr, ed, icons, cfg)
 }
 
-func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *config.Config) error {
+func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *config.Config, recovery ...scratchpad.RecoveryReference) error {
 	private, err := mgr.PrivacyEnabled()
 	if err != nil {
 		return err
@@ -143,7 +143,7 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 	if err != nil {
 		return err
 	}
-	if len(dates) == 0 && notebookFlag && !calendarFlag {
+	if len(dates) == 0 && notebookFlag && !calendarFlag && len(recovery) == 0 {
 		fmt.Println("No scratchpad pages found.")
 		return nil
 	}
@@ -165,7 +165,7 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 	}
 
 	mode := tui.ModeCalendar
-	if notebookFlag && !calendarFlag {
+	if notebookFlag && !calendarFlag || len(recovery) > 0 {
 		mode = tui.ModeNotebook
 	}
 	app := tui.NewApp(cal, nb, mode)
@@ -194,6 +194,11 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 	app.SetRecoveryRecorder(mgr.RecordBufferRecovery, mgr.ForgetBufferRecovery)
 	defer app.Close()
 	defer app.ReportRecoveries(os.Stderr)
+	if len(recovery) > 0 {
+		if err := app.ReviewExternalRecovery(recovery[0].Date, recovery[0].Path); err != nil {
+			return err
+		}
+	}
 
 	if _, rerr := tea.NewProgram(app, tea.WithAltScreen()).Run(); rerr != nil {
 		if recoveryErr := app.RecoverPrivateEdit(); recoveryErr != nil {
@@ -364,6 +369,9 @@ func editAndSave(mgr *scratchpad.Manager, ed *editor.Editor, pickedDate string) 
 	if err != nil {
 		return fmt.Errorf("failed to prepare editor: %w", err)
 	}
+	if indexErr := mgr.RecordBufferRecovery(sp.Date, path); indexErr != nil {
+		fmt.Fprintf(os.Stderr, "sp: could not index active editor buffer %q: %v; keep this path if interrupted\n", path, indexErr)
+	}
 	newContent, err := ed.RunPrepared(cmd, path)
 	if err != nil {
 		return recordRetainedBuffer(mgr, sp.Date, path, fmt.Errorf("failed to edit scratchpad: %w; buffer path: %s", err, path))
@@ -380,5 +388,8 @@ func editAndSave(mgr *scratchpad.Manager, ed *editor.Editor, pickedDate string) 
 		fmt.Println("Scratchpad saved!")
 	}
 	cleanup()
+	if indexErr := mgr.ForgetBufferRecovery(sp.Date, path); indexErr != nil {
+		fmt.Fprintf(os.Stderr, "sp: could not remove stale editor buffer reference %q: %v\n", path, indexErr)
+	}
 	return nil
 }

@@ -2,6 +2,8 @@ package editor
 
 import (
 	"os"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -84,6 +86,23 @@ func TestGetFallbackEditors(t *testing.T) {
 
 	if !found {
 		t.Error("getFallbackEditors() doesn't contain any common editors")
+	}
+}
+
+func TestReadEditedRejectsNonRegularRecoveryPaths(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := ReadEdited(dir); err == nil {
+		t.Fatal("accepted a directory as an editor buffer")
+	}
+	if runtime.GOOS == "windows" {
+		return // Native symlink privileges/ACL behavior are validated separately.
+	}
+	path := filepath.Join(dir, "symlink.md")
+	if err := os.Symlink(filepath.Join(dir, "missing.md"), path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadEdited(path); err == nil {
+		t.Fatal("followed a symlink as an editor/recovery buffer")
 	}
 }
 

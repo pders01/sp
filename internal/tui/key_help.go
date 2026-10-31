@@ -98,7 +98,7 @@ func (c *Calendar) keyBindings() []helpEntry {
 		{keys: "H/L", label: "previous/next " + period + " (clamped)", visible: true},
 		{keys: "Enter", label: "open selected day in notebook", visible: !year},
 		{keys: "Enter", label: "open selected month", visible: year},
-		{keys: "e/i", label: "edit selected day directly", visible: !year},
+		{keys: "e/i", label: c.editLabel() + " selected day directly", visible: !year},
 		{keys: "u", label: "unlock private notes for this process", visible: c.privacyEnabled},
 		{keys: "a", label: "choose template sections", visible: !year && c.templatesAvailable},
 		{keys: "m/y", label: "month/year view", visible: true},
@@ -120,7 +120,7 @@ func (n *Notebook) keyBindings() []helpEntry {
 		{keys: "PgUp/b PgDn/f", label: "scroll a full page", visible: true},
 		{keys: "Ctrl+U/D", label: "scroll half a page", visible: true},
 		{keys: "g/G", label: "top/bottom of note", visible: true},
-		{keys: "Enter/e/i", label: "edit current page", visible: len(n.pages) > 0},
+		{keys: "Enter/e/i", label: n.editLabel() + " current page", visible: len(n.pages) > 0},
 		{keys: "u", label: "unlock private notes for this process", visible: n.privacyEnabled},
 		{keys: "a", label: "choose template sections", visible: n.templatesAvailable && len(n.pages) > 0},
 		{keys: "Esc/Backspace", label: back, visible: true},
@@ -133,6 +133,7 @@ func (n *Notebook) keyBindings() []helpEntry {
 func privateEditorBindings() []helpEntry {
 	return []helpEntry{
 		{keys: "Ctrl+S", label: "save and return", visible: true},
+		{keys: "F2", label: "after conflict: compare saved text/draft, reload or explicitly select replacement", visible: true},
 		{keys: "Esc/Ctrl+C", label: "cancel; changed text requires confirmation and encrypted recovery", visible: true},
 		{keys: "←/→ ↑/↓", label: "move cursor", visible: true},
 		{keys: "Home/Ctrl+A", label: "start of line", visible: true},

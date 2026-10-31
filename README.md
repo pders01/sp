@@ -271,11 +271,22 @@ callback and reloads the current note before opening the editor. Lock files
 when the handle closes or the process exits. Do not delete them while SP runs.
 
 In legacy mode, on an edit conflict or editor/save failure, the CLI, notebook,
-and calendar keep the edited Markdown buffer and report its path. Copy or merge
-that buffer into the current note before retrying; SP does not merge
-automatically. Retained paths are printed after leaving the TUI and recorded as
-path-only metadata for `sp privacy recover --list`; listed paths may be stale and
-are never opened automatically. These buffers live in the OS temporary directory, so they
+and calendar keep the edited Markdown buffer and report its path. Reopening the
+edit offers a scrollable comparison with the current saved text. Select `d` for
+the retained draft or `r` for saved text, then confirm with a physical Enter.
+A fresh editor buffer is opened; the failed one stays intact. Choosing the draft
+explicitly authorizes a replacement attempt when the editor returns successfully.
+Any further concurrent change still causes a conflict; SP never auto-merges.
+
+Retained paths print after leaving the TUI and are recorded as path-only metadata
+for `sp privacy recover --list`; listed paths may be stale and are never opened
+automatically. To explicitly review a plaintext buffer from an earlier process:
+
+```sh
+sp privacy recover --plaintext-date YYYY-MM-DD <buffer-file>
+```
+
+This interactive path refuses privacy-enabled stores. Temporary editor buffers
 are not permanent backups. Privacy mode instead attempts encrypted recovery
 using the public recipient; if recovery fails, keep the editor open to retain
 the in-memory text and retry. See [recovery instructions](docs/privacy.md#edit-failures-recovery-and-backups).
