@@ -430,30 +430,6 @@ func (a *App) privacyView() (string, bool) {
 	return "", false
 }
 
-func renderPrivatePage(page PrivatePage) string {
-	if page.LoadError != "" {
-		return "Private note unavailable: " + page.LoadError
-	}
-	if !page.HasPrivate && page.Private == "" {
-		if strings.TrimSpace(page.Shared) != "" {
-			return "# Agent contributions · shared\n\n" + page.Shared
-		}
-		return "No entry for this day. Press e to create a private note."
-	}
-	private := page.Private
-	switch {
-	case page.Locked:
-		private = "Locked. Press u to unlock private notes."
-	case private == "":
-		private = "(Private note is empty.)"
-	}
-	content := "# Private notes\n\n" + private
-	if strings.TrimSpace(page.Shared) != "" {
-		content += "\n\n---\n\n# Agent contributions · shared\n\n" + page.Shared
-	}
-	return content
-}
-
 // privateEditor never creates plaintext files. Unsaved cancellation and save
 // failures use the caller's encrypted recovery mechanism; failed recovery keeps
 // the text in the running editor rather than discarding the only copy.
@@ -475,13 +451,15 @@ type privateEditor struct {
 	recoveries    []scratchpad.RecoveryReference
 	onRecovery    func(scratchpad.RecoveryReference)
 	load          func(string) (string, error)
+	canRelock     bool
+	savePolicy    string
 	conflicted    bool
 	review        *draftReview
 }
 
 func newPrivateEditor(date, original string, save Saver, sealRecovery func(string, string) (string, error)) *privateEditor {
 	input := newPrivateInput()
-	input.SetValue(original)
+	input.OpenValue(original)
 	input.Focus()
 	input.SetWidth(80)
 	input.SetHeight(18)
@@ -577,11 +555,20 @@ func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return e, nil
 	}
+	if e.input.Finding() {
+		if key, ok := msg.(tea.KeyMsg); ok && key.Type == tea.KeyF1 {
+			e.keyHelp = newKeyHelp("Find in current draft", privateFindBindings(), e.input.Status(), e.width, e.height)
+			return e, nil
+		}
+		var cmd tea.Cmd
+		e.input, cmd = e.input.Update(msg)
+		return e, cmd
+	}
 	if key, ok := msg.(tea.KeyMsg); ok {
 		if helpRequested(key, false) {
 			e.confirm = false
-			details := e.input.err + "\n" + e.status + "\nNo plaintext temporary editor file is created. Saving follows the store's current privacy policy."
-			e.keyHelp = newKeyHelp("Private editor", privateEditorBindings(), details, e.width, e.height)
+			details := e.input.Status() + "\n" + e.status + "\n" + e.savePolicy + "\nNo plaintext temporary editor file is created. Saving follows the store's current privacy policy."
+			e.keyHelp = newKeyHelp("Private editor", privateEditorBindings(e.canRelock), details, e.width, e.height)
 			return e, nil
 		}
 		switch key.Type {
@@ -685,11 +672,15 @@ func (e *privateEditor) View() string {
 	controls := wrappedHelp([]helpEntry{
 		{keys: "Ctrl+S", label: "save/return", visible: true},
 		{keys: "F2", label: "review conflict", visible: e.conflicted},
+		{keys: "Ctrl+L", label: "seal/lock", visible: e.canRelock},
 		{keys: "Esc", label: "cancel", visible: true},
 		{keys: "F1", label: "help", visible: true},
 	}, e.width)
-	var statuses []string
-	for _, status := range []string{e.input.err, e.status} {
+	if e.input.Finding() {
+		controls = wrappedHelp(privateFindBindings(), e.width)
+	}
+	statuses := []string{truncate(oneLine(e.input.Status()), e.width)}
+	for _, status := range []string{e.status} {
 		if status != "" {
 			statuses = append(statuses, truncate(oneLine(status), e.width))
 		}
@@ -700,9 +691,13 @@ func (e *privateEditor) View() string {
 	}
 	canvasHeight := e.height - 2 - len(statuses) - viewHeight(controls)
 	e.input.SetHeight(canvasHeight)
+	caption := "Built-in editor · no plaintext editor file"
+	if e.savePolicy != "" {
+		caption = e.savePolicy + " · no plaintext editor file"
+	}
 	lines := []string{
 		truncate("Private Markdown · "+e.date, e.width),
-		truncate("Built-in editor · no plaintext editor file", e.width),
+		truncate(caption, e.width),
 		lipgloss.NewStyle().Height(canvasHeight).Render(e.input.View()),
 	}
 	lines = append(lines, statuses...)
@@ -726,7 +721,7 @@ func EditRecoveredPrivate(date, current, recovered string, save Saver, sealRecov
 	if len(load) > 0 {
 		model.load = load[0]
 	}
-	model.input.SetValue(recovered)
+	model.input.OpenValue(recovered)
 	model.status = "Recovery: saving replaces the current private Markdown; shared contributions are retained."
 	return runPrivateEditor(model)
 }

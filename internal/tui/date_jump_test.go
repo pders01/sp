@@ -176,6 +176,7 @@ func TestDateShortcutIsLiteralInPrivateInputAndOwnedByOtherModals(t *testing.T) 
 	app.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	unlocked = true
 	app.Update(privacyKey("e"))
+	app.Update(tea.KeyMsg{Type: tea.KeyCtrlEnd})
 	app.Update(privacyKey("d"))
 	if app.dateJump != nil || app.privacy.editor.input.Value() != "based" {
 		t.Fatal("date shortcut captured editor input")

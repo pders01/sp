@@ -26,6 +26,10 @@ type privateInput struct {
 	width, height int
 	focused       bool
 	err           string
+	history       privateHistory
+	findActive    bool
+	findQuery     string
+	findNotice    string
 }
 
 func newPrivateInput() privateInput  { return privateInput{width: 80, height: 18} }
@@ -35,6 +39,8 @@ func (m *privateInput) SetValue(s string) {
 		return
 	}
 	m.text, m.pos = s, len(s)
+	m.history = privateHistory{}
+	m.findActive, m.findQuery, m.findNotice = false, "", ""
 }
 func (m *privateInput) SetWidth(w int)  { m.width = max(1, w) }
 func (m *privateInput) SetHeight(h int) { m.height = max(1, h) }
@@ -95,20 +101,7 @@ func (m privateInput) next(pos int) int {
 	_, to := g.Positions()
 	return pos + to
 }
-func (m *privateInput) insert(s string) {
-	if len(s) > privateInputLimit-len(m.text) {
-		m.err = "Private Markdown must not exceed 8 MiB; input rejected."
-		return
-	}
-	if !utf8.ValidString(s) {
-		m.err = "Private Markdown must be valid UTF-8; input rejected."
-		return
-	}
-	m.text = m.text[:m.pos] + s + m.text[m.pos:]
-	m.pos += len(s)
-	m.err = ""
-	m.snapCursor()
-}
+func (m *privateInput) insert(s string) { m.replace(m.pos, m.pos, s) }
 
 // An insertion/deletion can join adjacent graphemes (or form a CRLF). Keep
 // subsequent operations from landing inside the newly joined unit.
@@ -130,19 +123,14 @@ func (m *privateInput) snapCursor() {
 		}
 	}
 }
-func (m *privateInput) erase(from, to int) {
-	m.text = m.text[:from] + m.text[to:]
-	m.pos = from
-	m.err = ""
-	// At line start there is no preceding cluster to snap to.
-	if m.pos != m.lineStart(m.pos) {
-		m.snapCursor()
-	}
-}
+func (m *privateInput) erase(from, to int) { m.replace(from, to, "") }
 
 func (m *privateInput) vertical(up bool) {
+	m.verticalColumn(up, privateDisplayWidth(m.text[m.lineStart(m.pos):m.pos]))
+}
+
+func (m *privateInput) verticalColumn(up bool, column int) {
 	start := m.lineStart(m.pos)
-	column := privateDisplayWidth(m.text[start:m.pos])
 	var target int
 	if up {
 		if start == 0 {
@@ -175,6 +163,10 @@ func (m privateInput) Update(msg tea.Msg) (privateInput, tea.Cmd) {
 	if !m.focused {
 		return m, nil
 	}
+	if m.findActive {
+		m.updateFind(msg)
+		return m, nil
+	}
 	if text, ok := privatePasteText(msg); ok {
 		m.insert(text)
 		return m, nil
@@ -184,6 +176,27 @@ func (m privateInput) Update(msg tea.Msg) (privateInput, tea.Cmd) {
 		return m, nil
 	}
 	switch key.Type {
+	case tea.KeyCtrlZ:
+		m.undo()
+	case tea.KeyCtrlY:
+		m.redo()
+	case tea.KeyCtrlF:
+		m.findActive = true
+		m.findNext(true)
+	case tea.KeyF3:
+		m.findNext(false)
+	case tea.KeyCtrlHome:
+		m.MoveStart()
+	case tea.KeyCtrlEnd:
+		m.pos = len(m.text)
+	case tea.KeyCtrlLeft:
+		m.wordLeft()
+	case tea.KeyCtrlRight:
+		m.wordRight()
+	case tea.KeyPgUp:
+		m.page(true)
+	case tea.KeyPgDown:
+		m.page(false)
 	case tea.KeyRunes:
 		for _, r := range key.Runes {
 			if !utf8.ValidRune(r) {

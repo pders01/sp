@@ -235,6 +235,8 @@ class Suite:
             t.expect("Notebook · 2020-01-01")
             t.send("e")
             t.expect("Private Markdown")
+            t.expect("begin")
+            t.send(b"\x1b[1;5F")  # Ctrl+End; opening now starts at the first line.
             t.expect(self.long_end)
             t.send(b"\x13")
             t.expect("Notebook · 2020-01-01")

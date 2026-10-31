@@ -138,6 +138,13 @@ masked unlock. Private previews are not automatically decrypted across history.
 Footers wrap essential actions to the terminal width. Press `?` or `F1` in a
 viewer or template chooser for a scrollable key reference and full status details.
 In the built-in editor or TUI unlock prompt, use **F1 only**: `?` stays literal.
+The existing in-memory private editor opens at the start and provides Ctrl+Z/Y
+undo/redo (256 edits/16 MiB of history), Page Up/Down, Ctrl+Left/Right word movement,
+Ctrl+Home/End document movement, and Ctrl+F/F3 find within the current draft only.
+Find owns Enter/Escape and cannot save the note. Line/column and off-screen column
+indicators orient the literal horizontal viewport. These features do not write
+undo/search files, normalize Markdown, or settle the pending Neovim integration
+choice.
 Within help, `Esc`/`F1`/`q` closes only the reference; arrows, Page Up/Down, and
 `g`/`G` scroll it. Unsupported screen sizes show a resize hint without discarding
 notes, drafts, passphrases, or template selections.

@@ -113,6 +113,7 @@ func TestPrivateInputLiteralBatchesBypassAllKeyBindings(t *testing.T) {
 	for _, text := range []string{"enter", "esc", "ctrl+s", "ctrl+c", "left", "home", "ctrl+a", "ctrl+k", "backspace", "ctrl+v", "tab", "\talpha\r\n" + strings.Repeat("笔🙂\n", 150)} {
 		t.Run(fmt.Sprintf("%d/%s", len(text), strings.Split(text, "\n")[0]), func(t *testing.T) {
 			e := newPrivateEditor("2024-01-15", "prefix-", nil, nil)
+			e.Update(rawPhysical(tea.KeyCtrlEnd))
 			e.Update(privacyKey(text))
 			if e.done || e.confirm || e.input.Value() != "prefix-"+text {
 				t.Fatal("batched text was normalized or interpreted as a binding")
@@ -269,6 +270,7 @@ func TestPrivatePassphraseTaintCannotBeEditedIntoAnotherSecret(t *testing.T) {
 func TestPrivateInputAsyncPasteIsLiteralAndScoped(t *testing.T) {
 	text := "ctrl+s\t\r\n" + strings.Repeat("笔记\r\n", 150)
 	e := newPrivateEditor("2024-01-15", "prefix-", nil, nil)
+	e.Update(rawPhysical(tea.KeyCtrlEnd))
 	e.Update(privatePasteMsg(text))
 	if e.input.Value() != "prefix-"+text || e.done || e.confirm {
 		t.Fatal("asynchronous raw paste was normalized or interpreted as a command")

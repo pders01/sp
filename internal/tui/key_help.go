@@ -137,9 +137,15 @@ func (n *Notebook) keyBindings() []helpEntry {
 	}
 }
 
-func privateEditorBindings() []helpEntry {
+func privateEditorBindings(canRelock ...bool) []helpEntry {
 	return []helpEntry{
 		{keys: "Ctrl+S", label: "save and return", visible: true},
+		{keys: "Ctrl+Z/Ctrl+Y", label: "undo/redo (bounded memory-only history)", visible: true},
+		{keys: "PgUp/PgDn", label: "move one editor page", visible: true},
+		{keys: "Ctrl+←/→", label: "previous/next word", visible: true},
+		{keys: "Ctrl+Home/End", label: "start/end of draft", visible: true},
+		{keys: "Ctrl+F/F3", label: "find in current draft / next match; no archive search", visible: true},
+		{keys: "Ctrl+L", label: "seal draft and lock session", visible: len(canRelock) > 0 && canRelock[0]},
 		{keys: "F2", label: "after conflict: compare saved text/draft, reload or explicitly select replacement", visible: true},
 		{keys: "Esc/Ctrl+C", label: "cancel; changed text requires confirmation and encrypted recovery", visible: true},
 		{keys: "←/→ ↑/↓", label: "move cursor", visible: true},

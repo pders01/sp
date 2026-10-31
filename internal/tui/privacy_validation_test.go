@@ -131,6 +131,7 @@ func TestPrivacyValidationBatchedTextIsNotAModalCommand(t *testing.T) {
 		t.Run("editor/"+text, func(t *testing.T) {
 			calls := 0
 			e := newPrivateEditor("2024-01-15", "prefix-", func(_, _, _ string) error { calls++; return nil }, nil)
+			e.Update(rawPhysical(tea.KeyCtrlEnd))
 			e.Update(privacyKey(text))
 			if calls != 0 || e.done || e.confirm || e.input.Value() != "prefix-"+text {
 				t.Errorf("literal %q acted as a command: done=%v, confirm=%v, value=%q, saves=%d", text, e.done, e.confirm, e.input.Value(), calls)
