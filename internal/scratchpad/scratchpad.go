@@ -141,7 +141,7 @@ func (m *Manager) save(scratchpad *Scratchpad, syncDir func(string) error) error
 	return m.saveInternal(scratchpad, syncDir, false)
 }
 
-func (m *Manager) saveInternal(scratchpad *Scratchpad, syncDir func(string) error, migrating bool) error {
+func (m *Manager) saveInternal(scratchpad *Scratchpad, syncDir func(string) error, migrating bool, expectedPolicy ...bool) error {
 	if scratchpad == nil {
 		return errors.New("cannot save a nil scratchpad")
 	}
@@ -156,6 +156,9 @@ func (m *Manager) saveInternal(scratchpad *Scratchpad, syncDir func(string) erro
 	enabled, err := m.PrivacyEnabled()
 	if err != nil {
 		return err
+	}
+	if len(expectedPolicy) > 0 && enabled != expectedPolicy[0] {
+		return ErrPrivacyPolicyChanged
 	}
 	if migrating && !enabled {
 		return errors.New("privacy policy changed during migration; retry sp privacy enable")
@@ -214,7 +217,16 @@ func (m *Manager) ApplyTemplateSections(date string, sections []templates.Sectio
 	return m.applyTemplateSections(date, sections, syncDirectory)
 }
 
-func (m *Manager) applyTemplateSections(date string, sections []templates.Section, syncDir func(string) error) (*Scratchpad, error) {
+func (m *Manager) applyTemplateSections(date string, sections []templates.Section, syncDir func(string) error, expectedPolicy ...bool) (*Scratchpad, error) {
+	if len(expectedPolicy) > 0 {
+		actual, err := m.PrivacyEnabled()
+		if err != nil {
+			return nil, err
+		}
+		if actual != expectedPolicy[0] {
+			return nil, ErrPrivacyPolicyChanged
+		}
+	}
 	scratchpad, err := m.GetByDate(date)
 	if err != nil {
 		return nil, err
@@ -249,7 +261,7 @@ func (m *Manager) applyTemplateSections(date string, sections []templates.Sectio
 		return scratchpad, nil
 	}
 	scratchpad.Content = content
-	if err := m.save(scratchpad, syncDir); err != nil {
+	if err := m.saveInternal(scratchpad, syncDir, false, expectedPolicy...); err != nil {
 		if errors.Is(err, ErrDurabilityUnconfirmed) {
 			return scratchpad, err
 		}

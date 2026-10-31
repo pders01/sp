@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -38,9 +39,13 @@ type PrivacyHooks struct {
 	Inspect    func(string) (PublicPage, error)
 	IsUnlocked func() bool
 	Unlock     func([]byte) error
-	Load       func(string) (PrivatePage, error)
-	Save       Saver
-	Recover    func(date, content string) (string, error)
+	Lock       func()
+	// AsyncUnlock runs the expensive KDF off the UI thread. Hooks that rely
+	// on synchronous updates can leave this false.
+	AsyncUnlock bool
+	Load        func(string) (PrivatePage, error)
+	Save        Saver
+	Recover     func(date, content string) (string, error)
 }
 
 type privacyState struct {
@@ -49,6 +54,9 @@ type privacyState struct {
 	promptErr     string
 	promptInvalid bool // Sticky until submission/cancellation; never sanitize a secret.
 	editAfter     string
+	templateAfter string
+	job           *privateUnlockJob
+	closed        bool
 	editor        *privateEditor
 	keyHelp       *keyHelp
 }
@@ -56,7 +64,20 @@ type privacyState struct {
 // SetPrivacy switches editing to the in-memory editor. No external editor or
 // plaintext temporary Markdown is involved in this mode.
 func (a *App) SetPrivacy(hooks PrivacyHooks) {
+	// A failed reconfiguration must leave the running editor usable, not turn
+	// it into a closed session with the only unsealed copy trapped in memory.
+	if a.privacy != nil && !a.privacy.closed {
+		if err := a.sealPrivacyDraft(); err != nil {
+			a.setPrivacyStatus(err.Error())
+			return
+		}
+	}
+	if err := a.closePrivacy(); err != nil {
+		a.setPrivacyStatus(err.Error())
+		return
+	}
 	a.privacy = &privacyState{hooks: hooks}
+	a.installPrivacyIndicators()
 	a.nb.privacyEnabled = true
 	a.cal.privacyEnabled = true
 	// Defense in depth: do not leave an external editing path wired.
@@ -158,7 +179,7 @@ func (a *App) privateDate() string {
 }
 
 func (a *App) startPrivateEdit(date string) tea.Cmd {
-	if date == "" || a.privacy.hooks.Load == nil {
+	if a.privacy.closed || a.privacy.job != nil || date == "" || a.privacy.hooks.Load == nil {
 		return nil
 	}
 	page, err := a.privacy.hooks.Load(date)
@@ -176,6 +197,7 @@ func (a *App) startPrivateEdit(date string) tea.Cmd {
 	}
 	a.privacy.editor = newPrivateEditor(date, page.Private, a.privacy.hooks.Save, a.privacy.hooks.Recover)
 	a.privacy.editor.onRecovery = a.trackRecovery
+	a.privacy.editor.canRelock = a.privacy.hooks.Lock != nil
 	a.privacy.editor.load = func(date string) (string, error) {
 		page, err := a.privacy.hooks.Load(date)
 		if err != nil {
@@ -191,6 +213,9 @@ func (a *App) startPrivateEdit(date string) tea.Cmd {
 }
 
 func (a *App) startUnlock() tea.Cmd {
+	if a.privacy.closed || a.privacy.job != nil {
+		return nil
+	}
 	if a.privacy.hooks.IsUnlocked != nil && a.privacy.hooks.IsUnlocked() {
 		a.setPrivacyStatus("Private notes are unlocked for this SP process.")
 		return nil
@@ -245,12 +270,239 @@ func (a *App) setPrivacyStatus(text string) {
 	a.nb.theme.SetStatus(text, 0)
 }
 
+// A job is owned from acceptance, not from execution of a returned tea.Cmd.
+// result is buffered so shutdown can wait without running a command or draining
+// the UI message queue. Only the UI goroutine accesses cancellation/frame state.
+type privateUnlockJob struct {
+	result          chan privateUnlockedMsg
+	done            chan struct{}
+	cancelRequested bool
+	frame           int
+}
+
+type privateUnlockedMsg struct {
+	job *privateUnlockJob
+	err error
+}
+
+type privateUnlockTickMsg struct{ job *privateUnlockJob }
+
+func privateUnlockTick(job *privateUnlockJob) tea.Cmd {
+	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg {
+		return privateUnlockTickMsg{job: job}
+	})
+}
+
+func (p *privacyState) clearIntent() {
+	p.editAfter, p.templateAfter = "", ""
+}
+
+func (a *App) launchPrivateUnlock(secret []byte) tea.Cmd {
+	p := a.privacy
+	job := &privateUnlockJob{result: make(chan privateUnlockedMsg, 1), done: make(chan struct{})}
+	p.job, p.promptErr = job, ""
+	unlock := p.hooks.Unlock
+	go func() {
+		err := unlock(secret)
+		clear(secret)
+		job.result <- privateUnlockedMsg{job: job, err: err}
+		close(job.done)
+	}()
+	wait := func() tea.Msg {
+		<-job.done
+		return <-job.result
+	}
+	return tea.Batch(wait, privateUnlockTick(job))
+}
+
+func (a *App) finishPrivateUnlock(err error) tea.Cmd {
+	p := a.privacy
+	if err != nil {
+		p.promptErr = fmt.Sprintf("Unlock failed: %v", err)
+		return nil
+	}
+	p.prompt, p.keyHelp = nil, nil
+	p.promptErr, p.promptInvalid = "", false
+	a.refreshPrivatePage()
+	date, templateDate := p.editAfter, p.templateAfter
+	p.clearIntent()
+	if date != "" {
+		return a.startPrivateEdit(date)
+	}
+	if templateDate != "" {
+		if p.hooks.Load == nil {
+			a.setPrivacyStatus("Private template metadata is unavailable; retry templates after reloading.")
+			return nil
+		}
+		page, err := p.hooks.Load(templateDate)
+		if err != nil {
+			a.setPrivacyStatus("Cannot load private template metadata: " + err.Error())
+			return nil
+		}
+		if page.Locked {
+			a.setPrivacyStatus("Private template metadata is locked; unlock and retry templates.")
+			return nil
+		}
+		a.setPrivateApplied(templateDate, page.Applied)
+		// Resolution stays lazy, but the date belongs to the original action,
+		// not whichever page may now be active.
+		a.openTemplateChooser()
+		if a.templateChooser != nil {
+			a.templateChooser.date = templateDate
+		}
+		return nil
+	}
+	a.setPrivacyStatus("Private notes unlocked for this SP process.")
+	return nil
+}
+
+// updatePrivacySession can also be called by the parent router before chooser
+// routing. Read-only help/review and the editor's find field own their keys.
+func (a *App) updatePrivacySession(msg tea.Msg) (bool, tea.Cmd) {
+	p := a.privacy
+	if p == nil {
+		return false, nil
+	}
+	if result, ok := msg.(privateUnlockedMsg); ok {
+		if p.closed || p.job != result.job || result.job == nil {
+			return true, nil
+		}
+		cancelled := p.job.cancelRequested
+		p.job = nil
+		if cancelled {
+			return true, a.lockPrivacy()
+		}
+		return true, a.finishPrivateUnlock(result.err)
+	}
+	if tick, ok := msg.(privateUnlockTickMsg); ok {
+		if !p.closed && p.job != nil && p.job == tick.job {
+			p.job.frame++
+			return true, privateUnlockTick(p.job)
+		}
+		return true, nil
+	}
+	if p.closed {
+		return true, nil
+	}
+	if p.job != nil {
+		if key, ok := msg.(tea.KeyMsg); ok && (key.Type == tea.KeyEsc || key.Type == tea.KeyCtrlC || key.Type == tea.KeyCtrlL) {
+			p.job.cancelRequested = true
+			p.clearIntent()
+		}
+		return true, nil
+	}
+	key, ok := msg.(tea.KeyMsg)
+	if !ok || key.Type != tea.KeyCtrlL || key.Alt {
+		return false, nil
+	}
+	if p.keyHelp != nil || (p.editor != nil && (p.editor.keyHelp != nil || p.editor.review != nil || p.editor.input.Finding())) ||
+		a.cal.keyHelp != nil || a.cal.review != nil || a.nb.keyHelp != nil || a.nb.review != nil ||
+		(a.templateChooser != nil && a.templateChooser.keyHelp != nil) {
+		return false, nil
+	}
+	return true, a.lockPrivacy()
+}
+
+func (a *App) sealPrivacyDraft() error {
+	p := a.privacy
+	if p.editor == nil || p.editor.done || !p.editor.needsRecovery() {
+		return nil
+	}
+	path, err := p.editor.recovery()
+	if err != nil {
+		return privateRecoveryError(path, err)
+	}
+	return nil
+}
+
+// clearPrivateProjections drops references; it does not promise secure erasure
+// of Go strings, terminal scrollback, or memory previously held by callers.
+func (a *App) clearPrivateProjections(discardEditor bool) {
+	p := a.privacy
+	if p.prompt != nil {
+		p.prompt.SetValue("")
+	}
+	p.prompt, p.keyHelp = nil, nil
+	p.promptErr, p.promptInvalid = "", false
+	p.clearIntent()
+	if discardEditor {
+		p.editor = nil
+	}
+	a.appliedTemplates = make(map[string]map[string]bool)
+	a.templateChooser = nil
+	a.cal.keyHelp, a.cal.review = nil, nil
+	a.nb.keyHelp, a.nb.review = nil, nil
+	date := a.nb.GetCurrentPage()
+	page := &PrivatePage{Locked: true, Shared: a.nb.contents[date], HasPrivate: a.cal.privateDates[date]}
+	if a.nb.privatePage != nil && a.nb.privateDate == date {
+		page.Shared = a.nb.privatePage.Shared
+		page.HasPrivate = page.HasPrivate || a.nb.privatePage.HasPrivate || a.nb.privatePage.Private != ""
+	}
+	a.nb.privatePage, a.nb.privateDate = page, date
+	a.nb.updateViewportContent()
+}
+
+func (a *App) lockPrivacy() tea.Cmd {
+	p := a.privacy
+	if p.job != nil {
+		p.job.cancelRequested = true
+		p.clearIntent()
+		return nil
+	}
+	if a.templateChooser != nil && a.templateChooser.applying {
+		message := "Wait for template application to finish or cancel it before locking."
+		a.templateChooser.feedback = message
+		a.setPrivacyStatus(message)
+		return nil
+	}
+	if p.hooks.Lock == nil {
+		a.setPrivacyStatus("Locking is unavailable for this session.")
+		return nil
+	}
+	if err := a.sealPrivacyDraft(); err != nil {
+		message := fmt.Sprintf("Cannot lock: %v. Draft retained in the editor.", err)
+		p.editor.status = message
+		a.setPrivacyStatus(message)
+		return nil
+	}
+	p.hooks.Lock()
+	a.clearPrivateProjections(true)
+	a.setPrivacyStatus("Private notes locked. Press u to unlock.")
+	return nil
+}
+
+// closePrivacy waits even if the returned unlock command was never started.
+// Failed recovery retains the editor object for the caller's recovery/reporting
+// path, but keys are always locked before shutdown can complete.
+func (a *App) closePrivacy() error {
+	p := a.privacy
+	if p == nil || p.closed && p.job == nil && p.editor == nil {
+		return nil
+	}
+	p.closed = true
+	p.clearIntent()
+	if p.job != nil {
+		p.job.cancelRequested = true
+		<-p.job.done
+		p.job = nil
+	}
+	err := a.sealPrivacyDraft()
+	if p.hooks.Lock != nil {
+		p.hooks.Lock()
+	}
+	a.clearPrivateProjections(err == nil)
+	return err
+}
+
 // updatePrivacy handles only privacy-specific keys and modal UI. Returning
 // handled=false delegates normal navigation to the existing router.
 func (a *App) updatePrivacy(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 	p := a.privacy
 	if p == nil {
 		return false, nil
+	}
+	if handled, cmd := a.updatePrivacySession(msg); handled {
+		return true, cmd
 	}
 	if p.editor != nil {
 		e := p.editor
@@ -300,7 +552,8 @@ func (a *App) updatePrivacy(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 			case tea.KeyEsc, tea.KeyCtrlC:
 				p.prompt.SetValue("")
 				p.prompt = nil
-				p.editAfter = ""
+				p.clearIntent()
+				p.promptErr, p.promptInvalid = "", false
 				return true, nil
 			case tea.KeySpace:
 				p.insertPassphrase(" ")
@@ -320,23 +573,17 @@ func (a *App) updatePrivacy(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 					p.promptErr = "Unlock is unavailable."
 					return true, nil
 				}
-				// Unlock deliberately stays on the UI thread: no background key
-				// operation can outlive cancellation or a later process lock.
+				if p.hooks.AsyncUnlock {
+					if p.hooks.Lock == nil {
+						clear(secret)
+						p.promptErr = "Async unlock requires a session lock hook."
+						return true, nil
+					}
+					return true, a.launchPrivateUnlock(secret)
+				}
 				err := p.hooks.Unlock(secret)
 				clear(secret)
-				if err != nil {
-					p.promptErr = fmt.Sprintf("Unlock failed: %v", err)
-					return true, nil
-				}
-				p.prompt = nil
-				a.refreshPrivatePage()
-				date := p.editAfter
-				p.editAfter = ""
-				if date != "" {
-					return true, a.startPrivateEdit(date)
-				}
-				a.setPrivacyStatus("Private notes unlocked for this SP process.")
-				return true, nil
+				return true, a.finishPrivateUnlock(err)
 			}
 			if key.Type == tea.KeyRunes {
 				for _, r := range key.Runes {
@@ -381,13 +628,17 @@ func (a *App) updatePrivacy(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 			}
 		case "a":
 			if p.hooks.IsUnlocked == nil || !p.hooks.IsUnlocked() {
-				a.setPrivacyStatus("Unlock private notes with u before applying templates.")
-				return true, nil
+				p.templateAfter = a.privateDate()
+				return true, a.startUnlock()
 			}
 			if p.hooks.Load != nil {
 				page, err := p.hooks.Load(a.privateDate())
-				if err != nil || page.Locked {
-					a.setPrivacyStatus("Cannot load private template metadata; unlock or reload the page.")
+				if err != nil {
+					a.setPrivacyStatus("Cannot load private template metadata: " + err.Error())
+					return true, nil
+				}
+				if page.Locked {
+					a.setPrivacyStatus("Private template metadata is locked; unlock and retry templates.")
 					return true, nil
 				}
 				a.setPrivateApplied(a.privateDate(), page.Applied)
@@ -401,6 +652,9 @@ func (a *App) privacyView() (string, bool) {
 	if a.privacy == nil {
 		return "", false
 	}
+	if a.privacy.closed {
+		return fitView("Private session closed; decrypted views are hidden.\nReview reported recovery errors before terminating the process.", a.nb.width, a.nb.height), true
+	}
 	if a.privacy.editor != nil {
 		return a.privacy.editor.View(), true
 	}
@@ -410,6 +664,15 @@ func (a *App) privacyView() (string, bool) {
 		palette := a.nb.theme.Palette()
 		if p.keyHelp != nil {
 			return p.keyHelp.view(palette), true
+		}
+		if p.job != nil {
+			frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+			status := "Unlocking private notes…"
+			if p.job.cancelRequested {
+				status = "Cancelling unlock; waiting for key derivation before locking…"
+			}
+			view := strings.Join([]string{palette.Header.Render("Unlock private notes"), "", frames[p.job.frame%len(frames)] + " " + status, "Esc: cancel and wait"}, "\n")
+			return fitView(view, width, height), true
 		}
 		if width < 24 || height < 8 {
 			return smallTerminal("Unlock private notes", width, height, 24, 8, "F1: help · Esc: cancel"), true
@@ -717,13 +980,11 @@ func EditPrivate(date, original string, save Saver, sealRecovery func(date, cont
 // EditRecoveredPrivate keeps the current note as the conflict baseline while
 // presenting recovered text for deliberate review and replacement.
 func EditRecoveredPrivate(date, current, recovered string, save Saver, sealRecovery func(string, string) (string, error), load ...func(string) (string, error)) error {
-	model := newPrivateEditor(date, current, save, sealRecovery)
+	var loader func(string) (string, error)
 	if len(load) > 0 {
-		model.load = load[0]
+		loader = load[0]
 	}
-	model.input.OpenValue(recovered)
-	model.status = "Recovery: saving replaces the current private Markdown; shared contributions are retained."
-	return runPrivateEditor(model)
+	return EditRecoveredPrivateWithPolicy(date, current, recovered, save, sealRecovery, loader, "Saving follows the store's current policy")
 }
 
 func runPrivateEditor(model *privateEditor) error {

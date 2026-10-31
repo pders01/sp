@@ -202,7 +202,7 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 		for _, definition := range definitions {
 			options = append(options, tui.DayTemplate{ID: definition.ID, Name: definition.Name})
 		}
-		app.SetTemplates(options, applied, makeTemplateApplier(mgr, definitions))
+		app.SetTemplates(options, applied, makeTemplateApplier(mgr, definitions, private))
 		return nil
 	})
 	app.SetRecoveryRecorder(mgr.RecordBufferRecovery, mgr.ForgetBufferRecovery)
@@ -285,7 +285,7 @@ func templateDefinitions(cfg *config.Config) ([]templates.Definition, error) {
 	return templates.Normalize(definitions)
 }
 
-func makeTemplateApplier(mgr *scratchpad.Manager, definitions []templates.Definition) tui.TemplateApplier {
+func makeTemplateApplier(mgr *scratchpad.Manager, definitions []templates.Definition, expectedPolicy ...bool) tui.TemplateApplier {
 	byID := make(map[string]templates.Definition, len(definitions))
 	for _, definition := range definitions {
 		byID[definition.ID] = definition
@@ -294,6 +294,13 @@ func makeTemplateApplier(mgr *scratchpad.Manager, definitions []templates.Defini
 		private, err := mgr.PrivacyEnabled()
 		if err != nil {
 			return tui.TemplateApplyResult{}, err
+		}
+		wantPrivate := private
+		if len(expectedPolicy) > 0 {
+			wantPrivate = expectedPolicy[0]
+		}
+		if private != wantPrivate {
+			return tui.TemplateApplyResult{}, scratchpad.ErrPrivacyPolicyChanged
 		}
 		if private && !mgr.IsUnlocked() {
 			// Check before rendering: command templates must not run while
@@ -316,7 +323,7 @@ func makeTemplateApplier(mgr *scratchpad.Manager, definitions []templates.Defini
 		if contextErr := ctx.Err(); contextErr != nil {
 			return tui.TemplateApplyResult{}, contextErr
 		}
-		sp, err := mgr.ApplyTemplateSections(date, sections)
+		sp, err := mgr.ApplyTemplateSectionsWithPrivacyPolicy(date, sections, wantPrivate)
 		if err != nil && (!errors.Is(err, scratchpad.ErrDurabilityUnconfirmed) || sp == nil) {
 			return tui.TemplateApplyResult{}, err
 		}

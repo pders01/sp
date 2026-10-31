@@ -91,13 +91,8 @@ func newRecoverCommand(factory managerFactory) *cobra.Command {
 				return err
 			}
 			defer mgr.Lock()
-			passphrase, err := prompt.Password("Unlock recovery — passphrase: ")
-			defer clear(passphrase)
-			if err != nil {
+			if err := unlockPrivateWithRetry(prompt, cmd.ErrOrStderr(), mgr.Unlock, "Unlock recovery — passphrase (empty cancels): ", "Unlocking encrypted recovery…"); err != nil {
 				return err
-			}
-			if unlockErr := mgr.Unlock(passphrase); unlockErr != nil {
-				return unlockErr
 			}
 			recovery, err := mgr.ReadRecovery(args[0])
 			if err != nil {
@@ -107,8 +102,12 @@ func newRecoverCommand(factory managerFactory) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.ErrOrStderr(), "Review recovered text before saving: this replaces private Markdown, not an automatic merge. The recovery file is retained.")
-			return tui.EditRecoveredPrivate(recovery.Date, current.Content, recovery.Content, makeSaver(mgr), mgr.SealRecovery, makeLoader(mgr))
+			policy, err := recoverySavePolicy(mgr)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.ErrOrStderr(), policy+". Review before saving: this replaces private Markdown, not an automatic merge. The recovery file is retained.")
+			return tui.EditRecoveredPrivateWithPolicy(recovery.Date, current.Content, recovery.Content, makePolicySaver(mgr, policy == "Saving encrypted"), mgr.SealRecovery, makeLoader(mgr), policy)
 		},
 	}
 	cmd.Flags().BoolVar(&list, "list", false, "List recovery paths without unlocking or reading note text")

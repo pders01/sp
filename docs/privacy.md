@@ -39,7 +39,8 @@ put secrets in shared bullets, section names, or source labels.
 4. Enable first writes the global key metadata to `~/.sp/privacy.json`, then
    migrates existing notes one day at a time. Keep the passphrase safe outside
    SP; there is no password reset or recovery service.
-5. Run `sp privacy status` and check the listed remaining legacy plaintext dates.
+5. Run `sp privacy status` and check the remaining legacy plaintext count. Use
+   `sp privacy status --dates` to explicitly list dates when needed.
    Do not assume migration completed merely because privacy is enabled. Status
    reports storage/migration state without unlocking; it is not a cryptographic
    integrity check of all encrypted contents or a guarantee of freshness.
@@ -53,8 +54,8 @@ if migration is incomplete.** New private saves must be encrypted; remaining
 legacy files are still plaintext on disk. A cancelled command, I/O error,
 conflict, or process interruption is not an automatic rollback to legacy mode.
 
-Run `sp privacy status` to inspect the remaining legacy dates and any reported
-errors. Resolve the reported error without deleting key metadata or hand-editing
+Run `sp privacy status` to inspect counts and reported errors; add `--dates` for
+individual legacy dates. Resolve the reported error without deleting key metadata or hand-editing
 ciphertext, then run `sp privacy enable` again and unlock to resume migration.
 Already migrated days do not need to become plaintext again. Repeat status until
 no legacy dates remain; a status error is not evidence that all notes are safe.
@@ -100,8 +101,8 @@ explicit disabled state. Existing encrypted backups and `.sp-recovery-*.age`
 files are not decrypted or deleted. Keep that metadata and passphrase to read
 those files; `sp privacy recover` can still review a recovery file after unlock,
 with saves following the current plaintext policy. Re-enabling with
-`sp privacy enable` requires confirmation and the existing passphrase and reuses
-this key. It encrypts current daily notes again, but does not erase plaintext
+`sp privacy enable` requires confirmation and the existing passphrase once (not
+new-passphrase confirmation) and reuses this key. It encrypts current daily notes again, but does not erase plaintext
 copies created during reversal or revoke older backups/keys.
 
 Reversal metadata uses a newer format. Older privacy-aware builds reject it;
@@ -130,17 +131,33 @@ with `-`. `--source` is a self-reported label, not an authenticated identity.
   authored the text. A fully duplicate append is a no-op, not a new contribution.
   While privacy is active, append refuses an unmigrated legacy day: resume
   migration first. A new shared-only day needs no private payload or unlock.
+- Shared CLI operations optionally accept `--json`: append returns added and
+  duplicate bullet arrays; shared reads distinguish missing/no-shared/content.
+  Quiet append and raw shared-read defaults are unchanged; JSON never unlocks.
 - Private reads and edits require an interactive unlock in that process.
   Unlock is process-scoped, not a persistent login, exported secret, or background
-  key service. Another process must unlock separately. Exit SP when finished;
-  this is not a claim of guaranteed memory erasure.
+  key service. Another process must unlock separately. Ctrl+L explicitly relocks
+  the TUI, clears decrypted projections/template metadata, and seals a changed
+  draft as encrypted recovery before dropping it. Recovery failure leaves the
+  editor usable and unlocked. Exit also releases keys; neither is a claim of
+  guaranteed memory erasure.
 - In the privacy TUI, `u` opens the masked unlock prompt. `Enter`/`e` edits the
   private page in the built-in in-memory editor; calendar `Enter` first opens
-  that day's notebook. In the built-in editor, `Ctrl+S` saves and returns; `Esc`
-  cancels, with confirmation and encrypted recovery for changed text. Follow your
-  build's displayed key help if bindings differ.
+  that day's notebook. Active private editor/template saves pin encryption under
+  the publication lock: another process disabling privacy cannot silently save
+  the open draft as plaintext. In the built-in editor, `Ctrl+S` saves and returns; `Esc`
+  cancels, with confirmation and encrypted recovery for changed text. A locked
+  template request also prompts and resumes the intended chooser. Incorrect
+  passphrases stay masked and retry with cleared input in both bare editing and
+  recovery. Empty input cancels; no secret is normalized or passed to a shell.
+  Follow your build's displayed key help if bindings differ.
 - Privacy mode uses a lossless built-in in-memory editor, with horizontal
-  scrolling rather than soft wrapping. Tabs, CRLF, Unicode, and trailing lines
+  scrolling rather than soft wrapping. Editing opens at the start, with visible
+  line/column and off-screen-column indicators. Ctrl+Z/Y provides bounded in-memory
+  undo/redo (256 edits/16 MiB); Page Up/Down, Ctrl+Left/Right, Ctrl+Home/End and
+  Ctrl+F/F3 support page/word/document/current-draft find navigation. Find is not
+  archive search, owns save/cancel keys, and never writes a search/undo file.
+  Tabs, CRLF, Unicode, and trailing lines
   are retained; limits reject input explicitly instead of truncating it. Use
   arrows/Home/End, Ctrl+A/E for line start/end, Ctrl+K/U to delete after/before
   the cursor, Tab for a literal tab, and Ctrl+S to save. Terminal bracketed paste
@@ -152,6 +169,14 @@ with `-`. `--source` is a self-reported label, not an authenticated identity.
   a resize hint rather than overflowing the terminal.
   The initial version does not enable external editing for private content.
   The plaintext legacy workflow still uses its normal external editor.
+- TUI unlocking shows busy progress without blocking resize/cancel. Cancellation
+  waits for owned cryptographic work to finish and then locks; stale completions
+  cannot reopen private content. Migration/reversal print bounded stage/count
+  progress only, not dates, content, or secrets; these callbacks are not a
+  cancellation API. UI closure waits for owned work before releasing keys.
+- Private/shared Markdown is rendered independently under application-owned
+  labels, so an unfinished note fence cannot consume shared provenance. Display
+  escaping of terminal/bidi controls does not alter stored/editor bytes.
 - Private previews are not automatically decrypted across the calendar/history.
   Private decryption is lazy for the current page after unlock, not a bulk
   background preload. Shared content and public metadata are not private previews.
@@ -330,8 +355,13 @@ A recovery basename is also accepted. The regular file must be inside the same
 note store; its authenticated date must match the filename. After unlocking,
 SP opens recovered text in memory against the current note's conflict baseline.
 **Saving replaces current private Markdown; it does not merge it.** Review the
-text before saving. Shared contributions and the recovery file are retained.
-Do not delete the recovery file until you have verified the resulting note.
+text before saving. The persistent caption says **Saving encrypted** or **Saving
+as plaintext**, based on the reviewed store policy. After disabling, encrypted
+recovery is still read in memory but saves as plaintext. Publication checks that
+reviewed policy under the store lock, including absent dates; a concurrent policy
+change requires reopening recovery, not a silent change of save guarantees.
+Shared contributions and the recovery file are retained. Do not delete the
+recovery file until you have verified the resulting note.
 
 A live process pins its recovery public recipient after unlock, so later metadata
 substitution cannot redirect that editor's automatic recovery to another key.

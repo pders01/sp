@@ -79,6 +79,7 @@ With Go 1.25.13 or newer:
 ```sh
 go test -race ./...
 make privacy-terminal  # POSIX only, fresh synthetic homes; never your real store
+make ux-terminal       # reader/template/relock/policy-race PTYs; synthetic only
 make privacy-fuzz      # two workers, 20 seconds per target, 64 KiB inputs
 make vuln              # scanner built with the selected project toolchain
 ```
@@ -88,6 +89,24 @@ the blocked live model-driven trial. Do not retry or rephrase that trial to evad
 a provider restriction. Terminal results are redacted and transcripts are not
 saved. Preserve explicit distinctions between zero reachable advisories and
 advisories elsewhere in imported/required dependencies.
+
+### Local UX integration evidence
+
+The remaining-UX batch passed full unit/race suites and vet, the existing 11
+privacy-terminal checks, and seven new `make ux-terminal` workflow groups on
+local POSIX PTYs. The new harness uses fresh synthetic homes/temp directories,
+explicit harmless editor/template fixtures, and no user editor configuration.
+It covers dependency-isolated reading, final editor completion, template retry/
+cancellation, masked unlock-and-resume, undo/find/relock, disabled-store recovery,
+retained-key re-enable, shared-only JSON, and a concurrent disable while a private
+draft stays open. That last case must refuse plaintext publication and retain
+recovery. Both terminal targets tested binary SHA256
+`30d7978ec98d0face15a84d1a23d295fcc3c76d226b98e04a77cb8596d6382f2`;
+no transcript was saved. Windows amd64 cross-compilation also passed.
+
+This is not native Windows/GUI execution, accessibility review, a live model-
+driven trial, release verification, or independent cryptographic sign-off. The
+GUI completion fixture is a foreground fake CLI process, not a real GUI editor.
 
 ## Deterministic checks
 

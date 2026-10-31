@@ -1,4 +1,4 @@
-.PHONY: all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal privacy-fuzz vuln
+.PHONY: all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal ux-terminal privacy-fuzz vuln
 
 # Variables
 BINARY_NAME=sp
@@ -113,6 +113,12 @@ privacy-terminal:
 	@mkdir -p .privacy-adversarial
 	@go build -o .privacy-adversarial/sp-validation $(MAIN_PATH)
 	@python3 scripts/privacy-terminal/main.py --binary .privacy-adversarial/sp-validation
+
+## ux-terminal: Exercise integrated reader/editor/template/privacy UX in synthetic POSIX terminals
+ux-terminal:
+	@mkdir -p .privacy-adversarial
+	@go build -o .privacy-adversarial/sp-ux-validation $(MAIN_PATH)
+	@python3 scripts/ux-terminal/main.py --binary .privacy-adversarial/sp-ux-validation
 
 ## privacy-fuzz: Run four bounded parser/append fuzz campaigns (20 seconds each)
 privacy-fuzz:

@@ -100,7 +100,11 @@ sp append 2026-01-15 --json --section 'Agent notes' -- '- Public task' # added/d
 In privacy mode, `u` opens a masked TUI unlock prompt; `Enter`/`e` edits privately
 in memory (calendar `Enter` opens the notebook first). External editors are not
 enabled for privacy editing in the initial version. Unlock lasts only in that
-process. Never put a passphrase/private key in arguments, environment, or config.
+process; Ctrl+L explicitly relocks and seals changed drafts first. If recovery
+fails, the draft stays usable instead of being discarded. Locked template actions
+prompt and resume, and incorrect passphrases remain masked for retry. Unlocking
+shows busy progress; cancellation waits for owned work and locks before returning.
+Never put a passphrase/private key in arguments, environment, or config.
 Back up `privacy.json` with the notes: losing the passphrase or wrapped identity
 means losing the private writing. Shared bullets and source labels are public,
 self-reported data, not authenticated authorship. `sp privacy disable` restores
@@ -108,7 +112,9 @@ plaintext editing; interrupted reversal resumes with the same command. It retain
 the wrapped key for encrypted backups/recovery files. Re-enabling uses the existing
 passphrase/key (one authentication entry, not creation/confirmation) and does not
 erase plaintext copies. Status labels plaintext as normal after disabling and
-states the retained-key backup obligation. Interactive migration/reversal reports
+states the retained-key backup obligation. Recovery labels **Saving encrypted**
+or **Saving as plaintext** throughout review; a concurrent store-policy change
+blocks saving until recovery is reopened. Interactive migration/reversal reports
 stage/count progress, not secrets. Raw shared reads and quiet append remain the
 default; `--json` is opt-in and contains shared data only. Passphrase rotation and MCP
 access are not implemented. See the [full guide](docs/privacy.md).
@@ -264,8 +270,8 @@ template remains opt-in like every configured template.
 **Legacy plaintext mode only:** privacy mode uses the built-in in-memory editor,
 not an external editor. Viewer private/shared sections are independently rendered
 under UI-level labels, so note Markdown cannot consume the shared provenance
-boundary; empty shared areas stay hidden. External editor plugins, swap files, and backups have no
-privacy guarantee. See [private editing and recovery](docs/privacy.md#edit-failures-recovery-and-backups).
+boundary; empty shared areas stay hidden. External editor plugins, swap files,
+and backups have no privacy guarantee. See [private editing and recovery](docs/privacy.md#edit-failures-recovery-and-backups).
 
 In legacy mode, an explicit edit resolves the editor via `$EDITOR`, then `$VISUAL`, then
 platform-specific fallbacks (vim, nvim, nano, micro, emacs, code,
@@ -378,6 +384,7 @@ make build       # ./sp
 make test        # all packages
 make test-race   # race detector
 make privacy-terminal # POSIX PTY enable/edit/recover checks; synthetic stores only
+make ux-terminal      # integrated reader/editor/template/privacy UX; synthetic stores only
 make privacy-fuzz     # bounded parser/append fuzz campaigns
 make vuln             # reachable dependency advisories
 make coverage    # writes coverage.html

@@ -119,6 +119,12 @@ func (a *App) Init() tea.Cmd {
 // the program exits.
 func (a *App) Close() {
 	a.closeTemplateWork()
+	if err := a.closePrivacy(); err != nil {
+		if a.recoveryWarnings == nil {
+			a.recoveryWarnings = make(map[string]string)
+		}
+		a.recoveryWarnings["privacy-session"] = "Private draft recovery failed during shutdown: " + err.Error()
+	}
 	a.cal.Close()
 	a.nb.Close()
 }
@@ -140,6 +146,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_, paste := privatePasteText(msg)
 		if key || paste {
 			return a.updateDateJump(msg)
+		}
+	}
+	if a.privacy != nil {
+		if size, ok := msg.(tea.WindowSizeMsg); ok {
+			a.cal.Update(size)
+			a.nb.Update(size)
+		}
+		if handled, cmd := a.updatePrivacySession(msg); handled {
+			return a, cmd
 		}
 	}
 	// Read-only help must own its keys before privacy shortcuts or the
