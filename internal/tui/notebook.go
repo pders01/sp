@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/pders01/sp/internal/editor"
+	"github.com/pders01/sp/internal/scratchpad"
 )
 
 // Saver persists an edited scratchpad after checking the text originally handed
@@ -51,6 +52,8 @@ type Notebook struct {
 	sharedContents     map[string]string
 	onChange           func(date, content string)
 	onLoad             func(date, content string)
+	onRecovery         func(scratchpad.RecoveryReference)
+	onConsumed         func(date, path string)
 	canPop             bool
 	keyHelp            *keyHelp
 }
@@ -182,8 +185,14 @@ func (n *Notebook) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	if result.err != nil {
+		if msg.path != "" && n.onRecovery != nil {
+			n.onRecovery(scratchpad.RecoveryReference{Date: msg.date, Path: msg.path})
+		}
 		n.theme.SetStatus(result.status, 0)
 		return n, nil
+	}
+	if n.onConsumed != nil {
+		n.onConsumed(msg.date, msg.path)
 	}
 	n.theme.SetStatus(result.status, 1500*time.Millisecond)
 	return n, n.theme.expireStatusCmd(1500 * time.Millisecond)

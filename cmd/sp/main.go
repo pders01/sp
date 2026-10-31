@@ -191,7 +191,9 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 		options = append(options, tui.DayTemplate{ID: definition.ID, Name: definition.Name})
 	}
 	app.SetTemplates(options, applied, makeTemplateApplier(mgr, definitions))
+	app.SetRecoveryRecorder(mgr.RecordBufferRecovery, mgr.ForgetBufferRecovery)
 	defer app.Close()
+	defer app.ReportRecoveries(os.Stderr)
 
 	if _, rerr := tea.NewProgram(app, tea.WithAltScreen()).Run(); rerr != nil {
 		if recoveryErr := app.RecoverPrivateEdit(); recoveryErr != nil {
@@ -364,16 +366,16 @@ func editAndSave(mgr *scratchpad.Manager, ed *editor.Editor, pickedDate string) 
 	}
 	newContent, err := ed.RunPrepared(cmd, path)
 	if err != nil {
-		return fmt.Errorf("failed to edit scratchpad: %w; buffer path: %s", err, path)
+		return recordRetainedBuffer(mgr, sp.Date, path, fmt.Errorf("failed to edit scratchpad: %w; buffer path: %s", err, path))
 	}
 
 	if newContent != sp.Content {
 		sp.Content = newContent
 		if err := mgr.Save(sp); err != nil {
 			if errors.Is(err, scratchpad.ErrDurabilityUnconfirmed) {
-				return fmt.Errorf("scratchpad saved, but durability is unconfirmed: %w; buffer path: %s", err, path)
+				return recordRetainedBuffer(mgr, sp.Date, path, fmt.Errorf("scratchpad saved, but durability is unconfirmed: %w; buffer path: %s", err, path))
 			}
-			return fmt.Errorf("failed to save scratchpad: %w; buffer path: %s", err, path)
+			return recordRetainedBuffer(mgr, sp.Date, path, fmt.Errorf("failed to save scratchpad: %w; buffer path: %s", err, path))
 		}
 		fmt.Println("Scratchpad saved!")
 	}

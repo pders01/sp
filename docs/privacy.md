@@ -282,7 +282,19 @@ an unlocked private key. Do not expect a plaintext `.md` recovery buffer as in
 legacy external-editor mode. Current recovery files are
 `~/.sp/.sp-recovery-<date>-<random-id>.age`: raw age ciphertext of a private JSON
 recovery document, not a daily version-2 envelope or a plaintext Markdown file.
-Read the actual error and reported recovery path.
+Read the actual error and reported recovery path. SP prints retained paths again
+after leaving the alternate-screen UI, even if another status message replaced
+the original error. Discover candidates later without unlocking:
+
+```sh
+sp privacy recover --list
+```
+
+Listing reports filename-based encrypted candidates and path-only records of
+legacy plaintext editor buffers. It does not authenticate/decrypt recovery,
+open recorded external paths, or print note content. Records may be stale;
+OS temporary buffers are not permanent backups. A failed index write is reported
+with the retained path rather than implying discovery metadata was saved.
 If recovery publication also fails, retain the running editor: it keeps the
 in-memory text so you can retry rather than silently discarding it. Do not exit
 or terminate the process assuming an on-disk recovery exists.

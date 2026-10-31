@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -169,6 +170,7 @@ func (a *App) startPrivateEdit(date string) tea.Cmd {
 		return a.startUnlock()
 	}
 	a.privacy.editor = newPrivateEditor(date, page.Private, a.privacy.hooks.Save, a.privacy.hooks.Recover)
+	a.privacy.editor.onRecovery = a.trackRecovery
 	a.privacy.editor.resize(a.nb.width, a.nb.height)
 	return a.privacy.editor.Init()
 }
@@ -451,6 +453,8 @@ type privateEditor struct {
 	unconfirmed   bool // Save published this baseline, but durability needs retry.
 	width, height int
 	keyHelp       *keyHelp
+	recoveries    []scratchpad.RecoveryReference
+	onRecovery    func(scratchpad.RecoveryReference)
 }
 
 func newPrivateEditor(date, original string, save Saver, sealRecovery func(string, string) (string, error)) *privateEditor {
@@ -492,7 +496,21 @@ func (e *privateEditor) recovery() (string, error) {
 	if e.recover == nil {
 		return "", errors.New("encrypted recovery is unavailable; keep this editor open")
 	}
-	return e.recover(e.date, e.input.Value())
+	path, err := e.recover(e.date, e.input.Value())
+	if path != "" {
+		ref := scratchpad.RecoveryReference{Date: e.date, Path: path, Encrypted: true}
+		found := false
+		for _, existing := range e.recoveries {
+			found = found || existing == ref
+		}
+		if !found {
+			e.recoveries = append(e.recoveries, ref)
+		}
+		if e.onRecovery != nil {
+			e.onRecovery(ref)
+		}
+	}
+	return path, err
 }
 
 func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -638,9 +656,12 @@ func EditRecoveredPrivate(date, current, recovered string, save Saver, sealRecov
 func runPrivateEditor(model *privateEditor) error {
 	result, err := tea.NewProgram(model, tea.WithAltScreen()).Run()
 	if err != nil {
-		return model.recoverStopped(err)
+		err = model.recoverStopped(err)
+	} else {
+		err = result.(*privateEditor).err
 	}
-	return result.(*privateEditor).err
+	WriteRecoveryReport(os.Stderr, model.recoveries)
+	return err
 }
 
 func (e *privateEditor) recoverStopped(err error) error {

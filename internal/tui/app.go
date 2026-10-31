@@ -2,6 +2,7 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/pders01/sp/internal/scratchpad"
 )
 
 // AppMode picks the initial view the router renders. ModeCalendar is
@@ -33,6 +34,10 @@ type App struct {
 	applyTemplates   TemplateApplier
 	templateChooser  *templateChooser
 	privacy          *privacyState
+	recoveries       []scratchpad.RecoveryReference
+	recoveryWarnings []string
+	recordRecovery   func(date, path string) error
+	forgetRecovery   func(date, path string) error
 }
 
 // NewApp builds the router around an already-configured calendar and
@@ -49,6 +54,8 @@ func NewApp(cal *Calendar, nb *Notebook, mode AppMode) *App {
 	nb.canPop = app.canPop
 	cal.onChange, nb.onChange = app.noteChanged, app.noteChanged
 	cal.onLoad, nb.onLoad = app.noteLoaded, app.noteLoaded
+	cal.onRecovery, nb.onRecovery = app.trackRecovery, app.trackRecovery
+	cal.onConsumed, nb.onConsumed = app.consumedRecovery, app.consumedRecovery
 	return app
 }
 

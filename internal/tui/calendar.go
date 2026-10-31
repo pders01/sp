@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/pders01/sp/internal/editor"
+	"github.com/pders01/sp/internal/scratchpad"
 )
 
 // CalendarView selects which granularity the calendar renders.
@@ -53,6 +54,8 @@ type Calendar struct {
 	loadErrors         map[string]string
 	onChange           func(date, content string)
 	onLoad             func(date, content string)
+	onRecovery         func(scratchpad.RecoveryReference)
+	onConsumed         func(date, path string)
 	keyHelp            *keyHelp
 }
 
@@ -184,8 +187,14 @@ func (c *Calendar) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	if result.err != nil {
+		if msg.path != "" && c.onRecovery != nil {
+			c.onRecovery(scratchpad.RecoveryReference{Date: msg.date, Path: msg.path})
+		}
 		c.theme.SetStatus(result.status, 0)
 		return c, nil
+	}
+	if c.onConsumed != nil {
+		c.onConsumed(msg.date, msg.path)
 	}
 	c.theme.SetStatus(result.status, 1500*time.Millisecond)
 	return c, c.theme.expireStatusCmd(1500 * time.Millisecond)

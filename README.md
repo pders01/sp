@@ -81,6 +81,7 @@ selecting a view. Explicit `--calendar=false`/`--notebook=false` values are allo
 sp privacy enable   # interactive warnings, confirmation, passphrase twice; migrate
 sp privacy status   # inspect migration/reversal state without unlocking
 sp privacy disable  # confirm + existing passphrase; decrypt daily notes in place
+sp privacy recover --list          # discover recovery paths without unlocking
 sp privacy recover <recovery-file> # interactively review encrypted recovery; no auto-merge
 sp append 2026-01-15 --section 'Agent notes' --source 'local-helper' -- '- Public task'
 sp shared 2026-01-15 # shared-only read; no private unlock
@@ -272,7 +273,9 @@ when the handle closes or the process exits. Do not delete them while SP runs.
 In legacy mode, on an edit conflict or editor/save failure, the CLI, notebook,
 and calendar keep the edited Markdown buffer and report its path. Copy or merge
 that buffer into the current note before retrying; SP does not merge
-automatically. These recovery files live in the OS temporary directory, so they
+automatically. Retained paths are printed after leaving the TUI and recorded as
+path-only metadata for `sp privacy recover --list`; listed paths may be stale and
+are never opened automatically. These buffers live in the OS temporary directory, so they
 are not permanent backups. Privacy mode instead attempts encrypted recovery
 using the public recipient; if recovery fails, keep the editor open to retain
 the in-memory text and retry. See [recovery instructions](docs/privacy.md#edit-failures-recovery-and-backups).
