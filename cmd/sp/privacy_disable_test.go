@@ -82,11 +82,23 @@ func TestPrivacyDisableConfirmation(t *testing.T) {
 		t.Fatal("idempotent disable prompted for secrets")
 	}
 	// Re-enabling is explicit and uses the existing passphrase/key.
-	if err := enablePrivacy(mgr, &scriptedPrivacyPrompt{line: "ENABLE PRIVACY", passwords: []string{passphrase, passphrase}}, &output); err != nil {
+	path := filepath.Join(dir, "privacy.json")
+	retainedData, err := os.ReadFile(path)
+	if err != nil {
 		t.Fatal(err)
 	}
+	var retained map[string]any
+	if err := json.Unmarshal(retainedData, &retained); err != nil {
+		t.Fatal(err)
+	}
+	reenable := &scriptedPrivacyPrompt{line: "ENABLE PRIVACY", passwords: []string{passphrase}}
+	if err := enablePrivacy(mgr, reenable, &output); err != nil {
+		t.Fatal(err)
+	}
+	if reenable.lineCalls != 1 || reenable.passwordCalls != 1 || reenable.passwordPrompts[0] != "Existing passphrase: " {
+		t.Fatalf("re-enable should authenticate the existing identity once: %+v", reenable)
+	}
 	// Simulate the durable transition marker left by an interrupted reversal.
-	path := filepath.Join(dir, "privacy.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -94,6 +106,9 @@ func TestPrivacyDisableConfirmation(t *testing.T) {
 	var metadata map[string]any
 	if err := json.Unmarshal(data, &metadata); err != nil {
 		t.Fatal(err)
+	}
+	if metadata["recipient"] != retained["recipient"] || metadata["wrapped_identity"] != retained["wrapped_identity"] {
+		t.Fatal("re-enable rotated or rewrapped the retained identity")
 	}
 	metadata["version"], metadata["state"] = 2, "decrypting"
 	data, err = json.Marshal(metadata)
@@ -108,7 +123,7 @@ func TestPrivacyDisableConfirmation(t *testing.T) {
 	if err := writePrivacyStatus(mgr, &output); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Privacy: decrypting (incomplete)", "Normal access is blocked", "sp privacy disable"} {
+	for _, want := range []string{"Privacy: decrypting (incomplete)", "Plaintext dates (decryption in progress)", "Wrapped key: retained", "Normal access is blocked", "sp privacy disable"} {
 		if !strings.Contains(output.String(), want) {
 			t.Errorf("partial status missing %q: %q", want, output.String())
 		}

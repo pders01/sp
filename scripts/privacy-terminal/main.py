@@ -212,7 +212,7 @@ class Suite:
             t.password(self.secret, "Confirm passphrase: ")
             t.expect("Privacy enabled.")
         self.terminal(["privacy", "enable"], enable)
-        assert "Remaining plaintext dates (0)" in self.cli("privacy", "status")
+        assert "Remaining plaintext dates: 0" in self.cli("privacy", "status")
         self.assert_at_rest()
         self.results.append("interactive enable migrates past/today/future, masks passphrase, restricts file modes")
 

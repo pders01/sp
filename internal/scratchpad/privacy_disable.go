@@ -15,10 +15,22 @@ import (
 // Interrupted conversions can be resumed with the same passphrase. Existing
 // copies/backups are not erased, decrypted, or revoked by this operation.
 func (m *Manager) DisablePrivacy(passphrase []byte) error {
-	return m.disablePrivacy(passphrase, syncDirectory)
+	return m.DisablePrivacyWithProgress(passphrase, nil)
+}
+
+// DisablePrivacyWithProgress is DisablePrivacy with synchronous, data-free
+// notifications. Verification reports the existing preflight pass; decryption
+// reports the existing publication pass. See PrivacyProgress for restrictions.
+func (m *Manager) DisablePrivacyWithProgress(passphrase []byte, progress func(PrivacyProgress)) error {
+	return m.disablePrivacyWithProgress(passphrase, syncDirectory, progress)
 }
 
 func (m *Manager) disablePrivacy(passphrase []byte, syncDir func(string) error) error {
+	return m.disablePrivacyWithProgress(passphrase, syncDir, nil)
+}
+
+func (m *Manager) disablePrivacyWithProgress(passphrase []byte, syncDir func(string) error, progress func(PrivacyProgress)) error {
+	reportPrivacyProgress(progress, "inspecting", 0, 0)
 	storeLock, err := lockNote(m.storageDir, "privacy")
 	if err != nil {
 		return err
@@ -37,6 +49,7 @@ func (m *Manager) disablePrivacy(passphrase []byte, syncDir func(string) error) 
 		if err := syncDir(m.storageDir); err != nil {
 			return fmt.Errorf("%w: %w", ErrDurabilityUnconfirmed, err)
 		}
+		reportPrivacyProgress(progress, "complete", 0, 0)
 		return nil
 	}
 	if err := m.Unlock(passphrase); err != nil {
@@ -48,10 +61,12 @@ func (m *Manager) disablePrivacy(passphrase []byte, syncDir func(string) error) 
 	}
 	// Authenticate and verify every conversion before exposing any plaintext.
 	// A second pass bounds plaintext memory usage to one daily document.
-	for _, date := range dates {
+	reportPrivacyProgress(progress, "verifying", 0, len(dates))
+	for i, date := range dates {
 		if _, err := m.plaintextRecord(date); err != nil {
 			return fmt.Errorf("check decryption of %s: %w", date, err)
 		}
+		reportPrivacyProgress(progress, "verifying", i+1, len(dates))
 	}
 	// Durably record the transition before the first plaintext publication.
 	// v2 metadata is rejected by older privacy-aware SP versions, rather than
@@ -59,14 +74,20 @@ func (m *Manager) disablePrivacy(passphrase []byte, syncDir func(string) error) 
 	if err := m.setPrivacyState(metadata, "decrypting", syncDir); err != nil {
 		return err
 	}
-	for _, date := range dates {
+	reportPrivacyProgress(progress, "decrypting", 0, len(dates))
+	for i, date := range dates {
 		if err := m.decryptDate(date, syncDir); err != nil {
 			return fmt.Errorf("decrypt %s: %w; run sp privacy disable to resume", date, err)
 		}
+		reportPrivacyProgress(progress, "decrypting", i+1, len(dates))
 	}
 	// All notes have been verified and their publications synced. Only now
 	// permit ordinary plaintext saves, while retaining the wrapped key.
-	return m.setPrivacyState(metadata, "disabled", syncDir)
+	if err := m.setPrivacyState(metadata, "disabled", syncDir); err != nil {
+		return err
+	}
+	reportPrivacyProgress(progress, "complete", len(dates), len(dates))
+	return nil
 }
 
 // plaintextRecord returns nil for an already plaintext or shared-only note.

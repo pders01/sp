@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -74,7 +75,8 @@ func newPrivacyCommand(factory managerFactory) *cobra.Command {
 			return disablePrivacy(mgr, prompt, cmd.ErrOrStderr())
 		},
 	})
-	cmd.AddCommand(&cobra.Command{
+	var dates bool
+	statusCommand := &cobra.Command{
 		Use: "status", Short: "Inspect encryption state without unlocking",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -83,9 +85,11 @@ func newPrivacyCommand(factory managerFactory) *cobra.Command {
 				return err
 			}
 			defer mgr.Lock()
-			return writePrivacyStatus(mgr, cmd.OutOrStdout())
+			return writePrivacyStatusDates(mgr, cmd.OutOrStdout(), dates)
 		},
-	})
+	}
+	statusCommand.Flags().BoolVar(&dates, "dates", false, "List all dates by storage state")
+	cmd.AddCommand(statusCommand)
 	cmd.AddCommand(newRecoverCommand(factory))
 	return cmd
 }
@@ -134,6 +138,10 @@ func enablePrivacy(mgr *scratchpad.Manager, prompt privacyPrompter, output io.Wr
 	if err != nil {
 		return err
 	}
+	hasIdentity, err := mgr.HasPrivacyIdentity()
+	if err != nil {
+		return err
+	}
 	if !enabled {
 		if _, writeErr := fmt.Fprint(output, privacyWarning); writeErr != nil {
 			return writeErr
@@ -148,7 +156,14 @@ func enablePrivacy(mgr *scratchpad.Manager, prompt privacyPrompter, output io.Wr
 	} else {
 		fmt.Fprintln(output, "Privacy is already enabled. Unlock to resume any remaining plaintext migration.")
 	}
-	passphrase, err := prompt.Password("Passphrase: ")
+	passwordPrompt := "Passphrase: "
+	if hasIdentity {
+		if _, err := fmt.Fprintln(output, "Use the existing passphrase. The retained key is reused; re-enabling does not rotate keys or change the passphrase."); err != nil {
+			return err
+		}
+		passwordPrompt = "Existing passphrase: "
+	}
+	passphrase, err := prompt.Password(passwordPrompt)
 	defer clear(passphrase)
 	if err != nil {
 		return fmt.Errorf("read passphrase: %w", err)
@@ -156,7 +171,7 @@ func enablePrivacy(mgr *scratchpad.Manager, prompt privacyPrompter, output io.Wr
 	if len(passphrase) == 0 {
 		return errors.New("passphrase must not be empty")
 	}
-	if !enabled {
+	if !hasIdentity {
 		confirmation, err := prompt.Password("Confirm passphrase: ")
 		defer clear(confirmation)
 		if err != nil {
@@ -166,8 +181,8 @@ func enablePrivacy(mgr *scratchpad.Manager, prompt privacyPrompter, output io.Wr
 			return errors.New("passphrases do not match; privacy was not enabled")
 		}
 	}
-	if err := mgr.EnablePrivacy(passphrase); err != nil {
-		return fmt.Errorf("enable privacy: %w; run sp privacy status to inspect remaining plaintext dates", err)
+	if err := mgr.EnablePrivacyWithProgress(passphrase, privacyProgressReporter(output)); err != nil {
+		return fmt.Errorf("enable privacy: %w; run sp privacy status --dates to inspect remaining plaintext dates", err)
 	}
 	fmt.Fprintln(output, "Privacy enabled. Shared history and dates remain readable; old plaintext backups are not erased.")
 	return writePrivacyStatus(mgr, output)
@@ -200,7 +215,7 @@ func disablePrivacy(mgr *scratchpad.Manager, prompt privacyPrompter, output io.W
 	if err != nil {
 		return fmt.Errorf("read passphrase: %w", err)
 	}
-	if err := mgr.DisablePrivacy(passphrase); err != nil {
+	if err := mgr.DisablePrivacyWithProgress(passphrase, privacyProgressReporter(output)); err != nil {
 		return fmt.Errorf("disable privacy: %w; run sp privacy status and retry sp privacy disable", err)
 	}
 	if _, err := fmt.Fprintln(output, "Privacy disabled. Daily private notes are plaintext; the wrapped key is retained for encrypted backups and recovery files."); err != nil {
@@ -210,9 +225,17 @@ func disablePrivacy(mgr *scratchpad.Manager, prompt privacyPrompter, output io.W
 }
 
 func writePrivacyStatus(mgr *scratchpad.Manager, output io.Writer) error {
+	return writePrivacyStatusDates(mgr, output, false)
+}
+
+func writePrivacyStatusDates(mgr *scratchpad.Manager, output io.Writer, dates bool) error {
 	status, err := mgr.PrivacyStatus()
 	if err != nil {
 		return fmt.Errorf("inspect privacy status: %w", err)
+	}
+	hasIdentity, err := mgr.HasPrivacyIdentity()
+	if err != nil {
+		return fmt.Errorf("inspect privacy identity: %w", err)
 	}
 	state := "disabled"
 	if status.Enabled {
@@ -221,14 +244,43 @@ func writePrivacyStatus(mgr *scratchpad.Manager, output io.Writer) error {
 	if status.Decrypting {
 		state = "decrypting (incomplete)"
 	}
-	if _, writeErr := fmt.Fprintf(output, "Privacy: %s\nEncrypted dates: %d\nShared-only dates: %d\nRemaining plaintext dates (%d):\n",
-		state, len(status.EncryptedDates), len(status.SharedOnlyDates), len(status.PlaintextDates)); writeErr != nil {
-		return writeErr
+	plaintextLabel := "Plaintext dates (normal; privacy disabled)"
+	if status.Decrypting {
+		plaintextLabel = "Plaintext dates (decryption in progress)"
+	} else if status.Enabled {
+		plaintextLabel = "Remaining plaintext dates"
 	}
-	for _, date := range status.PlaintextDates {
-		if _, writeErr := fmt.Fprintln(output, "  "+date); writeErr != nil {
-			return writeErr
+	if _, err := fmt.Fprintf(output, "Privacy: %s\nEncrypted dates: %d\nShared-only dates: %d\n%s: %d\n",
+		state, len(status.EncryptedDates), len(status.SharedOnlyDates), plaintextLabel, len(status.PlaintextDates)); err != nil {
+		return err
+	}
+	keyState := "none"
+	if hasIdentity {
+		keyState = "retained; keep privacy.json and the existing passphrase for encrypted backups and recovery files"
+	}
+	if _, err := fmt.Fprintln(output, "Wrapped key: "+keyState); err != nil {
+		return err
+	}
+	if dates {
+		for _, group := range []struct {
+			label string
+			dates []string
+		}{
+			{"Encrypted", status.EncryptedDates},
+			{"Shared-only", status.SharedOnlyDates},
+			{plaintextLabel, status.PlaintextDates},
+		} {
+			if _, err := fmt.Fprintln(output, group.label+" listing:"); err != nil {
+				return err
+			}
+			for _, date := range group.dates {
+				if _, err := fmt.Fprintln(output, "  "+date); err != nil {
+					return err
+				}
+			}
 		}
+	} else if _, err := fmt.Fprintln(output, "Use sp privacy status --dates to list dates."); err != nil {
+		return err
 	}
 	if status.Decrypting {
 		_, err = fmt.Fprintln(output, "WARNING: Decryption is incomplete; some private notes may already be plaintext. Normal access is blocked. Run sp privacy disable to resume; stop all sp instances first.")
@@ -243,19 +295,31 @@ func writePrivacyStatus(mgr *scratchpad.Manager, output io.Writer) error {
 
 func newAppendCommand(factory managerFactory) *cobra.Command {
 	var section, source string
+	var jsonOutput bool
 	cmd := &cobra.Command{
 		Use:   "append <date> --section <name> [--source <name>] -- '- bullet'...",
 		Short: "Append shared bullets without unlocking",
 		Args:  cobra.MinimumNArgs(2),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := scratchpad.ValidateAppend(args[0], section, source, args[1:]); err != nil {
+				return err
+			}
 			mgr, err := factory()
 			if err != nil {
 				return err
 			}
 			defer mgr.Lock()
-			return mgr.Append(args[0], section, source, args[1:])
+			result, err := mgr.AppendDetailed(args[0], section, source, args[1:])
+			if err != nil {
+				return err
+			}
+			if jsonOutput {
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
+			}
+			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Report added and duplicate shared bullets as JSON")
 	cmd.Flags().StringVar(&section, "section", "", "Shared section name")
 	cmd.Flags().StringVar(&source, "source", "sp", "Self-reported contribution source (not authenticated)")
 	_ = cmd.MarkFlagRequired("section")
@@ -263,9 +327,15 @@ func newAppendCommand(factory managerFactory) *cobra.Command {
 }
 
 func newSharedCommand(factory managerFactory) *cobra.Command {
-	return &cobra.Command{
+	var jsonOutput bool
+	cmd := &cobra.Command{
 		Use: "shared <date>", Short: "Read shared notes without unlocking",
-		Args: cobra.ExactArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if err := cobra.ExactArgs(1)(cmd, args); err != nil {
+				return err
+			}
+			return scratchpad.ValidateSharedDate(args[0])
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mgr, err := factory()
 			if err != nil {
@@ -276,8 +346,23 @@ func newSharedCommand(factory managerFactory) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if jsonOutput {
+				state := "ok"
+				if !page.Exists {
+					state = "missing"
+				} else if strings.TrimSpace(page.Content) == "" {
+					state = "no_shared"
+				}
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(struct {
+					Date    string `json:"date"`
+					Status  string `json:"status"`
+					Content string `json:"content"`
+				}{page.Date, state, page.Content})
+			}
 			_, err = fmt.Fprint(cmd.OutOrStdout(), page.Content)
 			return err
 		},
 	}
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Report shared text and missing/no-shared state as JSON")
+	return cmd
 }

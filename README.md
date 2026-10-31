@@ -85,13 +85,16 @@ and is not persisted.
 ### Opt-in privacy usage (privacy-aware builds)
 
 ```sh
-sp privacy enable   # interactive warnings, confirmation, passphrase twice; migrate
-sp privacy status   # inspect migration/reversal state without unlocking
+sp privacy enable   # confirm new passphrase twice; retained keys authenticate once
+sp privacy status   # bounded policy/key summary without unlocking
+sp privacy status --dates # explicitly list every date by storage state
 sp privacy disable  # confirm + existing passphrase; decrypt daily notes in place
 sp privacy recover --list          # discover recovery paths without unlocking
 sp privacy recover <recovery-file> # interactively review encrypted recovery; no auto-merge
 sp append 2026-01-15 --section 'Agent notes' --source 'local-helper' -- '- Public task'
 sp shared 2026-01-15 # shared-only read; no private unlock
+sp shared 2026-01-15 --json # explicit missing/no-shared/content outcome
+sp append 2026-01-15 --json --section 'Agent notes' -- '- Public task' # added/duplicate arrays
 ```
 
 In privacy mode, `u` opens a masked TUI unlock prompt; `Enter`/`e` edits privately
@@ -103,7 +106,11 @@ means losing the private writing. Shared bullets and source labels are public,
 self-reported data, not authenticated authorship. `sp privacy disable` restores
 plaintext editing; interrupted reversal resumes with the same command. It retains
 the wrapped key for encrypted backups/recovery files. Re-enabling uses the existing
-passphrase/key and does not erase plaintext copies. Passphrase rotation and MCP
+passphrase/key (one authentication entry, not creation/confirmation) and does not
+erase plaintext copies. Status labels plaintext as normal after disabling and
+states the retained-key backup obligation. Interactive migration/reversal reports
+stage/count progress, not secrets. Raw shared reads and quiet append remain the
+default; `--json` is opt-in and contains shared data only. Passphrase rotation and MCP
 access are not implemented. See the [full guide](docs/privacy.md).
 
 ### Flow

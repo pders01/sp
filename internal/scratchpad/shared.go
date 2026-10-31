@@ -15,6 +15,7 @@ import (
 // indicates that a plaintext private document exists, not permission to read it.
 type SharedPage struct {
 	Date       string
+	Exists     bool
 	Content    string
 	HasPrivate bool
 	Legacy     bool
@@ -43,45 +44,88 @@ func (m *Manager) ReadShared(date string) (*SharedPage, error) {
 	if r.Private != nil && metadata == nil {
 		return nil, errors.New("encrypted scratchpad exists but privacy metadata is missing")
 	}
-	return &SharedPage{Date: date, Content: r.Agent.Content, HasPrivate: r.Private != nil || r.legacy != nil, Legacy: r.legacy != nil}, nil
+	return &SharedPage{Date: date, Exists: true, Content: r.Agent.Content, HasPrivate: r.Private != nil || r.legacy != nil, Legacy: r.legacy != nil}, nil
 }
 
-// Append changes only the shared agent area. It serializes the entire read /
-// modify / publish operation with private saves and migration. Attribution is
-// self-reported and is not cryptographically authenticated.
-func (m *Manager) Append(date, section, source string, bullets []string) error {
+// HasPrivacyIdentity inspects validated metadata only, including the retained
+// identity of a disabled store. It never unlocks or decrypts private notes.
+func (m *Manager) HasPrivacyIdentity() (bool, error) {
+	metadata, _, err := m.readMetadata()
+	return metadata != nil, err
+}
+
+// ValidateSharedDate validates a shared-operation date without opening storage.
+func ValidateSharedDate(date string) error { return validateDate(date) }
+
+// AppendResult describes only shared input outcomes. Duplicates includes each
+// skipped occurrence, including repetitions within the request. Bullets are
+// normalized (without the optional "- " prefix), in input order.
+type AppendResult struct {
+	Date       string   `json:"date"`
+	Section    string   `json:"section"`
+	Source     string   `json:"source"`
+	Added      []string `json:"added_bullets"`
+	Duplicates []string `json:"duplicate_bullets"`
+}
+
+// ValidateAppend validates all append input without opening storage.
+func ValidateAppend(date, section, source string, bullets []string) error {
+	_, err := normalizeAppend(date, section, source, bullets)
+	return err
+}
+
+func normalizeAppend(date, section, source string, bullets []string) ([]string, error) {
 	if err := validateDate(date); err != nil {
-		return err
+		return nil, err
 	}
 	if err := validateSection(section); err != nil {
-		return err
+		return nil, err
 	}
 	if err := validateLabel(source, 500); err != nil {
-		return fmt.Errorf("invalid source: %w", err)
+		return nil, fmt.Errorf("invalid source: %w", err)
 	}
 	if len(bullets) == 0 || len(bullets) > 1000 {
-		return errors.New("provide 1 to 1000 bullets")
+		return nil, errors.New("provide 1 to 1000 bullets")
 	}
 	normalized := make([]string, len(bullets))
 	for i, bullet := range bullets {
 		var err error
 		normalized[i], err = normalizeBullet(bullet)
 		if err != nil {
-			return err
+			return nil, err
 		}
+	}
+	return normalized, nil
+}
+
+// Append changes only the shared agent area. It serializes the entire read /
+// modify / publish operation with private saves and migration. Attribution is
+// self-reported and is not cryptographically authenticated.
+func (m *Manager) Append(date, section, source string, bullets []string) error {
+	_, err := m.AppendDetailed(date, section, source, bullets)
+	return err
+}
+
+// AppendDetailed preserves Append's locking, conflict and exact dedup semantics.
+// A result is returned only on success; errors may include publication durability
+// failures and must not be interpreted as confirmation that nothing was written.
+func (m *Manager) AppendDetailed(date, section, source string, bullets []string) (*AppendResult, error) {
+	normalized, err := normalizeAppend(date, section, source, bullets)
+	if err != nil {
+		return nil, err
 	}
 	storeLock, err := lockNote(m.storageDir, "privacy")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer storeLock.Close()
 	enabled, err := m.PrivacyEnabled()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	lock, err := lockNote(m.storageDir, date)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer lock.Close()
 	filename := filepath.Join(m.storageDir, date+".json")
@@ -91,26 +135,40 @@ func (m *Manager) Append(date, section, source string, bullets []string) error {
 	case os.IsNotExist(err):
 		r = &diskRecord{Version: 2, Date: date}
 	case err != nil:
-		return err
+		return nil, err
 	default:
 		r, err = decodeRecord(data, date)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if enabled && r.legacy != nil {
-		return errors.New("legacy plaintext page must be migrated before shared append")
+		return nil, errors.New("legacy plaintext page must be migrated before shared append")
 	}
 	content, added, err := appendBullets(r.Agent.Content, section, normalized)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	result := &AppendResult{Date: date, Section: section, Source: source, Added: append([]string{}, added...), Duplicates: []string{}}
+	// An added value consumes only its first occurrence; all other requested
+	// occurrences were skipped by appendBullets, whether preexisting or repeated.
+	pending := make(map[string]bool, len(added))
+	for _, bullet := range added {
+		pending[bullet] = true
+	}
+	for _, bullet := range normalized {
+		if pending[bullet] {
+			delete(pending, bullet)
+		} else {
+			result.Duplicates = append(result.Duplicates, bullet)
+		}
 	}
 	if len(added) == 0 {
-		return nil
+		return result, nil
 	}
 	id, err := randomID()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	now := time.Now()
 	r.Agent.Content = content
@@ -118,10 +176,13 @@ func (m *Manager) Append(date, section, source string, bullets []string) error {
 	r.Agent.Contributions = append(r.Agent.Contributions, Contribution{ID: id, Date: date, Source: source, Section: section, Bullets: added, Created: now})
 	data, err = marshalRecord(r)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	_, err = publish(filename, data, false, syncDirectory)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func validateLabel(s string, limit int) error {

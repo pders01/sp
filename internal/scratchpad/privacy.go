@@ -52,6 +52,29 @@ type PrivacyStatus struct {
 	SharedOnlyDates []string
 }
 
+// PrivacyProgress contains only a stage and date-file counts, never note data,
+// dates, credentials, or error details. Stages are inspecting, migrating,
+// verifying, decrypting, and complete, as applicable to the operation. Counts
+// are stage-local and include unchanged files; Total is zero when unknown or
+// when no date-file pass is needed. Complete is emitted only on success.
+// Migration verifies new ciphertext inline; progress adds no verification pass.
+//
+// Callbacks run synchronously on the caller's goroutine, possibly with storage
+// locks held. They must return promptly and must not reenter or mutate the
+// manager. They cannot cancel the operation; errors are returned by the method.
+// Callback panics propagate, so callbacks must not panic.
+type PrivacyProgress struct {
+	Stage     string
+	Completed int
+	Total     int
+}
+
+func reportPrivacyProgress(progress func(PrivacyProgress), stage string, completed, total int) {
+	if progress != nil {
+		progress(PrivacyProgress{Stage: stage, Completed: completed, Total: total})
+	}
+}
+
 func (m *Manager) readMetadata() (*privacyMetadata, [sha256.Size]byte, error) {
 	var zero [sha256.Size]byte
 	data, err := readBounded(filepath.Join(m.storageDir, "privacy.json"), maxMetadataSize)
@@ -207,6 +230,9 @@ func (m *Manager) IsUnlocked() bool {
 	return err == nil
 }
 
+// ValidatePassphrase validates bytes without transforming or retaining them.
+func ValidatePassphrase(passphrase []byte) error { return validatePassphrase(passphrase) }
+
 func validatePassphrase(passphrase []byte) error {
 	if len(passphrase) == 0 || len(passphrase) > maxPassphraseSize {
 		return errors.New("passphrase must contain 1 to 4096 bytes")
@@ -274,6 +300,13 @@ func (m *Manager) Unlock(passphrase []byte) error {
 // Calling it again unlocks the existing identity and resumes. Re-enabling a
 // disabled store reuses the retained key and requires its existing passphrase.
 func (m *Manager) EnablePrivacy(passphrase []byte) error {
+	return m.EnablePrivacyWithProgress(passphrase, nil)
+}
+
+// EnablePrivacyWithProgress is EnablePrivacy with synchronous, data-free
+// notifications. See PrivacyProgress for callback restrictions and count semantics.
+func (m *Manager) EnablePrivacyWithProgress(passphrase []byte, progress func(PrivacyProgress)) error {
+	reportPrivacyProgress(progress, "inspecting", 0, 0)
 	if err := validatePassphrase(passphrase); err != nil {
 		return err
 	}
@@ -284,7 +317,8 @@ func (m *Manager) EnablePrivacy(passphrase []byte) error {
 	if err != nil {
 		return err
 	}
-	for _, date := range dates {
+	reportPrivacyProgress(progress, "migrating", 0, len(dates))
+	for i, date := range dates {
 		data, err := readBounded(filepath.Join(m.storageDir, date+".json"), maxDocumentSize)
 		if err != nil {
 			return err
@@ -293,20 +327,20 @@ func (m *Manager) EnablePrivacy(passphrase []byte) error {
 		if err != nil {
 			return fmt.Errorf("migrate %s: %w", date, err)
 		}
-		if r.legacy == nil {
-			continue
+		if r.legacy != nil {
+			note, err := m.GetByDate(date)
+			if err != nil {
+				return err
+			}
+			if note.disk.legacy != nil {
+				if err := m.saveInternal(note, syncDirectory, true); err != nil {
+					return fmt.Errorf("migrate %s: %w", date, err)
+				}
+			}
 		}
-		note, err := m.GetByDate(date)
-		if err != nil {
-			return err
-		}
-		if note.disk.legacy == nil {
-			continue
-		}
-		if err := m.saveInternal(note, syncDirectory, true); err != nil {
-			return fmt.Errorf("migrate %s: %w", date, err)
-		}
+		reportPrivacyProgress(progress, "migrating", i+1, len(dates))
 	}
+	reportPrivacyProgress(progress, "complete", len(dates), len(dates))
 	return nil
 }
 

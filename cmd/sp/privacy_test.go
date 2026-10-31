@@ -100,7 +100,7 @@ func TestPrivacyStatusNoninteractive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Privacy: disabled", "Remaining plaintext dates (1)", "2025-01-02"} {
+	for _, want := range []string{"Privacy: disabled", "Plaintext dates (normal; privacy disabled): 1", "Wrapped key: none"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("status %q does not contain %q", output, want)
 		}
@@ -116,13 +116,28 @@ func TestPrivacyStatusNoninteractive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Privacy: enabled", "Encrypted dates: 1", "Remaining plaintext dates (0)"} {
+	for _, want := range []string{"Privacy: enabled", "Encrypted dates: 1", "Remaining plaintext dates: 0", "Wrapped key: retained"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("enabled status %q does not contain %q", output, want)
 		}
 	}
 	if mgr.IsUnlocked() {
 		t.Fatal("status unlocked manager")
+	}
+	if err := mgr.Append("2025-01-03", "Updates", "synthetic-agent", []string{"public status item"}); err != nil {
+		t.Fatal(err)
+	}
+	output, _, err = testCLI(factory, "privacy", "status", "--dates")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Encrypted listing:\n  2025-01-02", "Shared-only listing:\n  2025-01-03"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("opt-in status %q does not contain %q", output, want)
+		}
+	}
+	if strings.Contains(output, "public status item") || strings.Contains(output, "private status sentinel") || mgr.IsUnlocked() {
+		t.Fatal("date listing exposed content or unlocked private notes")
 	}
 }
 
@@ -159,10 +174,11 @@ func TestPrivacyStatusRejectsCorruptKeyMetadata(t *testing.T) {
 }
 
 type scriptedPrivacyPrompt struct {
-	line          string
-	passwords     []string
-	passwordCalls int
-	lineCalls     int
+	line            string
+	passwords       []string
+	passwordCalls   int
+	lineCalls       int
+	passwordPrompts []string
 }
 
 func (p *scriptedPrivacyPrompt) Line(string) (string, error) {
@@ -170,7 +186,8 @@ func (p *scriptedPrivacyPrompt) Line(string) (string, error) {
 	return p.line, nil
 }
 
-func (p *scriptedPrivacyPrompt) Password(string) ([]byte, error) {
+func (p *scriptedPrivacyPrompt) Password(label string) ([]byte, error) {
+	p.passwordPrompts = append(p.passwordPrompts, label)
 	if p.passwordCalls >= len(p.passwords) {
 		return nil, fmt.Errorf("unexpected password prompt")
 	}
@@ -299,9 +316,11 @@ func TestAppendDefaultSource(t *testing.T) {
 	}
 }
 
-func TestAppendValidationDelegatedToManager(t *testing.T) {
-	mgr := testManager(t)
-	factory := func() (*scratchpad.Manager, error) { return mgr, nil }
+func TestAppendValidationBeforeStorage(t *testing.T) {
+	factory := func() (*scratchpad.Manager, error) {
+		t.Fatal("invalid append opened storage")
+		return nil, errors.New("unexpected manager creation")
+	}
 	for _, args := range [][]string{
 		{"append", "../invalid", "--section", "Updates", "--", "- item"},
 		{"append", "2025-02-30", "--section", "Updates", "--", "- item"},
@@ -393,8 +412,15 @@ func TestPartialPrivacyNeverPreviewsLegacyPrivateContent(t *testing.T) {
 	if statusErr := writePrivacyStatus(mgr, &status); statusErr != nil {
 		t.Fatal(statusErr)
 	}
-	if !strings.Contains(status.String(), date) || !strings.Contains(status.String(), "Migration is incomplete") {
+	if strings.Contains(status.String(), date) || !strings.Contains(status.String(), "Remaining plaintext dates: 1") || !strings.Contains(status.String(), "Migration is incomplete") {
 		t.Fatalf("partial migration status = %q", status.String())
+	}
+	status.Reset()
+	if err := writePrivacyStatusDates(mgr, &status, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(status.String(), date) || strings.Contains(status.String(), "legacy private sentinel") {
+		t.Fatalf("opt-in partial migration listing = %q", status.String())
 	}
 	hooks := makePrivacyHooks(mgr)
 	page, err := hooks.Load(date)
