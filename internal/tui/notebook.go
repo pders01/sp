@@ -380,7 +380,7 @@ func (n *Notebook) updateViewportContent() {
 			page = *n.privatePage
 		}
 		content = renderPrivatePage(page)
-	} else if shared := n.sharedContents[n.pages[n.current]]; shared != "" {
+	} else if shared := n.sharedContents[n.pages[n.current]]; strings.TrimSpace(shared) != "" {
 		content = renderPrivatePage(PrivatePage{Private: content, Shared: shared})
 	}
 	renderer, err := glamour.NewTermRenderer(

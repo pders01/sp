@@ -13,6 +13,55 @@ func privacyKey(s string) tea.KeyMsg {
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 }
 
+func TestRenderPrivatePageOmitsEmptySharedSection(t *testing.T) {
+	for _, private := range []struct {
+		name string
+		page PrivatePage
+		want string
+	}{
+		{"unlocked", PrivatePage{Private: "private text"}, "# Private notes\n\nprivate text"},
+		{"locked", PrivatePage{Locked: true, HasPrivate: true}, "# Private notes\n\nLocked. Press u to unlock private notes."},
+		{"empty", PrivatePage{HasPrivate: true}, "# Private notes\n\n(No private content.)"},
+	} {
+		for _, shared := range []struct {
+			name    string
+			content string
+		}{
+			{"absent", ""},
+			{"whitespace", " \t\r\n"},
+			{"present", "### Updates\n\n- shared contribution\n"},
+		} {
+			t.Run(private.name+"/"+shared.name, func(t *testing.T) {
+				page := private.page
+				page.Shared = shared.content
+				want := private.want
+				if shared.name == "present" {
+					want += "\n\n---\n\n# Agent contributions · shared\n\n" + shared.content
+				}
+				if got := renderPrivatePage(page); got != want {
+					t.Fatalf("renderPrivatePage() = %q, want %q", got, want)
+				}
+			})
+		}
+	}
+}
+
+func TestPrivacyNotebookOmitsEmptySharedSection(t *testing.T) {
+	app := newTestApp(ModeNotebook)
+	defer app.Close()
+	app.SetPrivacy(PrivacyHooks{Load: func(string) (PrivatePage, error) {
+		return PrivatePage{Private: "private text"}, nil
+	}})
+	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	view := app.View()
+	if !strings.Contains(view, "private text") {
+		t.Fatal("notebook did not display private content")
+	}
+	if strings.Contains(view, "Agent contributions") || strings.Contains(view, "No shared contributions") {
+		t.Fatal("notebook displayed an empty agent section")
+	}
+}
+
 func TestPrivacyCalendarDoesNotLoadPrivateArchive(t *testing.T) {
 	app := newTestApp(ModeCalendar)
 	defer app.Close()
@@ -163,6 +212,26 @@ func TestPrivacyTemplateDoesNotPopulateSharedCaches(t *testing.T) {
 		if strings.Contains(content, "PRIVATE TEMPLATE") {
 			t.Fatal("private template copied to calendar")
 		}
+	}
+}
+
+func TestLegacyNotebookOmitsEmptySharedSection(t *testing.T) {
+	for _, shared := range []string{"", " \t\r\n"} {
+		t.Run("shared="+shared, func(t *testing.T) {
+			app := newTestApp(ModeNotebook)
+			defer app.Close()
+			date := app.nb.GetCurrentPage()
+			app.nb.SetContents(map[string]string{date: "legacy private text"})
+			app.SetSharedContents(map[string]string{date: shared})
+			app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+			view := app.View()
+			if !strings.Contains(view, "legacy private text") {
+				t.Fatal("notebook did not display private content")
+			}
+			if strings.Contains(view, "Private notes") || strings.Contains(view, "Agent contributions") {
+				t.Fatal("empty shared content added section headings to legacy notes")
+			}
+		})
 	}
 }
 

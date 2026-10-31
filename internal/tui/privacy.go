@@ -322,11 +322,11 @@ func renderPrivatePage(page PrivatePage) string {
 	case private == "":
 		private = "(No private content.)"
 	}
-	shared := page.Shared
-	if shared == "" {
-		shared = "(No shared contributions.)"
+	content := "# Private notes\n\n" + private
+	if strings.TrimSpace(page.Shared) != "" {
+		content += "\n\n---\n\n# Agent contributions · shared\n\n" + page.Shared
 	}
-	return "# Private notes\n\n" + private + "\n\n---\n\n# Agent contributions · shared\n\n" + shared
+	return content
 }
 
 // privateEditor never creates plaintext files. Unsaved cancellation and save
