@@ -663,25 +663,6 @@ func (c *Calendar) monthSparkline(first, last time.Time, w int) string {
 	return c.theme.Palette().MutedText.Render(b.String())
 }
 
-// truncate cuts s to at most w display columns, appending an ellipsis
-// when content was dropped. Operates on runes so multi-byte UTF-8 input
-// (any non-ASCII preview line) is sliced safely. Treats every rune as
-// one column; that is approximate for east-asian wides but correct for
-// the latin previews we expect from scratchpad content.
-func truncate(s string, w int) string {
-	if w <= 0 {
-		return s
-	}
-	runes := []rune(s)
-	if len(runes) <= w {
-		return s
-	}
-	if w == 1 {
-		return "…"
-	}
-	return string(runes[:w-1]) + "…"
-}
-
 func clamp(v, lo, hi int) int {
 	if v < lo {
 		return lo

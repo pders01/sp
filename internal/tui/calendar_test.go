@@ -331,7 +331,7 @@ func TestTruncate(t *testing.T) {
 		{"hello", 10, "hello"},
 		{"hello world", 5, "hell…"},
 		{"hi", 1, "…"},
-		{"hi", 0, "hi"},
+		{"hi", 0, ""},
 	}
 	for _, tt := range tests {
 		if got := truncate(tt.s, tt.w); got != tt.want {
