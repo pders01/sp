@@ -143,11 +143,6 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 	if err != nil {
 		return err
 	}
-	if len(dates) == 0 && notebookFlag && !calendarFlag && len(recovery) == 0 {
-		fmt.Println("No scratchpad pages found.")
-		return nil
-	}
-
 	cal := tui.NewCalendar(dates)
 	cal.SetIcons(icons)
 	cal.SetThemePref(cfg.UI.Theme)

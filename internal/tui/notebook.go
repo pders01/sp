@@ -35,6 +35,7 @@ type Notebook struct {
 	pages              []string
 	contents           map[string]string
 	current            int
+	today              string // Session-start date for startup and creation.
 	viewport           viewport.Model
 	width              int
 	height             int
@@ -64,18 +65,24 @@ type Notebook struct {
 // NewNotebook creates a new notebook instance. Pages are copied and
 // sorted descending internally so the caller's slice keeps its order.
 func NewNotebook(pages []string) *Notebook {
+	return newNotebookAt(pages, time.Now().Format(time.DateOnly))
+}
+
+func newNotebookAt(pages []string, today string) *Notebook {
 	owned := append([]string(nil), pages...)
 	sort.Sort(sort.Reverse(sort.StringSlice(owned)))
-	return &Notebook{
+	n := &Notebook{
 		pages:    owned,
 		contents: make(map[string]string),
 		drafts:   make(map[string]editDoneMsg),
-		current:  0,
+		current:  notebookStartIndex(owned, today),
+		today:    today,
 		width:    80,
 		height:   24,
 		icons:    DefaultIconSet(),
 		theme:    newThemeWatcher(ThemePrefAuto),
 	}
+	return n
 }
 
 // SetThemePref sets the initial theme preference. Call before Init so
@@ -231,10 +238,7 @@ func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		n.popping = true
 		return n, nil
 	case "enter", "e", "i":
-		if len(n.pages) == 0 {
-			return n, nil
-		}
-		date := n.pages[n.current]
+		date := n.editDate()
 		if cmd := n.startEdit(date); cmd != nil {
 			return n, cmd
 		}
@@ -289,7 +293,7 @@ func (n *Notebook) View() string {
 		return n.keyHelp.view(n.theme.Palette())
 	}
 	if len(n.pages) == 0 {
-		return fitView(n.theme.Palette().MutedText.Render("No scratchpad pages found.\nF1: help · q: quit"), n.width, n.height)
+		return n.emptyView()
 	}
 	n.layoutViewport()
 	header, footer := n.renderHeader(), n.renderFooter()

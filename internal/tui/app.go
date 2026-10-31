@@ -52,6 +52,9 @@ func NewApp(cal *Calendar, nb *Notebook, mode AppMode) *App {
 		appliedTemplates: make(map[string]map[string]bool),
 	}
 	nb.canPop = app.canPop
+	if mode == ModeNotebook {
+		nb.announceStart()
+	}
 	nb.drafts = cal.drafts // A failed draft follows its date across both views.
 	cal.onChange, nb.onChange = app.noteChanged, app.noteChanged
 	cal.onLoad, nb.onLoad = app.noteLoaded, app.noteLoaded

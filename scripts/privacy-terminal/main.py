@@ -218,7 +218,7 @@ class Suite:
 
         long_before = (self.store / "2020-01-01.json").read_bytes()
         def notebook(t):
-            t.expect("Notebook")
+            t.expect("Notebook · " + self.today)
             t.expect("Locked.")
             assert self.private not in t.text(), "locked viewer exposed private content"
             t.send("u")
@@ -227,6 +227,8 @@ class Suite:
             t.expect("Unlock failed:")
             t.send(self.secret + "\r")
             t.expect(self.private)
+            t.send("h")
+            t.expect("Notebook · 2099-01-01")
             t.send("l")
             t.expect("Notebook · " + self.today)
             t.send("l")

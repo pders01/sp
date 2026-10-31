@@ -165,6 +165,10 @@ func (a *App) startPrivateEdit(date string) tea.Cmd {
 		a.privateLoadFailed(date, err)
 		return nil
 	}
+	if a.mode == ModeNotebook && a.nb.GetCurrentPage() == date {
+		a.nb.privatePage, a.nb.privateDate = &page, date
+		a.nb.updateViewportContent()
+	}
 	if page.Locked {
 		a.privacy.editAfter = date
 		return a.startUnlock()
@@ -368,7 +372,11 @@ func (a *App) updatePrivacy(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 			return true, a.startUnlock()
 		case "enter", "e", "i":
 			if a.mode == ModeNotebook || (shortcut != "enter" && a.cal.view == ViewMonth) {
-				return true, a.startPrivateEdit(a.privateDate())
+				date := a.privateDate()
+				if a.mode == ModeNotebook {
+					date = a.nb.editDate()
+				}
+				return true, a.startPrivateEdit(date)
 			}
 		case "a":
 			if p.hooks.IsUnlocked == nil || !p.hooks.IsUnlocked() {

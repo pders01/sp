@@ -74,6 +74,10 @@ sp --version
 
 Choose either `-n` or `-c`; enabling both is an error rather than silently
 selecting a view. Explicit `--calendar=false`/`--notebook=false` values are allowed.
+Notebook startup prefers today, then the newest earlier saved date, then the
+nearest future date; fallback choices are labelled. An empty notebook stays open:
+Enter/e/i starts today's note (unlocking first in privacy mode). Opening or
+quitting the empty viewer does not save a note.
 
 ### Opt-in privacy usage (privacy-aware builds)
 

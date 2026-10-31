@@ -115,12 +115,13 @@ func (n *Notebook) keyBindings() []helpEntry {
 		back = "return to calendar"
 	}
 	return []helpEntry{
-		{keys: "←/h →/l", label: "newer/older page", visible: true},
-		{keys: "↑/k ↓/j", label: "scroll one line", visible: true},
-		{keys: "PgUp/b PgDn/f", label: "scroll a full page", visible: true},
-		{keys: "Ctrl+U/D", label: "scroll half a page", visible: true},
-		{keys: "g/G", label: "top/bottom of note", visible: true},
+		{keys: "←/h →/l", label: "newer/older page", visible: len(n.pages) > 0},
+		{keys: "↑/k ↓/j", label: "scroll one line", visible: len(n.pages) > 0},
+		{keys: "PgUp/b PgDn/f", label: "scroll a full page", visible: len(n.pages) > 0},
+		{keys: "Ctrl+U/D", label: "scroll half a page", visible: len(n.pages) > 0},
+		{keys: "g/G", label: "top/bottom of note", visible: len(n.pages) > 0},
 		{keys: "Enter/e/i", label: n.editLabel() + " current page", visible: len(n.pages) > 0},
+		{keys: "Enter/e/i", label: "create today's note (" + n.today + ")", visible: len(n.pages) == 0},
 		{keys: "u", label: "unlock private notes for this process", visible: n.privacyEnabled},
 		{keys: "a", label: "choose template sections", visible: n.templatesAvailable && len(n.pages) > 0},
 		{keys: "Esc/Backspace", label: back, visible: true},
