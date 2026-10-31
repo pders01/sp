@@ -135,6 +135,15 @@ Within help, `Esc`/`F1`/`q` closes only the reference; arrows, Page Up/Down, and
 `g`/`G` scroll it. Unsupported screen sizes show a resize hint without discarding
 notes, drafts, passphrases, or template selections.
 
+Press `d` in an ordinary viewer to jump to an exact `YYYY-MM-DD` date. Calendar
+jumps focus that day in month view; notebook jumps open the selected day and
+restore its session reading position. Missing dates can be selected without
+saving a note. Enter confirms a valid date; Escape/Ctrl+C cancels, Ctrl+U clears,
+and F1 opens help. Invalid dates/pastes are rejected, not trimmed or clamped.
+The shortcut does not apply while editing, unlocking, or using other modals.
+Private date navigation loads only the selected notebook page, never a history
+search or archive-wide decryption; calendar jumps do not decrypt private notes.
+
 #### Calendar
 
 | Key                | Action                                |
@@ -147,6 +156,7 @@ notes, drafts, passphrases, or template selections.
 | `a`                | choose template sections for the day  |
 | `m` `y`            | switch to month / year view           |
 | `t`                | reset cursor to today                 |
+| `d`                | jump to an exact date in month view   |
 | `Ctrl+T`           | cycle theme: auto → light → dark      |
 | `?` `F1`           | key reference and status details      |
 | `Esc`              | year → month; quit from month view    |
@@ -168,6 +178,7 @@ with `■` meaning at least one entry in that range and `·` meaning none.
 | `Ctrl+u` `Ctrl+d`    | half-page up / down             |
 | `b` `f` `pgup`/`pgdn`| full-page up / down             |
 | `g` `G`              | jump to top / bottom            |
+| `d`                  | jump to an exact date           |
 | `Enter` `e` `i`      | edit current page               |
 | `a`                  | choose template sections         |
 | `Esc` `Backspace`    | pop back to calendar (when -c)  |

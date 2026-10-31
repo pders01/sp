@@ -25,7 +25,7 @@ func TestViewerHelpOwnsKeysBeforePrivacyAndTemplateShortcuts(t *testing.T) {
 		beforeLoads := loads
 		beforeDate := app.privateDate()
 		app.Update(privacyKey("?"))
-		for _, key := range []tea.KeyMsg{privacyKey("u"), privacyKey("a"), privacyKey("e"), rawPhysical(tea.KeyEnter), rawPhysical(tea.KeyDown)} {
+		for _, key := range []tea.KeyMsg{privacyKey("u"), privacyKey("a"), privacyKey("e"), privacyKey("d"), rawPhysical(tea.KeyEnter), rawPhysical(tea.KeyDown)} {
 			app.Update(key)
 		}
 		if app.privateDate() != beforeDate || loads != beforeLoads || unlocks != 0 || applies != 0 || app.privacy.prompt != nil || app.privacy.editor != nil || app.templateChooser != nil {

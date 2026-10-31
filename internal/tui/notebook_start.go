@@ -43,6 +43,7 @@ func (n *Notebook) emptyView() string {
 	controls := wrappedHelp([]helpEntry{
 		{keys: "Enter/e/i", label: "create today", visible: true},
 		{keys: "u", label: "unlock", visible: n.privacyEnabled},
+		{keys: "d", label: "date", visible: n.dateJumpAvailable},
 		{keys: "?/F1", label: "help", visible: true},
 		{keys: "Esc", label: back, visible: true},
 		{keys: "q", label: "quit", visible: true},

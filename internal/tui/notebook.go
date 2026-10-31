@@ -51,6 +51,7 @@ type Notebook struct {
 	save               Saver
 	loader             func(date string) (string, error)
 	templatesAvailable bool
+	dateJumpAvailable  bool
 	privacyEnabled     bool
 	privatePage        *PrivatePage
 	privateDate        string
@@ -382,6 +383,7 @@ func (n *Notebook) renderFooter() string {
 		{keys: "enter/e", label: n.editLabel(), visible: true},
 		{keys: "u", label: "unlock", visible: n.privacyEnabled},
 		{keys: "a", label: "templates", visible: n.templatesAvailable},
+		{keys: "d", label: "date", visible: n.dateJumpAvailable},
 		{keys: "esc", label: back, visible: true},
 		{keys: "?/F1", label: "help", visible: true},
 		{keys: "q", label: "quit", visible: true},

@@ -49,6 +49,7 @@ type Calendar struct {
 	save               Saver
 	loader             func(date string) (string, error)
 	templatesAvailable bool
+	dateJumpAvailable  bool
 	privacyEnabled     bool
 	privateDates       map[string]bool // Public presence only; never private previews.
 	loadErrors         map[string]string
@@ -355,6 +356,7 @@ func (c *Calendar) View() string {
 		{keys: "u", label: "unlock", visible: !year && c.privacyEnabled},
 		{keys: "Esc", label: "month", visible: year},
 		{keys: "a", label: "templates", visible: !year && c.templatesAvailable},
+		{keys: "d", label: "date", visible: c.dateJumpAvailable},
 		{keys: "?/F1", label: "help", visible: true},
 		{keys: "q", label: "quit", visible: true},
 	}, c.width))

@@ -34,6 +34,7 @@ type App struct {
 	applyTemplates   TemplateApplier
 	templateChooser  *templateChooser
 	privacy          *privacyState
+	dateJump         *dateJumpPrompt
 	recoveries       []scratchpad.RecoveryReference
 	recoveryWarnings map[string]string
 	recordRecovery   func(date, path string) error
@@ -52,6 +53,7 @@ func NewApp(cal *Calendar, nb *Notebook, mode AppMode) *App {
 		appliedTemplates: make(map[string]map[string]bool),
 	}
 	nb.canPop = app.canPop
+	cal.dateJumpAvailable, nb.dateJumpAvailable = true, true
 	if mode == ModeNotebook {
 		nb.announceStart()
 	}
@@ -122,6 +124,19 @@ func (a *App) Close() {
 // Update routes the message to the active view, then inspects the
 // view's state machine for drill / pop / quit signals and reacts.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if a.dateJump != nil {
+		if size, ok := msg.(tea.WindowSizeMsg); ok {
+			a.cal.Update(size)
+			a.nb.Update(size)
+			a.dateJump.resize(size.Width, size.Height)
+			return a, nil
+		}
+		_, key := msg.(tea.KeyMsg)
+		_, paste := privatePasteText(msg)
+		if key || paste {
+			return a.updateDateJump(msg)
+		}
+	}
 	// Read-only help must own its keys before privacy shortcuts or the
 	// application-level template shortcut can act on the underlying view.
 	if _, key := msg.(tea.KeyMsg); key && a.templateChooser == nil &&
@@ -158,6 +173,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		return a.updateTemplateChooser(msg)
+	}
+	if key, ok := msg.(tea.KeyMsg); ok && key.Type == tea.KeyRunes && !key.Alt && len(key.Runes) == 1 && key.Runes[0] == 'd' {
+		current := a.privateDate()
+		if current == "" {
+			current = a.nb.today
+		}
+		a.dateJump = newDateJumpPrompt(current, a.cal.width, a.cal.height)
+		return a, nil
 	}
 	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "a" && a.startTemplateChooser() {
 		return a, nil
@@ -247,6 +270,13 @@ func (a *App) updateNotebook(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (a *App) View() string {
 	if a.quitting {
 		return ""
+	}
+	if a.dateJump != nil {
+		palette := a.cal.theme.Palette()
+		if a.mode == ModeNotebook {
+			palette = a.nb.theme.Palette()
+		}
+		return a.dateJump.view(palette)
 	}
 	if view, active := a.privacyView(); active {
 		return view
