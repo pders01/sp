@@ -18,6 +18,7 @@ func TestCLIErrorsAreReportedOnceWithoutUsageDumps(t *testing.T) {
 		{"flag", "unknown flag"},
 		{"command", "unknown command"},
 		{"required", "required flag"},
+		{"views", "choose one view"},
 		{"runtime", "save failed; buffer path: synthetic-recovery.md"},
 		{"cancel", "privacy enable cancelled"},
 	} {
@@ -85,6 +86,8 @@ func TestCLIErrorHelperProcess(_ *testing.T) {
 		rootCmd.SetArgs([]string{"does-not-exist"})
 	case "required":
 		rootCmd.SetArgs([]string{"append", "2026-01-01", "--", "- item"})
+	case "views":
+		rootCmd.SetArgs([]string{"-c", "-n"})
 	case "help":
 		rootCmd.SetArgs([]string{"--help"})
 	}

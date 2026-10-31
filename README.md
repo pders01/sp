@@ -72,6 +72,9 @@ sp -c       # calendar; Enter drills into the notebook on that day
 sp --version
 ```
 
+Choose either `-n` or `-c`; enabling both is an error rather than silently
+selecting a view. Explicit `--calendar=false`/`--notebook=false` values are allowed.
+
 ### Opt-in privacy usage (privacy-aware builds)
 
 ```sh

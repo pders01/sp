@@ -53,6 +53,14 @@ func newRootCommand(factory managerFactory) *cobra.Command {
   sp -n   # Notebook (Enter/e: edit)
   sp -c   # Calendar (Enter: notebook; e: edit directly)`,
 		Args: cobra.NoArgs,
+		PreRunE: func(*cobra.Command, []string) error {
+			// Check enabled values, not mere flag presence: explicit false
+			// values remain useful to callers assembling boolean options.
+			if calendarFlag && notebookFlag {
+				return errors.New("--calendar and --notebook cannot be enabled together; choose one view")
+			}
+			return nil
+		},
 		RunE: runScratchpad,
 	}
 	cmd.Flags().BoolVarP(&calendarFlag, "calendar", "c", false, "Browse dates")
