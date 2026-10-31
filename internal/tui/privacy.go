@@ -265,6 +265,9 @@ func (a *App) updatePrivacy(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 				p.prompt = nil
 				p.editAfter = ""
 				return true, nil
+			case tea.KeySpace:
+				p.insertPassphrase(" ")
+				return true, nil
 			case tea.KeyEnter:
 				secret := []byte(p.prompt.Value())
 				p.prompt.SetValue("")

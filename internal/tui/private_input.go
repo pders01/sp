@@ -192,6 +192,8 @@ func (m privateInput) Update(msg tea.Msg) (privateInput, tea.Cmd) {
 			}
 		}
 		m.insert(string(key.Runes))
+	case tea.KeySpace:
+		m.insert(" ")
 	case tea.KeyTab:
 		m.insert("\t")
 	case tea.KeyEnter:
