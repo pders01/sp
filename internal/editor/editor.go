@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
-	"time"
 )
 
 // Editor represents an external editor
@@ -27,10 +26,17 @@ func NewEditor() (*Editor, error) {
 
 // Prepare builds the *exec.Cmd that opens content in the user's editor
 // alongside the temp-file path that holds the buffered content and a
-// cleanup func to remove that file. Callers use RunPrepared, or hand the command
-// to tea.ExecProcess and read it with ReadEdited. Invoke cleanup only after
-// persistence succeeds or the edit is unchanged, retaining the buffer on error.
+// cleanup func to remove that file. Successful process exit is the edit-finished
+// contract: known GUI launchers get blocking options; unknown executables and
+// wrappers must themselves remain running until editing finishes. Callers use
+// RunPrepared, or hand the command to tea.ExecProcess and call ReadEdited only
+// after successful exit. Invoke cleanup only after persistence succeeds or the
+// edit is unchanged, retaining the buffer on error.
 func (e *Editor) Prepare(content string) (cmd *exec.Cmd, path string, cleanup func(), err error) {
+	args, err := editorCompletionArgs(e.command, e.args)
+	if err != nil {
+		return nil, "", nil, err
+	}
 	tmpFile, err := os.CreateTemp("", "sp-*.md")
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("failed to create temp file: %w", err)
@@ -46,8 +52,6 @@ func (e *Editor) Prepare(content string) (cmd *exec.Cmd, path string, cleanup fu
 		return nil, "", nil, fmt.Errorf("failed to close temp file: %w", cerr)
 	}
 
-	args := make([]string, 0, len(e.args)+1)
-	args = append(args, e.args...)
 	args = append(args, tmpFile.Name())
 	cmd = exec.Command(e.command, args...)
 	cmd.Stdin = os.Stdin
@@ -56,10 +60,9 @@ func (e *Editor) Prepare(content string) (cmd *exec.Cmd, path string, cleanup fu
 	return cmd, tmpFile.Name(), cleanup, nil
 }
 
-// IsGUI reports whether the resolved editor is a GUI binary that
-// detaches from the terminal. TUI callers should fall back to a
-// suspend-and-edit flow for these editors because tea.ExecProcess
-// returns immediately when the process forks.
+// IsGUI reports whether the resolved editor is a known GUI launcher.
+// It is informational only: Prepare supplies the same process-exit completion
+// contract for GUI and terminal editors, including when used with tea.ExecProcess.
 func (e *Editor) IsGUI() bool { return e.isGUI }
 
 // ReadEdited reads the content the editor wrote to path.
@@ -80,67 +83,12 @@ func ReadEdited(path string) (string, error) {
 
 // RunPrepared runs a command returned by Prepare and reads its edited buffer.
 // The caller owns cleanup so the buffer can survive a subsequent save failure.
-// Detached GUI editors retain the synchronous flow's existing polling behavior.
+// Like tea.ExecProcess, this waits for process exit, never for a first save.
 func (e *Editor) RunPrepared(cmd *exec.Cmd, path string) (string, error) {
-	if e.isGUI {
-		return e.editGUI(cmd, path)
-	}
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("editor failed: %w", err)
 	}
 	return ReadEdited(path)
-}
-
-// editGUI handles GUI editors by waiting for file modification
-func (e *Editor) editGUI(cmd *exec.Cmd, filename string) (string, error) {
-	// Get initial file info
-	initialInfo, err := os.Stat(filename)
-	if err != nil {
-		return "", err
-	}
-
-	// Start editor in background
-	if serr := cmd.Start(); serr != nil {
-		return "", fmt.Errorf("failed to start editor: %w", serr)
-	}
-
-	// Wait for file modification (with timeout)
-	modified := false
-	timeout := time.After(5 * time.Minute) // 5 minute timeout
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-timeout:
-			_ = cmd.Process.Kill()
-			return "", fmt.Errorf("editor timeout")
-		case <-ticker.C:
-			info, statErr := os.Stat(filename)
-			if statErr != nil {
-				continue
-			}
-			if info.ModTime().After(initialInfo.ModTime()) {
-				modified = true
-			}
-		}
-		if modified {
-			break
-		}
-	}
-
-	// Wait for editor to finish
-	if werr := cmd.Wait(); werr != nil {
-		return "", fmt.Errorf("editor failed: %w", werr)
-	}
-
-	// Read back the content
-	data, rerr := os.ReadFile(filename)
-	if rerr != nil {
-		return "", fmt.Errorf("failed to read edited file: %w", rerr)
-	}
-
-	return string(data), nil
 }
 
 // detectEditor finds the best available editor
@@ -164,7 +112,7 @@ func detectEditor() (*Editor, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("no suitable editor found")
+	return nil, fmt.Errorf("no suitable blocking editor found; configure EDITOR (or VISUAL) to an editor such as 'code --wait' or 'vim'")
 }
 
 // parseEditorCommand parses arguments without shell execution or expansion.
@@ -185,6 +133,12 @@ func parseEditorCommand(cmd string) (*Editor, error) {
 		return nil, fmt.Errorf("editor not found: %s", parts[0])
 	}
 
+	// Reject known nonblocking launchers before any editor buffer is created.
+	// Prepare repeats this check and adds flags for both CLI and TUI callers.
+	if _, err := editorCompletionArgs(parts[0], parts[1:]); err != nil {
+		return nil, err
+	}
+
 	editor := &Editor{
 		command: parts[0],
 		args:    parts[1:],
@@ -192,22 +146,6 @@ func parseEditorCommand(cmd string) (*Editor, error) {
 	}
 
 	return editor, nil
-}
-
-// isGUIEditor checks if an editor is GUI-based
-func isGUIEditor(command string) bool {
-	guiEditors := map[string]bool{
-		"code":      true, // VSCode
-		"subl":      true, // Sublime Text
-		"atom":      true, // Atom
-		"gedit":     true, // GNOME Editor
-		"kate":      true, // KDE Editor
-		"notepad++": true, // Notepad++
-		"notepad":   true, // Windows Notepad
-		"textedit":  true, // macOS TextEdit
-	}
-
-	return guiEditors[command]
 }
 
 // getFallbackEditors returns platform-specific fallback editors

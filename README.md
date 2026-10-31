@@ -252,11 +252,13 @@ Windows uses native Windows argument quoting. There is no implicit shell:
 variables, `~`, globs, pipes, and command substitutions are not expanded. Malformed
 POSIX quoting is rejected before launch rather than silently changing arguments.
 
-**Caveat:** GUI editors that fork-and-detach (VS Code without
-`--wait`, Sublime, Atom) will return immediately when invoked from
-inside the TUI and look broken — `tea.ExecProcess` waits on the
-launched process. For those, stick with bare `sp` (the synchronous
-path keeps the original GUI polling loop).
+Both bare `sp` and TUI editing wait for the prepared editor process to finish,
+not for the first file modification. Recognized GUI launchers receive their
+supported wait/foreground option (`code --wait`, `kate --block`, `gvim --nofork`,
+etc.); supplied options are retained. Unsupported detached launchers such as
+`open`, TextEdit, and modern Notepad are rejected with configuration advice.
+Custom wrappers must remain in the foreground until editing is finished.
+Closing unchanged returns normally; intermediate saves do not finish the edit.
 
 ## Data storage
 
