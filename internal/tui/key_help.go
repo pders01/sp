@@ -105,7 +105,9 @@ func (c *Calendar) keyBindings() []helpEntry {
 		{keys: "t/T", label: "return to today", visible: true},
 		{keys: "Ctrl+T", label: "cycle theme", visible: true},
 		{keys: "?/F1", label: "toggle key help", visible: true},
-		{keys: "q/Ctrl+C/Esc", label: "quit", visible: true},
+		{keys: "Esc", label: "return to month view", visible: year},
+		{keys: "Esc", label: "quit (root month view)", visible: !year},
+		{keys: "q/Ctrl+C", label: "quit", visible: true},
 	}
 }
 

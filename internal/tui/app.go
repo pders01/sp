@@ -12,7 +12,7 @@ type AppMode int
 
 const (
 	// ModeCalendar opens on the calendar; Enter on a day drills into
-	// the notebook, and pressing Esc/q in the notebook pops back.
+	// the notebook, and pressing Esc/Backspace in the notebook pops back.
 	ModeCalendar AppMode = iota
 	// ModeNotebook opens directly on the notebook with no calendar
 	// behind it; Esc/q quits.

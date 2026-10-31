@@ -149,7 +149,8 @@ notes, drafts, passphrases, or template selections.
 | `t`                | reset cursor to today                 |
 | `Ctrl+T`           | cycle theme: auto → light → dark      |
 | `?` `F1`           | key reference and status details      |
-| `q` `Ctrl+C` `Esc` | quit                                  |
+| `Esc`              | year → month; quit from month view    |
+| `q` `Ctrl+C`       | quit directly from either view        |
 
 Month/year jumps clamp to the target month's last valid day and remember the
 chosen day: January 31 → February 28 → March 31 (February 29 in leap years).

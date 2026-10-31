@@ -222,8 +222,15 @@ func (c *Calendar) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return c, nil
 	}
 	switch msg.String() {
-	case "ctrl+c", "q", "esc":
+	case "ctrl+c", "q":
 		c.quitting = true
+		return c, nil
+	case "esc":
+		if c.view == ViewYear {
+			c.view = ViewMonth
+		} else {
+			c.quitting = true
+		}
 		return c, nil
 	case "ctrl+t":
 		c.theme.Cycle()
@@ -345,7 +352,8 @@ func (c *Calendar) View() string {
 	help := palette.Help.Render(wrappedHelp([]helpEntry{
 		{keys: "enter", label: "open", visible: true},
 		{keys: "e", label: c.editLabel(), visible: !year},
-		{keys: "u", label: "unlock", visible: c.privacyEnabled},
+		{keys: "u", label: "unlock", visible: !year && c.privacyEnabled},
+		{keys: "Esc", label: "month", visible: year},
 		{keys: "a", label: "templates", visible: !year && c.templatesAvailable},
 		{keys: "?/F1", label: "help", visible: true},
 		{keys: "q", label: "quit", visible: true},
