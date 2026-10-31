@@ -4,9 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
-
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // Note-controlled terminal controls cannot erase/spoof UI provenance labels.
@@ -24,44 +21,29 @@ func safeMarkdownDisplay(text string) string {
 }
 
 func (n *Notebook) renderMarkdown(text string) string {
-	text = safeMarkdownDisplay(text)
-	renderer, err := glamour.NewTermRenderer(glamour.WithStandardStyle(n.theme.Style()), glamour.WithWordWrap(max(n.width-4, 20)))
-	if err == nil {
-		if rendered, renderErr := renderer.Render(text); renderErr == nil {
-			text = rendered
-		}
-	}
-	return ansi.Wrap(displayText(text), max(n.width, 20), "")
+	// renderDocument owns the two-cell margin; give it the full viewport.
+	return renderDocument(text, n.theme.Style(), max(1, n.width))
 }
 
-// Every area gets its own Markdown renderer. A fence/HTML construct in private
-// writing can never consume the shared area's UI label or change its provenance.
+func insetNotebookBody(body string) string {
+	return "  " + strings.ReplaceAll(body, "\n", "\n  ")
+}
+
+// Only the personal document belongs in the primary viewport. Shared text is
+// rendered independently in shared_updates.go, never combined with this buffer.
 func (n *Notebook) renderPrivateAreas(page PrivatePage) string {
-	palette := n.theme.Palette()
-	var areas []string
 	switch {
 	case page.LoadError != "":
-		areas = append(areas, "Private note unavailable: "+safeMarkdownDisplay(page.LoadError))
-	case page.HasPrivate || page.Private != "":
-		state, body := "unlocked", ""
-		switch {
-		case page.Locked:
-			state, body = "locked", "Locked. Press u to unlock private notes."
-		case page.Private == "":
-			body = "(Private note is empty.)"
-		default:
-			body = n.renderMarkdown(page.Private)
-		}
-		if !n.privacyEnabled && !page.Locked {
-			state = "plaintext"
-		}
-		areas = append(areas, palette.Header.Render("Private notes · "+state), body)
+		return insetNotebookBody("Personal note unavailable: " + safeMarkdownDisplay(page.LoadError))
+	case page.Locked && page.HasPrivate:
+		return insetNotebookBody("Note locked. Press u to unlock.")
+	case !page.HasPrivate && page.Private == "":
+		return insetNotebookBody("No personal note for this day. Press e to create a note.")
+	case page.Locked:
+		return insetNotebookBody("Note locked. Press u to unlock.")
+	case page.Private == "":
+		return insetNotebookBody("This note is empty. Press e to write.")
+	default:
+		return n.renderMarkdown(page.Private)
 	}
-	if strings.TrimSpace(page.Shared) != "" {
-		areas = append(areas, palette.Header.Render("Agent contributions · shared (self-reported)"), n.renderMarkdown(page.Shared))
-	}
-	if len(areas) == 0 {
-		return "No entry for this day. Press e to create a private note."
-	}
-	return strings.Join(areas, "\n")
 }

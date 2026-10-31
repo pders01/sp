@@ -62,8 +62,8 @@ func TestNotebook_Update_Navigation(t *testing.T) {
 	notebook.width = 100
 	notebook.height = 30
 
-	// Test right navigation
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}
+	// Left goes to the earlier saved day (descending internal index).
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}
 	model, cmd := notebook.Update(msg)
 
 	updatedNotebook, ok := model.(*Notebook)
@@ -71,8 +71,8 @@ func TestNotebook_Update_Navigation(t *testing.T) {
 	assert.Equal(t, 1, updatedNotebook.current)
 	assert.Nil(t, cmd)
 
-	// Test left navigation
-	msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}
+	// Right returns to the later saved day.
+	msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}
 	model, cmd = updatedNotebook.Update(msg)
 
 	updatedNotebook, ok = model.(*Notebook)
@@ -81,7 +81,7 @@ func TestNotebook_Update_Navigation(t *testing.T) {
 	assert.Nil(t, cmd)
 
 	// Test arrow keys
-	msg = tea.KeyMsg{Type: tea.KeyRight}
+	msg = tea.KeyMsg{Type: tea.KeyLeft}
 	model, cmd = updatedNotebook.Update(msg)
 
 	updatedNotebook, ok = model.(*Notebook)
@@ -89,7 +89,7 @@ func TestNotebook_Update_Navigation(t *testing.T) {
 	assert.Equal(t, 1, updatedNotebook.current)
 	assert.Nil(t, cmd)
 
-	msg = tea.KeyMsg{Type: tea.KeyLeft}
+	msg = tea.KeyMsg{Type: tea.KeyRight}
 	model, cmd = updatedNotebook.Update(msg)
 
 	updatedNotebook, ok = model.(*Notebook)
@@ -105,8 +105,8 @@ func TestNotebook_Update_NavigationBounds(t *testing.T) {
 	notebook.height = 30
 
 	// Test navigation at boundaries
-	// Try to go left when at first page
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}
+	// Try to go later when at the latest saved page.
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}
 	model, cmd := notebook.Update(msg)
 
 	updatedNotebook, ok := model.(*Notebook)
@@ -114,16 +114,16 @@ func TestNotebook_Update_NavigationBounds(t *testing.T) {
 	assert.Equal(t, 0, updatedNotebook.current) // Should stay at 0
 	assert.Nil(t, cmd)
 
-	// Go to last page
-	msg = tea.KeyMsg{Type: tea.KeyRight}
+	// Go to the earliest page.
+	msg = tea.KeyMsg{Type: tea.KeyLeft}
 	model, _ = updatedNotebook.Update(msg)
 
 	updatedNotebook, ok = model.(*Notebook)
 	require.True(t, ok)
 	assert.Equal(t, 1, updatedNotebook.current)
 
-	// Try to go right when at last page
-	msg = tea.KeyMsg{Type: tea.KeyRight}
+	// Try to go earlier at the earliest saved page.
+	msg = tea.KeyMsg{Type: tea.KeyLeft}
 	model, cmd = updatedNotebook.Update(msg)
 
 	updatedNotebook, ok = model.(*Notebook)
@@ -233,7 +233,7 @@ func TestNotebook_View_Empty(t *testing.T) {
 	notebook := NewNotebook([]string{})
 	view := notebook.View()
 
-	assert.Contains(t, view, "No scratchpad pages found.")
+	assert.Contains(t, view, "Start today's note")
 }
 
 func TestNotebook_View_Quitting(t *testing.T) {
@@ -262,7 +262,7 @@ func TestNotebook_View_WithContent(t *testing.T) {
 	assert.Contains(t, view, "Notebook · 2024-01-16")
 
 	// Keep essential actions visible; the full key reference is expandable.
-	assert.Contains(t, view, "enter/e: edit • esc: quit • ?/F1: help • q: quit")
+	assert.Contains(t, view, "enter/e: edit • esc: quit • ?/F1: help")
 
 	// Should contain page indicators
 	assert.Contains(t, view, "2024-01-15")
@@ -427,6 +427,6 @@ func TestNotebook_FooterScrolling(t *testing.T) {
 		assert.Contains(t, view, notebook.pages[i])
 
 		// Essential controls remain visible as the date strip moves.
-		assert.Contains(t, view, "enter/e: edit • esc: quit • ?/F1: help • q: quit")
+		assert.Contains(t, view, "enter/e: edit • esc: quit • ?/F1: help")
 	}
 }

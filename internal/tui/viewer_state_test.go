@@ -97,9 +97,15 @@ func TestNotebookMarkdownCannotConsumeSharedProvenanceBoundary(t *testing.T) {
 		return PrivatePage{Private: private, Shared: shared, HasPrivate: true}, nil
 	}})
 	view := ansi.Strip(app.nb.viewport.View())
-	if !strings.Contains(view, "Private notes · unlocked") || !strings.Contains(view, "Agent contributions · shared (self-reported)") || !strings.Contains(view, "public contribution") {
-		t.Fatalf("Markdown absorbed UI boundaries: %q", view)
+	if !strings.Contains(view, "PRIVATE_CANARY") || strings.Contains(view, "public contribution") {
+		t.Fatalf("primary Markdown mixed document boundaries: %q", view)
 	}
+	app.Update(privacyKey("c"))
+	sharedView := ansi.Strip(app.View())
+	if !strings.Contains(sharedView, "Not encrypted") || !strings.Contains(sharedView, "self-reported") || !strings.Contains(sharedView, "public contribution") || strings.Contains(sharedView, "PRIVATE_CANARY") {
+		t.Fatalf("shared provenance/data boundary lost: %q", sharedView)
+	}
+	app.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if strings.Contains(app.nb.viewport.View(), "\x1b[2J") {
 		t.Fatal("note controls could erase UI labels")
 	}

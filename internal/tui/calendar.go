@@ -6,7 +6,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/pders01/sp/internal/editor"
@@ -225,7 +224,11 @@ func (c *Calendar) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if c.view == ViewYear {
 			context = "year"
 		}
-		c.keyHelp = newKeyHelp("Calendar · "+context, c.keyBindings(), c.focusLine()+"\n"+diagnosticDetails(c.theme.StatusText(), c.diagnostics), c.width, c.height)
+		details := c.focusLine()
+		if c.privacyEnabled {
+			details += "\nCalendar previews show shared text only; private notes stay hidden even while unlocked."
+		}
+		c.keyHelp = newKeyHelp("Calendar · "+context, c.keyBindings(), details+"\n"+diagnosticDetails(c.theme.StatusText(), c.diagnostics), c.width, c.height)
 		return c, nil
 	}
 	switch msg.String() {
@@ -357,22 +360,23 @@ func (c *Calendar) View() string {
 	}
 	title += privacyBadge(c.privacyEnabled, c.privacyState)
 	header := viewHeader(withIcon(c.icons.Calendar, title), c.theme.StatusText(), palette, c.width)
-	help := palette.Help.Render(wrappedHelp([]helpEntry{
+	footer := screenFooter([]helpEntry{
 		{keys: "enter", label: "open", visible: true},
 		{keys: "e", label: c.editLabel(), visible: !year},
-		{keys: "u", label: "unlock", visible: !year && c.privacyEnabled && !privacyIsUnlocked(c.privacyState)},
-		{keys: "Ctrl+L", label: "lock", visible: !year && c.canRelock && privacyIsUnlocked(c.privacyState)},
-		{keys: "Esc", label: "month", visible: year},
-		{keys: "a", label: "templates", visible: !year && c.templatesAvailable},
-		{keys: "d", label: "date", visible: c.dateJumpAvailable},
-		{keys: "?/F1", label: "help", visible: true},
+		{keys: "m/y", label: "month/year", visible: true},
+		{keys: "t", label: "today", visible: !year},
 		{keys: "q", label: "quit", visible: true},
-	}, c.width))
-	minHeight := viewHeight(header) + minBodyHeight + 2 + viewHeight(help)
+		{keys: "?/F1", label: "help", visible: true},
+	}, palette, c.width)
+	legend := ""
+	if year {
+		legend = palette.MutedText.Render("  Timeline · full month: ■ active range · none")
+	}
+	minHeight := viewHeight(header) + minBodyHeight + viewHeight(legend) + viewHeight(footer)
 	if c.width < minWidth || c.height < minHeight {
 		return smallTerminal("Calendar · "+c.cursor.Format(time.DateOnly), c.width, c.height, minWidth, minHeight, "F1: help · q: quit")
 	}
-	bodyHeight := c.height - viewHeight(header) - 2 - viewHeight(help)
+	bodyHeight := c.height - viewHeight(header) - viewHeight(legend) - viewHeight(footer)
 	var body string
 	if year {
 		body = c.renderYear(c.width, bodyHeight)
@@ -380,9 +384,12 @@ func (c *Calendar) View() string {
 		body = c.renderMonthLayout(c.width, bodyHeight)
 	}
 	bodyBlock := lipgloss.NewStyle().Width(c.width).Height(bodyHeight).Align(lipgloss.Center, lipgloss.Top).Render(body)
-	rule := palette.Separator.Render(strings.Repeat("─", c.width))
-	focus := palette.MutedText.Render(truncate(c.focusLine(), c.width))
-	return fitView(lipgloss.JoinVertical(lipgloss.Left, header, bodyBlock, focus, rule, help), c.width, c.height)
+	blocks := []string{header, bodyBlock}
+	if legend != "" {
+		blocks = append(blocks, legend)
+	}
+	blocks = append(blocks, footer)
+	return fitView(lipgloss.JoinVertical(lipgloss.Left, blocks...), c.width, c.height)
 }
 
 func (c *Calendar) focusLine() string {
@@ -393,7 +400,7 @@ func (c *Calendar) focusLine() string {
 	weekday := c.cursor.Format("Mon")
 	focus := fmt.Sprintf("Focus: %s (%s)", date, weekday)
 	if c.loadErrors[date] != "" {
-		return focus + " — entry unavailable"
+		return focus + " — entry unavailable: " + safeMarkdownDisplay(c.loadErrors[date])
 	}
 	if preview, ok := c.previews[date]; ok {
 		return focus + " — " + safeMarkdownDisplay(preview)
@@ -413,7 +420,10 @@ func (c *Calendar) renderMonthLayout(width, height int) string {
 	if height-calendarH-1 < minPreviewHeight {
 		return c.renderMonth(width, height)
 	}
-	cellH := clamp((height-weekHeaderRow-1-minPreviewHeight)/rows, minCellHeight, maxCellHeight)
+	// Prefer enough room for prose before growing mostly empty day cells.
+	// At narrow sizes retain the smaller excerpt rather than dropping it.
+	previewBudget := min(minPreviewHeight+2, height-calendarH-1)
+	cellH := clamp((height-weekHeaderRow-1-previewBudget)/rows, minCellHeight, maxCellHeight)
 	calendarH = weekHeaderRow + rows*cellH
 	previewH := height - calendarH - 1
 
@@ -442,37 +452,34 @@ func (c *Calendar) renderDocumentPreview(width, height int) string {
 
 	date := c.cursor.Format("2006-01-02")
 	title := fmt.Sprintf("Preview · %s · %s", date, c.cursor.Format("Monday"))
-	contentWidth := max(width-2, 0)
+	p := c.theme.Palette()
+	contentWidth := max(width-4, 0)
 	// Only the cached public projection belongs here. Rendering must not call a
 	// loader or decrypt private notes, even when the notebook is unlocked.
 	content := c.contents[date]
 	switch {
 	case c.loadErrors[date] != "":
-		content = c.theme.Palette().MutedText.Render("Entry unavailable: " + c.loadErrors[date])
+		content = "  " + p.MutedText.Render(truncate("Entry unavailable: "+oneLine(safeMarkdownDisplay(c.loadErrors[date])), contentWidth))
 	case strings.TrimSpace(content) == "":
 		message := "No entry for this day."
 		if c.privacyEnabled && c.privateDates[date] {
-			message = "Private note hidden. Press Enter to open."
+			message = "Private note hidden."
 		} else if c.hasData[date] {
 			message = "Entry is empty."
 			if c.privacyEnabled {
 				message = "Shared-only entry; no shared content."
 			}
 		}
-		content = c.theme.Palette().MutedText.Render(message)
+		content = "  " + p.MutedText.Render(truncate(message, contentWidth))
 	default:
 		if c.privacyEnabled {
 			title += " · shared"
-		}
-		renderer, err := glamour.NewTermRenderer(
-			glamour.WithStandardStyle(c.theme.Style()),
-			glamour.WithWordWrap(max(contentWidth-4, 1)),
-		)
-		if err == nil {
-			if rendered, renderErr := renderer.Render(safeMarkdownDisplay(content)); renderErr == nil {
-				content = strings.Trim(rendered, "\n")
+			if ansi.StringWidth(title) > contentWidth {
+				// The projection label matters more than an optional weekday.
+				title = fmt.Sprintf("Preview · %s · shared", date)
 			}
 		}
+		content = renderDocument(content, c.theme.Style(), width)
 	}
 
 	lines := strings.Split(content, "\n")
@@ -484,20 +491,23 @@ func (c *Calendar) renderDocumentPreview(width, height int) string {
 	for len(lines) > 0 && strings.TrimSpace(ansi.Strip(lines[len(lines)-1])) == "" {
 		lines = lines[:len(lines)-1]
 	}
-	available := max(height-2, 0)
-	hint := "Enter: full note"
-	if len(lines) > available {
+	available := max(height-1, 0)
+	clipped := len(lines) > available
+	if clipped {
+		// Only clipped excerpts need another open-note hint; ordinary previews
+		// already have the footer action and should prioritize the writing.
+		available = max(available-1, 0)
 		lines = lines[:available]
-		hint = "… · " + hint
 	}
-	body := c.theme.Palette().MutedText.Bold(true).Render(truncate(title, contentWidth))
+	body := "  " + p.Header.Render(truncate(title, contentWidth))
 	if available > 0 {
-		body += "\n" + fitView(strings.Join(lines, "\n"), contentWidth, available)
+		body += "\n" + fitView(strings.Join(lines, "\n"), width, available)
 	}
-	// Keep the full-note action visible even when the excerpt is clipped.
-	body = lipgloss.NewStyle().Height(max(height-1, 0)).Render(body)
-	body += "\n" + c.theme.Palette().MutedText.Render(truncate(hint, contentWidth))
-	return fitView(lipgloss.NewStyle().Width(width).Height(height).Padding(0, 1).Render(body), width, height)
+	if clipped && height > 1 {
+		body = lipgloss.NewStyle().Height(height - 1).Render(body)
+		body += "\n  " + p.MutedText.Render(truncate("… · Enter: full note", contentWidth))
+	}
+	return fitView(body, width, height)
 }
 
 // renderMonth renders a 7-column day grid sized to fill the given area.
@@ -659,28 +669,32 @@ func (c *Calendar) renderMonthTile(year int, month time.Month, w, h int) string 
 	if cursorMonth {
 		titleText = "▌ " + titleText + " ▐"
 	}
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(p.Text)
+	titleStyle := p.MutedText
+	if count > 0 {
+		titleStyle = p.Header
+	}
 	if cursorMonth {
-		titleStyle = titleStyle.Foreground(p.Highlight)
+		titleStyle = p.SelectedDate
 	}
 	titleLine := titleStyle.Render(titleText)
 
 	var summary string
 	switch count {
 	case 0:
-		summary = p.MutedText.Render("no entries")
+		// Empty months retain their position, not repeated diagnostic text.
 	case 1:
 		summary = lipgloss.NewStyle().Foreground(p.Accent).Render("1 entry")
 	default:
 		summary = lipgloss.NewStyle().Foreground(p.Accent).Render(fmt.Sprintf("%d entries", count))
 	}
 
-	spark := c.monthSparkline(first, last, w-4)
-
-	lines := []string{titleLine, summary}
-	if spark != "" {
-		lines = append(lines, spark)
+	spark := ""
+	if count > 0 {
+		spark = c.monthSparkline(first, last, w-4)
 	}
+
+	// Keep month headings aligned even when an empty tile has no summary.
+	lines := []string{titleLine, summary, spark}
 	content := lipgloss.JoinVertical(lipgloss.Center, lines...)
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, content)
 }

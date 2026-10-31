@@ -31,7 +31,7 @@ func TestViewerHelpOwnsKeysBeforePrivacyAndTemplateShortcuts(t *testing.T) {
 		if app.privateDate() != beforeDate || loads != beforeLoads || unlocks != 0 || applies != 0 || app.privacy.prompt != nil || app.privacy.editor != nil || app.templateChooser != nil {
 			t.Fatal("help forwarded an action to the underlying view")
 		}
-		if !strings.Contains(app.View(), "keys") {
+		if !strings.Contains(app.View(), "/ Help") {
 			t.Fatal("viewer did not show its key reference")
 		}
 		app.Update(rawPhysical(tea.KeyEsc))
@@ -58,7 +58,7 @@ func TestKeyHelpIsContextualAndLabelsHalfPageScrolling(t *testing.T) {
 	nb := NewNotebook([]string{"2026-01-01"})
 	defer nb.Close()
 	nb.Update(rawPhysical(tea.KeyF1))
-	for _, want := range []string{"half a page", "full page", "g/G", "newer/older", "no parent view"} {
+	for _, want := range []string{"half a page", "full page", "g/G", "earlier/later", "no parent view"} {
 		if !strings.Contains(nb.keyHelp.content, want) {
 			t.Fatalf("notebook help missing %q", want)
 		}

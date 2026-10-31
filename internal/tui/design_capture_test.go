@@ -57,30 +57,45 @@ func TestDesignCapture(t *testing.T) {
 		{"month", "Month calendar", "calendar", "2026-10", false},
 		{"year", "Year calendar", "calendar", "2026", false},
 		{"plain", "Plain notebook", "notebook", "Saturday field notes", false},
-		{"empty", "Empty notebook", "notebook", "", false},
+		{"empty", "Empty notebook", "notebook", "Start today's note", true},
+		{"plain-empty", "Saved empty personal note", "notebook", "This note is empty", true},
+		{"plain-shared", "Plain note with secondary shared updates available", "notebook", "Shared updates available", true},
 		{"private-month", "Locked private month calendar", "encrypted-calendar", "2026-10", false},
 		{"private-year", "Locked private year calendar", "encrypted-calendar", "2026", false},
-		{"locked", "Locked private note", "encrypted-notebook", "Locked.", true},
-		{"locked-shared", "Locked private note with shared updates", "encrypted-notebook", "Agent contributions", true},
+		{"locked", "Locked private note", "encrypted-notebook", "Note locked.", true},
+		{"locked-shared", "Locked private note with shared updates", "encrypted-notebook", "Shared updates available", true},
+		{"shared-updates-open", "Read-only shared updates", "shared-updates", "Not encrypted", true},
+		{"locked-with-shared-open", "Shared updates while private note is locked", "shared-updates", "Not encrypted", true},
+		{"shared-updates-help", "Shared updates key reference", "shared-updates", "Shared updates", true},
+		{"locked-with-shared-help", "Locked shared updates key reference", "shared-updates", "Shared updates", true},
 		{"unlocked", "Unlocked private note", "encrypted-notebook", "Saturday field notes", true},
-		{"unlocked-shared", "Unlocked private note with shared updates", "encrypted-notebook", "Private notes", true},
-		{"shared-only", "Shared updates without a private note", "encrypted-notebook", "Agent contributions", true},
-		{"load-error", "Private note load error", "encrypted-notebook", "synthetic archive unavailable", true},
+		{"unlocked-shared", "Unlocked private note with shared updates", "encrypted-notebook", "Shared updates available", true},
+		{"shared-only", "Shared updates without a private note", "encrypted-notebook", "No personal note", true},
+		{"private-empty", "Unlocked empty private note", "encrypted-notebook", "empty", true},
+		{"load-error", "Private note load error", "encrypted-notebook", "unavailable", true},
+		{"load-error-help", "Full private load error details", "encrypted-notebook", "synthetic archive unavailable", true},
 		{"unlock", "Unlock prompt", "unlock", "Passphrase:", true},
 		{"unlock-masked", "Unlock prompt with synthetic masked input", "unlock", "Passphrase:", true},
 		{"unlock-error", "Unlock rejected", "unlock", "Unlock failed", true},
-		{"unlock-busy", "Unlock in progress", "unlock", "Unlocking private notes", true},
+		{"unlock-busy", "Unlock in progress", "unlock", "Unlocking your notes", true},
 		{"unlock-cancelling", "Unlock cancellation pending", "unlock", "Cancelling unlock", true},
-		{"unlock-help", "Unlock key reference", "unlock", "Unlock private notes", true},
-		{"editor", "Private Markdown editor", "private-editor", "Private Markdown", true},
+		{"unlock-help", "Unlock key reference", "unlock", "Unlock notes", true},
+		{"editor", "Private Markdown editor", "private-editor", "Write · " + designCaptureDate, true},
+		{"editor-empty", "Empty private writer", "private-editor", "Write · " + designCaptureDate, true},
 		{"editor-dirty-cancel", "Private editor with unsaved cancellation", "private-editor", "Unsaved changes", true},
 		{"editor-find", "Find in private draft", "private-editor", "prototype", true},
-		{"editor-save-error", "Private save failed with encrypted recovery", "private-editor", "Save failed", true},
-		{"editor-conflict", "Private save conflict", "private-editor", "Save failed", true},
+		{"editor-save-error", "Private save failed with encrypted recovery", "private-editor", "Not saved", true},
+		{"editor-save-error-help", "Complete save error and recovery path", "private-editor", "synthetic storage unavailable", true},
+		{"editor-recovery-error", "Save and encrypted recovery both failed", "private-editor", "Recovery failed", true},
+		{"editor-recovery-error-help", "Complete recovery failure details", "private-editor", "synthetic recovery unavailable", true},
+		{"editor-durability-error", "Published save with unconfirmed durability", "private-editor", "durability", true},
+		{"editor-conflict", "Private save conflict", "private-editor", "F2: compare", true},
 		{"editor-review", "Private conflict comparison", "private-editor", "", true},
-		{"editor-help", "Private editor key reference", "private-editor", "Private editor", true},
+		{"editor-help", "Private editor key reference", "private-editor", "Write · " + designCaptureDate, true},
 		{"recovery-encrypted", "Encrypted recovery review", "recovery", "Saving encrypted", true},
 		{"recovery-plaintext", "Recovery under plaintext save policy", "recovery", "Saving as plaintext", true},
+		{"recovery-plaintext-save-error", "Plaintext recovery save failed", "recovery", "Saving as plaintext", true},
+		{"recovery-encrypted-save-error", "Encrypted recovery save failed", "recovery", "Saving encrypted", true},
 		{"templates", "Template chooser", "templates", "SAVE NOW", false},
 		{"templates-selected", "Selected templates", "templates", "SAVE NOW", false},
 		{"templates-applied", "Previously applied template selected again", "templates", "append again", false},
@@ -100,9 +115,9 @@ func TestDesignCapture(t *testing.T) {
 		// Set before constructors, including their initial auto resolution.
 		t.Setenv("GLAMOUR_STYLE", theme)
 		for _, scene := range scenes {
-			sizes := []tea.WindowSizeMsg{{Width: 100, Height: 30}}
+			sizes := []tea.WindowSizeMsg{{Width: 100, Height: 30}, {Width: 80, Height: 24}, {Width: 56, Height: 16}}
 			if scene.compact {
-				sizes = append(sizes, tea.WindowSizeMsg{Width: 80, Height: 24}, tea.WindowSizeMsg{Width: 56, Height: 16})
+				sizes = append(sizes, tea.WindowSizeMsg{Width: 40, Height: 12})
 			}
 			for _, size := range sizes {
 				id := fmt.Sprintf("%s-%s-%dx%d", scene.id, theme, size.Width, size.Height)
@@ -115,8 +130,31 @@ func TestDesignCapture(t *testing.T) {
 					if scene.id == "unlock-masked" && !strings.Contains(view, "•") {
 						t.Fatal("synthetic input was not visibly masked")
 					}
-					if (strings.HasPrefix(scene.id, "locked") || scene.group == "unlock") && strings.Contains(ansi.Strip(view), "Saturday field notes") {
-						t.Fatal("locked view exposed private note text")
+					plain := ansi.Strip(view)
+					if (strings.HasPrefix(scene.id, "locked") || scene.group == "unlock" || scene.group == "shared-updates") && strings.Contains(plain, "Saturday field notes") {
+						t.Fatal("locked or secondary view exposed private note text")
+					}
+					if scene.group == "shared-updates" && !strings.HasSuffix(scene.id, "help") && !strings.Contains(plain, "Resize terminal") {
+						for _, label := range []string{"Not encrypted", "self-reported", "read-only"} {
+							if !strings.Contains(strings.ToLower(plain), strings.ToLower(label)) {
+								t.Fatalf("shared view missing provenance label %q", label)
+							}
+						}
+					}
+					if scene.group == "recovery" && !strings.Contains(plain, "Resize terminal") {
+						policy := "Saving encrypted"
+						if strings.HasPrefix(scene.id, "recovery-plaintext") {
+							policy = "Saving as plaintext"
+						}
+						if !strings.Contains(plain, policy) {
+							t.Fatalf("recovery save policy hidden: %q", policy)
+						}
+					}
+					if size.Width >= 56 && !strings.Contains(plain, "Resize terminal") && !strings.Contains(plain, "sp / ") {
+						t.Fatal("view lost common branded location chrome")
+					}
+					if strings.HasSuffix(scene.id, "help") && !strings.Contains(view, "\x1b[38;2;") && !strings.Contains(view, "\x1b[48;2;") {
+						t.Fatal("help lost its themed palette")
 					}
 					if view != app.View() {
 						t.Fatal("View changed without an update")
@@ -131,7 +169,7 @@ func TestDesignCapture(t *testing.T) {
 						}
 					}
 					// Narrow views may deliberately use the production small-terminal fallback.
-					if size.Width == 100 && !strings.Contains(ansi.Strip(view), scene.want) {
+					if size.Width == 100 && !strings.Contains(strings.ToLower(strings.Join(strings.Fields(plain), " ")), strings.ToLower(strings.Join(strings.Fields(scene.want), " "))) {
 						t.Fatalf("frame missing scene marker %q", scene.want)
 					}
 					if ids[id] {
@@ -194,6 +232,9 @@ func designCaptureApp(t *testing.T, scene designCaptureScene, theme string, size
 			"2026-10-22":      "# Research\n\nCompare notebook navigation patterns.\n",
 			"2026-09-30":      "# September retrospective\n\nCarry the useful ideas forward.\n",
 		}
+		if scene.id == "plain-empty" {
+			contents[designCaptureDate] = ""
+		}
 		cal.SetContents(contents)
 		nb.SetContents(contents)
 		nb.SetCurrentDate(designCaptureDate)
@@ -212,52 +253,90 @@ func designCaptureApp(t *testing.T, scene designCaptureScene, theme string, size
 		app.Close()
 	})
 	app.Update(size) // No Init: in particular, no appearance subscription.
+	if scene.id == "plain-shared" {
+		app.SetSharedContents(map[string]string{designCaptureDate: designCaptureShared})
+	}
 	if scene.id == "year" || scene.id == "private-year" {
 		cal.view = ViewYear
 	}
 
+	privateLoads, privateSaves, privateUnlocks := 0, 0, 0
 	private := scene.group == "encrypted-calendar" || scene.group == "encrypted-notebook" ||
-		scene.group == "unlock" || scene.group == "private-editor" || scene.group == "recovery" || scene.group == "templates"
+		scene.group == "unlock" || scene.group == "private-editor" || scene.group == "recovery" || scene.group == "templates" || scene.group == "shared-updates"
 	if private {
 		locked := scene.group == "unlock" || scene.group == "encrypted-calendar" || strings.HasPrefix(scene.id, "locked")
 		page := PrivatePage{HasPrivate: true, Locked: locked}
 		if !locked {
 			page.Private = designCaptureNote
 		}
-		if strings.HasSuffix(scene.id, "-shared") || scene.id == "shared-only" {
+		if strings.HasSuffix(scene.id, "-shared") || scene.id == "shared-only" || scene.group == "shared-updates" {
 			page.Shared = designCaptureShared
 		}
 		if scene.id == "shared-only" {
 			page.Private, page.HasPrivate = "", false
+		}
+		if scene.id == "private-empty" || scene.id == "editor-empty" {
+			page.Private = ""
 		}
 		app.SetPrivacy(PrivacyHooks{
 			Inspect: func(string) (PublicPage, error) {
 				return PublicPage{Shared: page.Shared, HasPrivate: page.HasPrivate}, nil
 			},
 			IsUnlocked: func() bool { return !locked },
-			Unlock:     func([]byte) error { return errors.New("synthetic passphrase rejected") },
-			Lock:       func() {},
+			Unlock: func([]byte) error {
+				privateUnlocks++
+				return errors.New("synthetic passphrase rejected")
+			},
+			Lock: func() {},
 			Load: func(string) (PrivatePage, error) {
-				if scene.id == "load-error" {
+				privateLoads++
+				if strings.HasPrefix(scene.id, "load-error") {
 					return PrivatePage{}, errors.New("synthetic archive unavailable")
 				}
 				return page, nil
 			},
 			Save: func(string, string, string) error {
-				if scene.id == "editor-save-error" {
+				privateSaves++
+				if strings.Contains(scene.id, "save-error") || strings.HasPrefix(scene.id, "editor-recovery-error") {
 					return errors.New("synthetic storage unavailable")
+				}
+				if scene.id == "editor-durability-error" {
+					return scratchpad.ErrDurabilityUnconfirmed
 				}
 				if scene.id == "editor-conflict" || scene.id == "editor-review" {
 					return scratchpad.ErrConflict
 				}
 				return nil
 			},
-			Recover: func(string, string) (string, error) { return "/synthetic/recovery.age", nil },
+			Recover: func(string, string) (string, error) {
+				if strings.HasPrefix(scene.id, "editor-recovery-error") {
+					return "", errors.New("synthetic recovery unavailable")
+				}
+				return "/synthetic/recovery.age", nil
+			},
 		})
 	}
 	key := func(kind tea.KeyType) { app.Update(tea.KeyMsg{Type: kind}) }
 	runes := func(text string) { app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text)}) }
 	switch scene.group {
+	case "shared-updates":
+		loadsBefore := privateLoads
+		runes("c")
+		for _, blocked := range []string{"u", "e", "i", "a", "d", "h", "l"} {
+			runes(blocked)
+		}
+		key(tea.KeyEnter)
+		key(tea.KeyCtrlS)
+		if !nb.sharedActive() || privateLoads != loadsBefore || privateSaves != 0 || privateUnlocks != 0 || app.privacy.prompt != nil || app.privacy.editor != nil || app.templateChooser != nil || app.dateJump != nil || nb.GetCurrentPage() != designCaptureDate {
+			t.Fatal("secondary shared viewer forwarded a private load, edit, unlock, template, or date action")
+		}
+		if strings.HasSuffix(scene.id, "help") {
+			key(tea.KeyF1)
+		}
+	case "encrypted-notebook":
+		if scene.id == "load-error-help" {
+			key(tea.KeyF1)
+		}
 	case "unlock":
 		runes("u")
 		switch scene.id {
@@ -282,7 +361,7 @@ func designCaptureApp(t *testing.T, scene designCaptureScene, theme string, size
 			t.Fatal("private editor did not open")
 		}
 		switch scene.id {
-		case "editor-dirty-cancel", "editor-save-error", "editor-conflict", "editor-review":
+		case "editor-dirty-cancel", "editor-save-error", "editor-save-error-help", "editor-recovery-error", "editor-recovery-error-help", "editor-durability-error", "editor-conflict", "editor-review":
 			e.input.SetValue(designCaptureNote + "\nDraft: simplify the save feedback.\n")
 			if scene.id == "editor-dirty-cancel" {
 				key(tea.KeyEsc)
@@ -294,6 +373,10 @@ func designCaptureApp(t *testing.T, scene designCaptureScene, theme string, size
 						t.Fatal("conflict review did not open")
 					}
 				}
+				if strings.HasSuffix(scene.id, "help") {
+					key(tea.KeyF1)
+					key(tea.KeyEnd) // Full outcome/path details remain reachable.
+				}
 			}
 		case "editor-find":
 			key(tea.KeyCtrlF)
@@ -303,7 +386,7 @@ func designCaptureApp(t *testing.T, scene designCaptureScene, theme string, size
 		}
 	case "recovery":
 		policy := "Saving encrypted"
-		if scene.id == "recovery-plaintext" {
+		if strings.HasPrefix(scene.id, "recovery-plaintext") {
 			policy = "Saving as plaintext"
 		}
 		hooks := app.privacy.hooks
@@ -312,6 +395,9 @@ func designCaptureApp(t *testing.T, scene designCaptureScene, theme string, size
 			func(string) (string, error) { return designCaptureNote, nil }, policy)
 		e.resize(size.Width, size.Height)
 		app.privacy.editor = e
+		if strings.HasSuffix(scene.id, "save-error") {
+			key(tea.KeyCtrlS)
+		}
 	case "templates":
 		app.SetTemplates([]DayTemplate{
 			{ID: "daily", Name: "Daily reflection"},

@@ -1,7 +1,5 @@
 package tui
 
-import "strings"
-
 // Dates are ISO strings sorted descending. Prefer today, then the newest past
 // page, then the nearest future page. Startup never inserts or persists a page.
 func notebookStartIndex(pages []string, today string) int {
@@ -40,22 +38,16 @@ func (n *Notebook) emptyView() string {
 	if n.canPop {
 		back = "back"
 	}
-	controls := wrappedHelp([]helpEntry{
-		{keys: "Enter/e/i", label: "create today", visible: true},
-		{keys: "u", label: "unlock", visible: n.privacyEnabled && !privacyIsUnlocked(n.privacyState)},
-		{keys: "Ctrl+L", label: "lock", visible: n.canRelock && privacyIsUnlocked(n.privacyState)},
-		{keys: "d", label: "date", visible: n.dateJumpAvailable},
-		{keys: "?/F1", label: "help", visible: true},
+	footer := screenFooter([]helpEntry{
+		{keys: "Enter/e", label: "create today", visible: true},
 		{keys: "Esc", label: back, visible: true},
-		{keys: "q", label: "quit", visible: true},
-	}, n.width)
-	view := strings.Join([]string{
-		viewHeader("Notebook · "+n.today+privacyBadge(n.privacyEnabled, n.privacyState), n.theme.StatusText(), palette, n.width),
-		palette.MutedText.Render("No scratchpad pages found."), controls,
-	}, "\n")
-	minHeight := viewHeight(view)
+		{keys: "?/F1", label: "help", visible: true},
+	}, palette, n.width)
+	title := "Notebook · " + n.today + privacyBadge(n.privacyEnabled, n.privacyState)
+	body := "Start today's note\n\nNo personal note yet. Press Enter or e to begin."
+	minHeight := viewHeight(viewHeader(title, n.theme.StatusText(), palette, n.width)) + viewHeight(footer) + viewHeight(body)
 	if n.width < 24 || n.height < minHeight {
 		return smallTerminal("Notebook · "+n.today, n.width, n.height, 24, minHeight, "Enter/e: create · F1: help · q: quit")
 	}
-	return fitView(view, n.width, n.height)
+	return screenView(title, n.theme.StatusText(), insetNotebookBody(body), footer, palette, n.width, n.height)
 }

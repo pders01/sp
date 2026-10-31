@@ -5,6 +5,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type dateJumpPrompt struct {
@@ -112,19 +114,23 @@ func (p *dateJumpPrompt) view(palette Palette) string {
 	if p.keyHelp != nil {
 		return p.keyHelp.view(palette)
 	}
-	if p.width < 24 || p.height < 8 {
-		return smallTerminal("Jump to date", p.width, p.height, 24, 8, "F1: help · Esc: cancel")
-	}
-	controls := wrappedHelp([]helpEntry{
-		{keys: "Enter", label: "jump", visible: true},
+	innerWidth := max(1, p.width-4)
+	footer := screenFooter([]helpEntry{
+		{keys: "Enter", label: "select date", visible: true},
 		{keys: "Esc/Ctrl+C", label: "cancel", visible: true},
 		{keys: "F1", label: "help", visible: true},
-	}, p.width)
-	return fitView(strings.Join([]string{
-		viewHeader("Jump to date", p.err, palette, p.width),
-		"Current: " + p.current, "YYYY-MM-DD: " + p.input.View(),
-		controls, "Selection only; no note is saved.",
-	}, "\n"), p.width, p.height)
+	}, palette, p.width)
+	lines := []string{palette.Header.Render("Date · YYYY-MM-DD"), p.input.View()}
+	if p.err != "" {
+		lines = append(lines, palette.ErrorMessage.Render(ansi.Wrap(p.err, innerWidth, "")))
+	}
+	lines = append(lines, "", palette.MutedText.Render(ansi.Wrap("Selection only; no note is saved.", innerWidth, "")))
+	body := lipgloss.NewStyle().PaddingLeft(2).Render(strings.Join(lines, "\n"))
+	minHeight := 2 + viewHeight(body) + viewHeight(footer)
+	if p.width < 24 || p.height < minHeight {
+		return smallTerminal("Jump to date", p.width, p.height, 24, minHeight, "F1: help · Esc: cancel; no save")
+	}
+	return screenView("Jump to date · "+p.current, "", body, footer, palette, p.width, p.height)
 }
 
 func (a *App) updateDateJump(msg tea.Msg) (tea.Model, tea.Cmd) {

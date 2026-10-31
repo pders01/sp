@@ -46,10 +46,13 @@ func TestCalendarPreviewUXFrameMatrix(t *testing.T) {
 				assertFrameFits(t, view, size)
 				plain := ansi.Strip(view)
 				readable := strings.Join(strings.Fields(plain), " ")
-				for _, want := range []string{"Preview · " + month.date, "PUBLIC SECOND LINE", "Enter: full note", "Focus: " + month.date, "▌"} {
+				for _, want := range []string{"Preview · " + month.date, "PUBLIC SECOND LINE", "enter: open", "m/y: month/year", "▌"} {
 					if !strings.Contains(readable, want) {
 						t.Fatalf("missing %q:\n%s", want, plain)
 					}
+				}
+				if strings.Contains(plain, "Focus:") {
+					t.Fatal("default view duplicates focus details reserved for F1")
 				}
 				if cal.monthRows() != month.weeks || cal.CursorDate() != month.date {
 					t.Fatal("rendering changed month geometry or focus")
@@ -92,7 +95,7 @@ func TestCalendarPreviewUXAllocationAndCompleteWeeks(t *testing.T) {
 					if gridHeight < minimum || height-gridHeight-1 < minPreviewHeight {
 						t.Fatalf("height %d allocated grid %d without useful preview", height, gridHeight)
 					}
-					if !strings.Contains(layout, "PUBLIC SECOND LINE") {
+					if !strings.Contains(ansi.Strip(layout), "PUBLIC SECOND LINE") {
 						t.Fatalf("height %d lost useful preview text", height)
 					}
 				}
@@ -204,7 +207,7 @@ func TestCalendarPreviewUXPrivacyPublicProjectionOnly(t *testing.T) {
 				if loads != 0 || strings.Contains(view, "PRIVATE_CANARY") || !strings.Contains(readable, scenario.want) {
 					t.Fatalf("calendar failed public-only preview: loads=%d\n%s", loads, view)
 				}
-				if !strings.Contains(view, "Preview ·") || !strings.Contains(view, "Enter: full note") {
+				if !strings.Contains(view, "Preview ·") || !strings.Contains(view, "enter: open") {
 					t.Fatal("privacy controls crowded out the preview")
 				}
 				if scenario.shared != "" && !strings.Contains(view, "· shared") {

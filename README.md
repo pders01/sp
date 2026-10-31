@@ -15,8 +15,9 @@ with Go and the [charm.sh](https://charm.sh) toolchain.
 ## Features
 
 - Daily scratchpad: a fresh page per day, kept on disk forever
-- Explicitly opt-in private-note encryption, with separately displayed shared
-  contributions in the same daily file and a locked append CLI for tools
+- Explicitly opt-in private-note encryption, with a personal-note-first notebook,
+  separate read-only shared updates in the same daily file, and a locked append
+  CLI for tools
 - Three view modes that drill into one another:
   - Year / month calendar with per-day previews and entry sparklines
   - Notebook viewer with glamour-rendered markdown, scrubbable across
@@ -80,7 +81,15 @@ Enter/e/i starts today's note (unlocking first in privacy mode). Opening or
 quitting the empty viewer does not save a note. Reading positions are remembered
 per date for the current session, including calendar round-trips, and clamped
 when content or layout changes. The position cache holds offsets, not note text,
-and is not persisted.
+and is not persisted. Dates run left to right in ascending order: Left/h opens
+an earlier saved date, Right/l a later one.
+
+The primary notebook shows only your personal note. Press `c` in an ordinary
+calendar or notebook viewer to open separate, read-only **Shared updates** for
+that date—even while locked, without unlocking or loading the private note.
+Shared updates are labelled **Not encrypted**; provenance is self-reported, not
+verified authorship. `Esc` or `c` returns to the note with its reading offset
+preserved. If help is open, close that layer first; Escape closes help only.
 
 ### Opt-in privacy usage (privacy-aware builds)
 
@@ -112,10 +121,13 @@ plaintext editing; interrupted reversal resumes with the same command. It retain
 the wrapped key for encrypted backups/recovery files. Re-enabling uses the existing
 passphrase/key (one authentication entry, not creation/confirmation) and does not
 erase plaintext copies. Status labels plaintext as normal after disabling and
-states the retained-key backup obligation. Recovery labels **Saving encrypted**
-or **Saving as plaintext** throughout review; a concurrent store-policy change
-blocks saving until recovery is reopened. Interactive migration/reversal reports
-stage/count progress, not secrets. Raw shared reads and quiet append remain the
+states the retained-key backup obligation. The writer/recovery view keeps a
+**Saving encrypted** or **Saving as plaintext** caption visible; a concurrent
+store-policy change blocks recovery saving until recovery is reopened. Concise
+outcomes distinguish saved, unchanged, cancelled, not saved, and unconfirmed
+durability; F1 retains full error/recovery details. Newer edits after an
+unconfirmed publication are explicitly labelled unsaved. Interactive
+migration/reversal reports stage/count progress, not secrets. Raw shared reads and quiet append remain the
 default; `--json` is opt-in and contains shared data only. Passphrase rotation and MCP
 access are not implemented. See the [full guide](docs/privacy.md).
 
@@ -141,10 +153,12 @@ notebook.
 The tables below describe navigation; privacy-aware builds also provide `u` for
 masked unlock. Private previews are not automatically decrypted across history.
 
-Footers wrap essential actions to the terminal width. Press `?` or `F1` in a
-viewer or template chooser for a scrollable key reference and full status details.
+Shared `sp`/location chrome and branded Glamour headings unify the screens.
+Compact footers show fewer default actions; press `?` or `F1` in a viewer or
+template chooser for the full grouped, scrollable key reference and status details.
 In the built-in editor or TUI unlock prompt, use **F1 only**: `?` stays literal.
-The existing in-memory private editor opens at the start and provides Ctrl+Z/Y
+The in-memory private writer is titled **Write / date**, with themed help and
+conflict review. It opens at the start and provides Ctrl+Z/Y
 undo/redo (256 edits/16 MiB of history), Page Up/Down, Ctrl+Left/Right word movement,
 Ctrl+Home/End document movement, and Ctrl+F/F3 find within the current draft only.
 Find owns Enter/Escape and cannot save the note. Line/column and off-screen column
@@ -153,7 +167,10 @@ undo/search files, normalize Markdown, or settle the pending Neovim integration
 choice.
 Within help, `Esc`/`F1`/`q` closes only the reference; arrows, Page Up/Down, and
 `g`/`G` scroll it. Unsupported screen sizes show a resize hint without discarding
-notes, drafts, passphrases, or template selections.
+notes, drafts, passphrases, or template selections. The unlock prompt updates
+truthfully on resize and cannot submit a hidden form at unsupported sizes.
+Physical Ctrl+T cycles appearance in the private writer too, except while help
+or find owns the keys; literal/pasted text and lossless input remain unchanged.
 
 Press `d` in an ordinary viewer to jump to an exact `YYYY-MM-DD` date. Calendar
 jumps focus that day in month view; notebook jumps open the selected day and
@@ -177,6 +194,7 @@ search or archive-wide decryption; calendar jumps do not decrypt private notes.
 | `m` `y`            | switch to month / year view           |
 | `t`                | reset cursor to today                 |
 | `d`                | jump to an exact date in month view   |
+| `c`                | read shared updates for the day       |
 | `Ctrl+T`           | cycle theme: auto → light → dark      |
 | `?` `F1`           | key reference and status details      |
 | `Esc`              | year → month; quit from month view    |
@@ -196,7 +214,7 @@ in privacy mode and never trigger private decryption.
 
 | Key                  | Action                          |
 | -------------------- | ------------------------------- |
-| `←/h` `→/l`          | newer / older page              |
+| `←/h` `→/l`          | earlier / later saved date       |
 | `↑/k` `↓/j`          | scroll content                  |
 | `Ctrl+u` `Ctrl+d`    | half-page up / down             |
 | `b` `f` `pgup`/`pgdn`| full-page up / down             |
@@ -204,6 +222,7 @@ in privacy mode and never trigger private decryption.
 | `d`                  | jump to an exact date           |
 | `Enter` `e` `i`      | edit current page               |
 | `a`                  | choose template sections         |
+| `c`                  | read shared updates (Esc/c returns) |
 | `Esc` `Backspace`    | pop back to calendar (when -c)  |
 | `Ctrl+T`             | cycle theme                     |
 | `?` `F1`             | key reference and status details |
@@ -238,9 +257,11 @@ command = ["/path/to/issue-template", "--markdown"]
 
 `auto` resolves via `GLAMOUR_STYLE` → `COLORFGBG` → terminal
 detection → macOS `AppleInterfaceStyle`. Send `SIGUSR1` (`pkill -USR1
-sp`) to re-detect after a manual switch. Calendar/notebook share one application
-appearance preference. Ctrl+T acknowledges preference changes even if the resolved
-colors stay the same; changes are session-only and do not rewrite `config.toml`.
+sp`) to re-detect after a manual switch. Calendar/notebook and private writer
+share the application appearance preference; standalone private editing/recovery
+also honors the configured theme. Ctrl+T acknowledges preference changes even
+if the resolved colors stay the same; changes are session-only and do not rewrite
+`config.toml`.
 
 Press `a` on a day to open the multi-select template chooser. Markdown files
 and command stdout become separate `##` sections; commands receive the selected
@@ -268,10 +289,12 @@ template remains opt-in like every configured template.
 ## Editor support
 
 **Legacy plaintext mode only:** privacy mode uses the built-in in-memory editor,
-not an external editor. Viewer private/shared sections are independently rendered
-under UI-level labels, so note Markdown cannot consume the shared provenance
-boundary; empty shared areas stay hidden. External editor plugins, swap files,
-and backups have no privacy guarantee. See [private editing and recovery](docs/privacy.md#edit-failures-recovery-and-backups).
+not an external editor. The notebook's personal note and separate read-only
+shared updates are independently rendered under application-owned labels, so
+note Markdown cannot consume the shared provenance boundary. The custom lossless
+input is unchanged by the redesign. Neovim/external-private-editor integration
+remains unresolved; no plaintext fallback is introduced. External editor plugins,
+swap files, and backups have no privacy guarantee. See [private editing and recovery](docs/privacy.md#edit-failures-recovery-and-backups).
 
 In legacy mode, an explicit edit resolves the editor via `$EDITOR`, then `$VISUAL`, then
 platform-specific fallbacks (vim, nvim, nano, micro, emacs, code,
@@ -385,7 +408,8 @@ make test        # all packages
 make test-race   # race detector
 make privacy-terminal # POSIX PTY enable/edit/recover checks; synthetic stores only
 make ux-terminal      # integrated reader/editor/template/privacy UX; synthetic stores only
-make design-capture   # synthetic view PNGs and labelled design concepts; ImageMagick required
+make design-terminal  # 4 synthetic PTY cases: dark/light × 100x30/56x16
+make design-capture   # 402 actual frames / 53 scenes + historical concepts; needs ImageMagick
 make privacy-fuzz     # bounded parser/append fuzz campaigns
 make vuln             # reachable dependency advisories
 make coverage    # writes coverage.html
@@ -400,9 +424,16 @@ Lint is pinned to `golangci-lint v2.5.0` (v2 configuration for Go 1.25 support).
 Workflow configuration is not evidence that a remote run has passed.
 See `RELEASE.md` for the GoReleaser flow.
 
-The [visual design study](docs/design/2026-10-31/README.md) compares current
-screens with a proposed calmer notebook, secondary shared updates, and
-chronological navigation. Concepts are not implemented application behavior.
+The cohesive TUI redesign is implemented: personal-note-first reading, secondary
+shared updates, ascending date navigation, and shared reader/writer chrome.
+`make design-capture` captures 402 actual application frames across 53 synthetic
+scenes alongside labelled historical concepts from the
+[visual design study](docs/design/2026-10-31/README.md); concept images are not
+runtime evidence.
+
+Full normal tests and vet previously passed. Final redesign race/PTY validation
+and matching hashes/evidence are in progress and will be recorded separately.
+No native GUI/Windows, accessibility, audit, or release sign-off is implied.
 
 ## License
 

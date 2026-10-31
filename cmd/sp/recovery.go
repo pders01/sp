@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/pders01/sp/internal/config"
 	"github.com/pders01/sp/internal/editor"
 	"github.com/pders01/sp/internal/scratchpad"
 	"github.com/pders01/sp/internal/tui"
@@ -78,9 +77,9 @@ func newRecoverCommand(factory managerFactory) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				cfg := config.Default()
+				cfg, notices := loadUIConfiguration()
 				return runApp(mgr, ed, tui.NewIconSet(cfg.UI.Icons), cfg,
-					appStartup{recovery: &scratchpad.RecoveryReference{Date: plaintextDate, Path: path}})
+					appStartup{recovery: &scratchpad.RecoveryReference{Date: plaintextDate, Path: path}, notices: notices})
 			}
 			prompt, err := newTerminalPrompt(cmd.InOrStdin(), cmd.ErrOrStderr())
 			if err != nil {
@@ -107,7 +106,9 @@ func newRecoverCommand(factory managerFactory) *cobra.Command {
 				return err
 			}
 			fmt.Fprintln(cmd.ErrOrStderr(), policy+". Review before saving: this replaces private Markdown, not an automatic merge. The recovery file is retained.")
-			return tui.EditRecoveredPrivateWithPolicy(recovery.Date, current.Content, recovery.Content, makePolicySaver(mgr, policy == "Saving encrypted"), mgr.SealRecovery, makeLoader(mgr), policy)
+			cfg, notices := loadUIConfiguration()
+			printConfigurationNotices(cmd.ErrOrStderr(), notices)
+			return tui.EditRecoveredPrivateWithPolicy(recovery.Date, current.Content, recovery.Content, makePolicySaver(mgr, policy == "Saving encrypted"), mgr.SealRecovery, makeLoader(mgr), policy, cfg.UI.Theme)
 		},
 	}
 	cmd.Flags().BoolVar(&list, "list", false, "List recovery paths without unlocking or reading note text")

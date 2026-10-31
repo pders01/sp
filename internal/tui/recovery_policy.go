@@ -11,6 +11,10 @@ func recoveredPrivateEditor(date, current, recovered string, save Saver, sealRec
 // EditRecoveredPrivateWithPolicy keeps an explicit save-policy caption visible
 // independently of transient errors: encrypted artifacts can be reviewed after
 // disabling privacy, when the resulting daily note will be plaintext.
-func EditRecoveredPrivateWithPolicy(date, current, recovered string, save Saver, sealRecovery func(string, string) (string, error), load func(string) (string, error), policy string) error {
-	return runPrivateEditor(recoveredPrivateEditor(date, current, recovered, save, sealRecovery, load, policy))
+func EditRecoveredPrivateWithPolicy(date, current, recovered string, save Saver, sealRecovery func(string, string) (string, error), load func(string) (string, error), policy string, preference ...string) error {
+	model := recoveredPrivateEditor(date, current, recovered, save, sealRecovery, load, policy)
+	if len(preference) > 0 {
+		model.theme.SetPref(preference[0])
+	}
+	return runPrivateEditor(model)
 }

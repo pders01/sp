@@ -43,9 +43,47 @@ func oneLine(text string) string {
 }
 
 func viewHeader(title, status string, palette Palette, width int) string {
-	// Reserve the status row so transient messages do not move the document.
-	return palette.Header.Render(truncate(oneLine(title), width)) + "\n" +
-		palette.MutedText.Render(truncate(oneLine(status), width))
+	// A fixed two-row shell keeps feedback from moving the document. The
+	// quiet rule becomes an outcome row when there is something to report.
+	heading := palette.Header.Render("sp") + palette.MutedText.Render(" / ") + palette.Title.Render(oneLine(title))
+	second := palette.Separator.Render(strings.Repeat("─", max(0, width)))
+	if status != "" {
+		second = statusStyle(status, palette).Render(truncate(oneLine(safeMarkdownDisplay(status)), width))
+	}
+	return truncate(heading, width) + "\n" + second
+}
+
+// screenFooter keeps secondary shortcuts in help instead of filling the page
+// with instructions. Callers still own which actions are available in context.
+func screenFooter(entries []helpEntry, palette Palette, width int) string {
+	return palette.Separator.Render(strings.Repeat("─", max(0, width))) + "\n" + palette.Help.Render(wrappedHelp(entries, width))
+}
+
+// screenView is the common, bounded shell for forms and secondary views.
+// The body is already projected for display; no stored/input bytes change here.
+func screenView(title, status, body, footer string, palette Palette, width, height int) string {
+	header := viewHeader(title, status, palette, width)
+	minimum := viewHeight(header) + viewHeight(footer) + 1
+	if width < 24 || height < minimum {
+		return smallTerminal(title, width, height, 24, minimum, "F1: help · Esc: return")
+	}
+	bodyHeight := height - viewHeight(header) - viewHeight(footer)
+	return fitView(lipgloss.JoinVertical(lipgloss.Left, header,
+		lipgloss.NewStyle().Height(bodyHeight).Render(fitView(body, width, bodyHeight)), footer), width, height)
+}
+
+// Metadata is not note content. Error words reinforce color so outcomes remain
+// understandable in monochrome terminals and without color perception.
+func statusStyle(status string, palette Palette) lipgloss.Style {
+	lower := strings.ToLower(status)
+	switch {
+	case strings.Contains(lower, "failed"), strings.Contains(lower, "unavailable"), strings.Contains(lower, "cannot "), strings.Contains(lower, "not saved"), strings.Contains(lower, "rejected"):
+		return palette.ErrorMessage
+	case strings.Contains(lower, "unconfirmed"), strings.Contains(lower, "unsaved"), strings.Contains(lower, "plaintext"), strings.Contains(lower, "cancel"):
+		return lipgloss.NewStyle().Foreground(palette.Highlight)
+	default:
+		return palette.MutedText
+	}
 }
 
 func smallTerminal(title string, width, height, minWidth, minHeight int, controls string) string {

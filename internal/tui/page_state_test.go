@@ -15,13 +15,13 @@ func TestPrivatePageStatesDistinguishHiddenAbsentSharedAndUnavailable(t *testing
 		want   string
 		absent []string
 	}{
-		{"hidden", PrivatePage{Locked: true, HasPrivate: true}, "Locked. Press u", []string{"No entry", "unavailable"}},
-		{"absent locked", PrivatePage{Locked: true}, "No entry for this day", []string{"Locked.", "# Private notes", "Agent contributions"}},
-		{"absent unlocked", PrivatePage{}, "No entry for this day", []string{"Locked.", "# Private notes", "Agent contributions"}},
-		{"shared-only locked", PrivatePage{Locked: true, Shared: "public bullet"}, "Agent contributions · shared", []string{"Locked.", "No entry", "# Private notes"}},
-		{"shared-only unlocked", PrivatePage{Shared: "public bullet"}, "public bullet", []string{"Locked.", "No entry", "# Private notes"}},
-		{"empty private", PrivatePage{HasPrivate: true}, "Private note is empty", []string{"No entry", "Locked.", "Agent contributions"}},
-		{"unavailable", PrivatePage{LoadError: "damaged document"}, "Private note unavailable: damaged document", []string{"No entry", "Locked.", "is empty"}},
+		{"hidden", PrivatePage{Locked: true, HasPrivate: true}, "Note locked. Press u", []string{"No personal note", "unavailable"}},
+		{"absent locked", PrivatePage{Locked: true}, "No personal note for this day", []string{"Note locked.", "# Private notes", "Agent contributions"}},
+		{"absent unlocked", PrivatePage{}, "No personal note for this day", []string{"Note locked.", "# Private notes", "Agent contributions"}},
+		{"shared-only locked", PrivatePage{Locked: true, Shared: "public bullet"}, "No personal note for this day", []string{"Note locked.", "public bullet", "# Private notes"}},
+		{"shared-only unlocked", PrivatePage{Shared: "public bullet"}, "No personal note for this day", []string{"Note locked.", "public bullet", "# Private notes"}},
+		{"empty private", PrivatePage{HasPrivate: true}, "This note is empty", []string{"No personal note", "Note locked.", "Agent contributions"}},
+		{"unavailable", PrivatePage{LoadError: "damaged document"}, "Personal note unavailable: damaged document", []string{"No personal note", "Note locked.", "is empty"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			n := NewNotebook(nil)
@@ -72,7 +72,7 @@ func TestPrivateCalendarUsesPublicPresenceWithoutDecrypting(t *testing.T) {
 			t.Fatal("short calendar focus did not identify hidden private content")
 		}
 		app.cal.SetCursor(sharedDate)
-		if view := app.View(); !strings.Contains(view, "public contribution") || !strings.Contains(view, "shared") {
+		if view := app.View(); !strings.Contains(view, "public contribution") || !strings.Contains(strings.ToLower(view), "shared") {
 			t.Fatal("shared-only preview was not available or labelled")
 		}
 		app.cal.SetCursor(absentDate)
@@ -94,7 +94,7 @@ func TestPrivatePageLoadErrorsAreNotPresentedAsLockedOrEmpty(t *testing.T) {
 	store.loadErr = errors.New("damaged document")
 	app.refreshPrivatePage()
 	view := app.View()
-	if !strings.Contains(view, "Private note unavailable") || strings.Contains(view, "PRIVATE_ORIGINAL") || strings.Contains(view, "Locked.") || strings.Contains(view, "No entry") {
+	if !strings.Contains(view, "Personal note unavailable") || strings.Contains(view, "PRIVATE_ORIGINAL") || strings.Contains(view, "Locked.") || strings.Contains(view, "No entry") {
 		t.Fatalf("failed private load has misleading state: %q", view)
 	}
 	app.canPop = true

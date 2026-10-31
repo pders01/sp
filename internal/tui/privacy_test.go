@@ -21,8 +21,8 @@ func TestRenderPrivatePageOmitsEmptySharedSection(t *testing.T) {
 		want string
 	}{
 		{"unlocked", PrivatePage{Private: "private text"}, "private text"},
-		{"locked", PrivatePage{Locked: true, HasPrivate: true}, "Locked. Press u to unlock private notes."},
-		{"empty", PrivatePage{HasPrivate: true}, "Private note is empty"},
+		{"locked", PrivatePage{Locked: true, HasPrivate: true}, "Note locked. Press u to unlock."},
+		{"empty", PrivatePage{HasPrivate: true}, "This note is empty"},
 	} {
 		for _, shared := range []struct {
 			name    string
@@ -42,12 +42,8 @@ func TestRenderPrivatePageOmitsEmptySharedSection(t *testing.T) {
 				if !strings.Contains(got, private.want) {
 					t.Fatalf("private area = %q, want %q", got, private.want)
 				}
-				if shared.name == "present" {
-					if !strings.Contains(got, "Agent contributions · shared") || !strings.Contains(got, "shared contribution") {
-						t.Fatal("populated shared area was hidden")
-					}
-				} else if strings.Contains(got, "Agent contributions") {
-					t.Fatal("empty shared area was rendered")
+				if strings.Contains(got, "Agent contributions") || strings.Contains(got, "shared contribution") {
+					t.Fatal("primary note renderer mixed in the secondary shared document")
 				}
 			})
 		}
@@ -250,9 +246,14 @@ func TestLegacySharedProjectionDoesNotChangeEditablePrivateText(t *testing.T) {
 	app.nb.SetContents(map[string]string{date: "legacy private text"})
 	app.SetSharedContents(map[string]string{date: "shared contribution"})
 	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	if !strings.Contains(app.View(), "shared contribution") || !strings.Contains(app.View(), "legacy private text") {
-		t.Fatal("legacy notebook did not project both areas")
+	if strings.Contains(app.View(), "shared contribution") || !strings.Contains(app.View(), "legacy private text") || !strings.Contains(app.View(), "Shared updates available") {
+		t.Fatal("legacy notebook did not keep the note primary with a shared affordance")
 	}
+	app.Update(privacyKey("c"))
+	if !strings.Contains(app.View(), "shared contribution") || strings.Contains(app.View(), "legacy private text") || !strings.Contains(app.View(), "Not encrypted") {
+		t.Fatal("secondary shared view mixed documents or hid its policy")
+	}
+	app.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if _, content := app.nb.CurrentContent(); content != "legacy private text" {
 		t.Fatal("shared projection changed private editing baseline")
 	}

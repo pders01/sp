@@ -80,6 +80,8 @@ With Go 1.25.13 or newer:
 go test -race ./...
 make privacy-terminal  # POSIX only, fresh synthetic homes; never your real store
 make ux-terminal       # reader/template/relock/policy-race PTYs; synthetic only
+make design-terminal   # 4 synthetic PTY cases: dark/light × 100x30/56x16
+make design-capture    # 402 actual frames across 53 scenes + historical concepts
 make privacy-fuzz      # two workers, 20 seconds per target, 64 KiB inputs
 make vuln              # scanner built with the selected project toolchain
 ```
@@ -90,7 +92,49 @@ a provider restriction. Terminal results are redacted and transcripts are not
 saved. Preserve explicit distinctions between zero reachable advisories and
 advisories elsewhere in imported/required dependencies.
 
-### Local UX integration evidence
+### Cohesive redesign: completed local validation
+
+The redesign is implemented, separately from the completed 40-item UX backlog.
+Full normal/race suites, vet and build pass. Eleven privacy-terminal checks,
+seven UX-terminal workflow groups and four design-terminal cases pass against
+candidate SHA256 `66f48da4436924971a1464e4450276e398f798aede46a13eb8a4c95f13ddecbb`.
+Fixtures under `.privacy-adversarial/`: `terminal-8310617f7b547ee5`,
+`ux-terminal-b3de89c7f3019043`, and `design-terminal-b39d8d38b2860f0e`.
+No transcript was saved. Windows amd64 cross-compilation passes; it is not native
+Windows execution. The historical hash in the next section is a different build.
+
+`make design-terminal` supplies four synthetic PTY cases: dark and light at
+100x30 and 56x16. `make design-capture` produces 402 actual application frames
+across 53 scenes, alongside labelled historical concepts (ImageMagick required).
+All 402 production frames export under the race detector and render to the local
+gallery. Six Python capture-tool tests pass. Concepts are historical design
+studies, not actual frames or runtime acceptance evidence.
+
+For final-candidate verification, check:
+
+- The primary notebook contains only the personal note. Ordinary viewer `c`
+  opens read-only shared updates while locked with no unlock or private load;
+  **Not encrypted** and self-reported provenance remain visible. Esc/c returns
+  to the note and its offset; help closes first rather than navigating behind it.
+- Left/h selects earlier saved dates, Right/l later dates, with an ascending
+  strip, today-first startup, and preserved per-date positions.
+- Shared `sp`/location chrome, branded Glamour headings, compact default actions,
+  and full grouped F1 help appear consistently. The private writer uses
+  **Write / date**, themed help/review, and the configured standalone theme.
+  Physical Ctrl+T changes appearance except when help/find owns the keys;
+  custom lossless input, literal/paste behavior, and crypto contracts are intact.
+- Saving encrypted/plaintext captions remain visible. Concise outcomes retain
+  full F1 details; recovery failure keeps the editor open, and newer edits after
+  an unconfirmed publication are explicitly unsaved, not labelled saved.
+- Unlock responds truthfully to resize, preserves masked input, and cannot
+  submit an invisible form at unsupported dimensions.
+
+Use only isolated synthetic stores. These checks do not settle the unresolved
+Neovim/external-private-editor policy or authorize a plaintext fallback. No
+native GUI/Windows execution, accessibility review, audit, or release sign-off
+is implied by implementation completion or synthetic captures.
+
+### Historical local UX integration evidence (before the redesign)
 
 The remaining-UX batch passed full unit/race suites and vet, the existing 11
 privacy-terminal checks, and seven new `make ux-terminal` workflow groups on
@@ -132,10 +176,10 @@ Do not implement fault injection by attacking the host.
 | Payload preservation | Trusted harness compares protected private payload before/after shared append; it is unchanged. Private plaintext is not decrypted just to update shared content. |
 | Concurrency | Concurrent cooperating appends preserve distinct bullets and dedup exact repeats. Test append versus private save and migration; full read-modify-write locking and revision checks prevent lost updates/stale overwrite, or surface a conflict. |
 | Tampering | On disposable copies, corrupt ciphertext, edit shared/provenance/public metadata, delete notes, and replay valid older records. Corrupt encrypted payload must fail authentication; public edits and valid rollback are not claimed to be cryptographically prevented. Record actual validation errors. |
-| TUI | Locked calendar/notebook does not preload private previews; `u` masks unlock; only current-page private reads decrypt lazily. Calendar Enter opens notebook; private edit uses the built-in editor, not `$EDITOR`. Verify displayed bindings against the candidate build. |
+| TUI | Locked calendar/notebook does not preload private previews; `u` masks unlock; only current-page private reads decrypt lazily. Calendar Enter opens notebook; private edit uses the built-in editor, not `$EDITOR`. Ordinary viewer `c` opens separate shared-only updates without unlock/private Load; Esc/c restores the note offset and help closes first. Verify displayed bindings against the candidate build. |
 | Editor isolation | A harmless external-editor sentinel in the fixture must not be invoked for privacy edits. Check authorized fixture temp files/logs for private canaries, but report that a scan cannot prove no plaintext copies ever existed. |
 | Recovery | Inject save conflict/failure, then recovery failure, through controlled test hooks. Successful private recovery is encrypted to the public recipient; failure keeps in-memory edits available for retry and does not report a nonexistent recovery file. Verify retained text through the trusted harness. |
-| Durability | Exercise pre-publication and post-replacement sync errors. Distinguish failed save from replacement whose crash durability is unconfirmed. Do not promise rollback after publication. |
+| Durability | Exercise pre-publication and post-replacement sync errors. Distinguish failed save from replacement whose crash durability is unconfirmed. New edits after an unconfirmed publication must be labelled unsaved. Do not promise rollback after publication. |
 | Process scope | A second fresh SP process remains locked; no key/passphrase is persisted in config, args, or environment. Closing/reopening requires unlock. No claim that Go erased every old memory copy. |
 | Backup | Restore daily files with matching global metadata and trusted passphrase in isolation. Demonstrate that removing the identity backup or withholding the passphrase prevents private recovery. Keep a usable baseline outside the attacker's scope. |
 

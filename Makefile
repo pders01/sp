@@ -1,4 +1,4 @@
-.PHONY: all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal ux-terminal design-capture privacy-fuzz vuln
+.PHONY: all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal ux-terminal design-terminal design-capture privacy-fuzz vuln
 
 # Variables
 BINARY_NAME=sp
@@ -119,6 +119,12 @@ ux-terminal:
 	@mkdir -p .privacy-adversarial
 	@go build -o .privacy-adversarial/sp-ux-validation $(MAIN_PATH)
 	@python3 scripts/ux-terminal/main.py --binary .privacy-adversarial/sp-ux-validation
+
+## design-terminal: Exercise chronological/read-only/encrypted redesign flows in synthetic POSIX terminals
+design-terminal:
+	@mkdir -p .privacy-adversarial
+	@go build -o .privacy-adversarial/sp-design-validation $(MAIN_PATH)
+	@python3 -B scripts/design-terminal/main.py --binary .privacy-adversarial/sp-design-validation
 
 ## design-capture: Render synthetic TUI frames and separate static design concepts (ImageMagick required)
 design-capture:

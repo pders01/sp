@@ -46,6 +46,7 @@ type templateChooser struct {
 	cancelRequested bool
 	attempt         *templateApplyAttempt
 	feedback        string // Persistent until another attempt or the chooser is dismissed.
+	outcome         string // Short visible policy/outcome; feedback retains the full diagnostic for F1.
 	emptySelection  bool
 	keyHelp         *keyHelp
 }
@@ -180,6 +181,7 @@ func (a *App) updateTemplateChooser(msg tea.Msg) (tea.Model, tea.Cmd) {
 		chooser.cancel = cancel
 		chooser.cancelRequested = false
 		chooser.feedback = ""
+		chooser.outcome = ""
 		chooser.emptySelection = false
 		a.setTemplatePersistentStatus("")
 		attempt := &templateApplyAttempt{done: make(chan struct{})}
@@ -242,22 +244,28 @@ func (a *App) finishTemplateApply(msg templateAppliedMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	if msg.err != nil {
-		var text string
+		var text, outcome string
 		switch {
 		case published && errors.Is(msg.err, scratchpad.ErrDurabilityUnconfirmed):
+			outcome = "Saved; durability unconfirmed. Check storage before retrying: Enter appends another copy."
 			text = fmt.Sprintf("Templates saved, but durability is unconfirmed: %v. Check storage before retrying; Enter appends another copy, Esc closes.", msg.err)
 		case published:
+			outcome = "Published with an error. Check saved content before retrying: Enter appends another copy."
 			text = fmt.Sprintf("Templates published, but application reported an error: %v. Check saved content before retrying; Enter appends another copy, Esc closes.", msg.err)
 		case errors.Is(msg.err, context.Canceled):
+			outcome = "Cancelled before publication. Selections retained; Enter retries."
 			text = "Template application cancelled before publication. Selections retained; Enter retries, Space changes selection, Esc closes."
 		default:
+			outcome = "Not saved. Selections retained; resolve the error, then Enter retries."
 			text = fmt.Sprintf("Templates not saved: %v. Resolve the error, then Enter retries; Space changes selection, Esc closes.", msg.err)
 		}
 		if cancelRequested && published {
 			text = "Cancellation after commit: insertion was not undone. Editor not opened. " + text
+			outcome = "Cancellation after commit: insertion not undone; editor not opened. " + outcome
 		}
 		if chooser != nil {
 			chooser.feedback = text
+			chooser.outcome = outcome
 			chooser.keyHelp = nil // The outcome must not remain hidden behind help.
 		}
 		a.setTemplatePersistentStatus(text)
@@ -348,41 +356,45 @@ func (a *App) renderTemplateChooser() string {
 		return chooser.keyHelp.view(palette)
 	}
 	innerWidth := max(1, width-4)
-	footer := wrappedHelp(chooser.bindings(), innerWidth)
+	footer := screenFooter([]helpEntry{
+		{keys: "↑/↓", label: "move", visible: !chooser.applying},
+		{keys: "Space", label: "select", visible: !chooser.applying},
+		{keys: "Enter", label: "SAVE NOW", visible: !chooser.applying},
+		{keys: "Esc", label: "close", visible: !chooser.applying},
+		{keys: "Esc", label: "request cancel", visible: chooser.applying},
+		{keys: "?/F1", label: "help", visible: true},
+	}, palette, width)
+	wrap := func(text string) string { return ansi.Wrap(displayText(text), innerWidth, "") }
+	lines := []string{
+		lipgloss.NewStyle().Foreground(palette.Highlight).Bold(true).Render(wrap("SAVE NOW: saves before editing. Editor cancel does not undo insertion.")),
+		palette.MutedText.Render(wrap("[applied] = history; select to append again (another copy).")),
+	}
 	if chooser.applying {
-		phase := "Saving templates…"
+		phase := "Saving templates… Esc requests cancellation; waiting for the outcome."
 		if chooser.cancelRequested {
 			phase = "Cancellation requested; waiting for outcome. Saved insertion is not undone."
 		}
-		footer = ansi.Wrap(phase, innerWidth, "") + "\n" + footer
+		lines = append(lines, palette.MutedText.Render(wrap(phase)))
 	}
-	boundary := ansi.Wrap("SAVE NOW: saves before editing. Editor cancel does not undo insertion.", innerWidth, "")
-	hint := ansi.Wrap("[applied] = history; select to append again (another copy).", innerWidth, "")
-	// Padding, header, instructions, gap, footer. Always reserve one option row.
-	chromeHeight := 4 + viewHeight(boundary) + viewHeight(hint) + viewHeight(footer)
+	if chooser.emptySelection {
+		lines = append(lines, palette.ErrorMessage.Render(wrap("Nothing selected. Use Space to select sections.")))
+	}
+	if chooser.feedback != "" {
+		if chooser.outcome != "" {
+			lines = append(lines, palette.ErrorMessage.Render(wrap(chooser.outcome)))
+		}
+		// The full error stays verbatim in F1. Never let a long storage error
+		// displace the publication warning, selected option or next action.
+		lines = append(lines, palette.MutedText.Render(truncate(oneLine(chooser.feedback), max(0, innerWidth-19))+" · F1: full details"))
+	}
+	lines = append(lines, "")
+	// Two header rows, fixed instructions/outcome, footer and one option.
+	chromeHeight := 2 + viewHeight(strings.Join(lines, "\n")) + viewHeight(footer)
 	minHeight := chromeHeight + 1
-	feedbackText := chooser.feedbackText()
-	if feedbackText != "" {
-		minHeight++
-	}
 	if width < 30 || height < minHeight {
 		return smallTerminal("Templates · SAVE NOW", width, height, 30, minHeight, "F1: details/help · Esc: close/request cancel")
 	}
-	lines := []string{
-		palette.Header.Render(truncate(fmt.Sprintf("Templates · %s · %d/%d", chooser.date, chooser.cursor+1, len(a.templates)), innerWidth)),
-		palette.MutedText.Render(boundary),
-		palette.MutedText.Render(hint),
-	}
-	feedbackHeight := 0
-	if feedbackText != "" {
-		feedback := strings.Split(ansi.Wrap(displayText(feedbackText), innerWidth, ""), "\n")
-		feedbackHeight = min(len(feedback), min(3, height-chromeHeight-1))
-		if feedbackHeight < len(feedback) {
-			feedback[feedbackHeight-1] = truncate(feedback[feedbackHeight-1], max(0, innerWidth-19)) + " … F1: full details"
-		}
-		lines = append(lines, palette.MutedText.Render(strings.Join(feedback[:feedbackHeight], "\n")))
-	}
-	start, end := chooser.visibleRange(len(a.templates), height-chromeHeight-feedbackHeight)
+	start, end := chooser.visibleRange(len(a.templates), height-chromeHeight)
 	for i := start; i < end; i++ {
 		option := a.templates[i]
 		marker := "[ ]"
@@ -406,8 +418,9 @@ func (a *App) renderTemplateChooser() string {
 		}
 		lines = append(lines, cursor+style.Render(truncate(marker+" "+history+oneLine(option.Name), innerWidth-2)))
 	}
-	lines = append(lines, "", palette.Help.Render(footer))
-	return fitView(lipgloss.NewStyle().Padding(1, 2).Render(strings.Join(lines, "\n")), width, height)
+	body := lipgloss.NewStyle().PaddingLeft(2).Render(strings.Join(lines, "\n"))
+	title := fmt.Sprintf("Templates · %s · %d/%d", chooser.date, chooser.cursor+1, len(a.templates))
+	return screenView(title, "", body, footer, palette, width, height)
 }
 
 func (c *templateChooser) visibleRange(total, height int) (start, end int) {

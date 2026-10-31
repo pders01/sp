@@ -56,10 +56,10 @@ func TestPrivateReadingPositionSurvivesIntermediateAndFailedLoads(t *testing.T) 
 		return PrivatePage{Private: strings.Repeat("PRIVATE_CANARY_"+date+"\n\n", 120), HasPrivate: true}, nil
 	}})
 	app.nb.viewport.SetYOffset(15)
-	app.Update(tea.KeyMsg{Type: tea.KeyRight})
+	app.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	app.nb.viewport.SetYOffset(25)
 	// Deliberately inspect the transition before the router loads the new page.
-	app.nb.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	app.nb.Update(tea.KeyMsg{Type: tea.KeyRight})
 	if app.nb.viewportReady || app.nb.positions[first] != 15 {
 		t.Fatal("locked placeholder overwrote the remembered private position")
 	}
@@ -77,7 +77,7 @@ func TestPrivateReadingPositionSurvivesIntermediateAndFailedLoads(t *testing.T) 
 	if app.nb.viewport.YOffset != 15 || loads != 5 {
 		t.Fatal("recovery from load failure lost position or loaded extra archive pages")
 	}
-	app.Update(tea.KeyMsg{Type: tea.KeyRight})
+	app.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	if app.nb.viewport.YOffset != 25 {
 		t.Fatal("other private page did not restore its own position")
 	}
@@ -128,16 +128,16 @@ func TestNotebookRestoresIndependentReadingPositions(t *testing.T) {
 	})
 	app.nb.SetCurrentDate("2026-02-02")
 	app.nb.viewport.SetYOffset(10)
-	app.Update(tea.KeyMsg{Type: tea.KeyRight})
+	app.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	if app.nb.viewport.YOffset != 0 {
 		t.Fatal("an unread page inherited the previous page's position")
 	}
 	app.nb.viewport.SetYOffset(20)
-	app.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	app.Update(tea.KeyMsg{Type: tea.KeyRight})
 	if app.nb.viewport.YOffset != 10 {
 		t.Fatalf("newer page restored row %d, want 10", app.nb.viewport.YOffset)
 	}
-	app.Update(tea.KeyMsg{Type: tea.KeyRight})
+	app.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	if app.nb.viewport.YOffset != 20 {
 		t.Fatalf("older page restored row %d, want 20", app.nb.viewport.YOffset)
 	}

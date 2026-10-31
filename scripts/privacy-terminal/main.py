@@ -182,7 +182,7 @@ class Suite:
 
     def open_editor(self, terminal):
         terminal.password(self.secret, "Unlock private notes")
-        terminal.expect("Private Markdown")
+        terminal.expect("Write · " + self.today)
 
     @staticmethod
     def replace_line(terminal, text):
@@ -219,22 +219,22 @@ class Suite:
         long_before = (self.store / "2020-01-01.json").read_bytes()
         def notebook(t):
             t.expect("Notebook · " + self.today)
-            t.expect("Locked.")
+            t.expect("Note locked.")
             assert self.private not in t.text(), "locked viewer exposed private content"
             t.send("u")
             t.expect("Passphrase: ")
             t.send("wrong-synthetic-passphrase\r")
-            t.expect("Unlock failed:")
+            t.expect("Unlock failed")
             t.send(self.secret + "\r")
             t.expect(self.private)
-            t.send("h")
+            t.send("l")
             t.expect("Notebook · 2099-01-01")
-            t.send("l")
+            t.send("h")
             t.expect("Notebook · " + self.today)
-            t.send("l")
+            t.send(b"\x1b[D")  # Left: earlier saved note.
             t.expect("Notebook · 2020-01-01")
             t.send("e")
-            t.expect("Private Markdown")
+            t.expect("Write · 2020-01-01")
             t.expect("begin")
             t.send(b"\x1b[1;5F")  # Ctrl+End; opening now starts at the first line.
             t.expect(self.long_end)
@@ -278,7 +278,8 @@ class Suite:
 
         def recover(t):
             t.password(self.secret, "Unlock recovery")
-            t.expect("Private Markdown")
+            t.expect("Write · " + self.today)
+            t.expect("Saving encrypted")
             t.expect(self.recovered)
             t.send(b"\x13")
         self.terminal(["privacy", "recover", str(recoveries[0])], recover)

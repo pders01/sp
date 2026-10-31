@@ -201,17 +201,17 @@ original = note.read_bytes()
 
 
 def session(terminal):
-    terminal.expect("Locked.")
+    terminal.expect("Note locked.")
     terminal.send("a")
     terminal.expect("Passphrase: ")
     terminal.send("wrong\r")
-    terminal.expect("Unlock failed:")
+    terminal.expect("Unlock failed")
     terminal.send(secret + "\r")
     terminal.expect("SAVE NOW")
     terminal.send("\x1b")
     terminal.expect("unlocked")
     terminal.send("e")
-    terminal.expect("Private Markdown")
+    terminal.expect("Write · " + today)
     terminal.expect("Ln 1/1 Col 1")
     terminal.send("X")
     terminal.expect("XBASE_PRIVATE")
@@ -224,7 +224,7 @@ def session(terminal):
     terminal.expect("Find: X")
     terminal.send(b"\x13")
     terminal.send("\x1b")
-    terminal.expect("Ctrl+S: save/return")
+    terminal.expect("save/return")
     terminal.send(b"\x0c")
     terminal.expect("Private notes locked.")
     assert note.read_bytes() == original, "find/save or relock replaced the daily note"
@@ -262,8 +262,8 @@ run(["privacy", "disable"], env, disable)
 
 def recovery(terminal):
     terminal.password(secret, "Unlock recovery")
+    terminal.expect("Write · " + today)
     terminal.expect("Saving as plaintext")
-    terminal.expect("Private Markdown")
     terminal.send(b"\x13")
 
 
@@ -289,16 +289,20 @@ print("PASS: explicit plaintext recovery, preserved shared/artifact bytes and si
 
 
 def concurrent_policy(terminal):
-    terminal.expect("Locked.")
+    terminal.expect("Note locked.")
     terminal.send("e")
     terminal.expect("Passphrase: ")
     terminal.send(secret + "\r")
-    terminal.expect("Private Markdown")
+    terminal.expect("Write · " + today)
     terminal.send("Z")
     terminal.expect("ZXBASE_PRIVATE")
     run(["privacy", "disable"], env, disable)
     terminal.send(b"\x13")
+    # Short persistent outcome is allowed; F1 retains the complete reason.
+    terminal.send(b"\x1bOP")
+    terminal.send("G")
     terminal.expect("store save policy changed")
+    terminal.send("\x1b")
     assert json.loads(note.read_text())["content"] == "XBASE_PRIVATE", "silent plaintext save"
     terminal.send(b"\x0c")
     terminal.expect("Private notes locked.")

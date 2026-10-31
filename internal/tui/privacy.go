@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -197,6 +196,8 @@ func (a *App) startPrivateEdit(date string) tea.Cmd {
 	}
 	a.privacy.editor = newPrivateEditor(date, page.Private, a.privacy.hooks.Save, a.privacy.hooks.Recover)
 	a.privacy.editor.onRecovery = a.trackRecovery
+	a.privacy.editor.theme = a.nb.theme
+	a.privacy.editor.savePolicy = "Saving encrypted"
 	a.privacy.editor.canRelock = a.privacy.hooks.Lock != nil
 	a.privacy.editor.load = func(date string) (string, error) {
 		page, err := a.privacy.hooks.Load(date)
@@ -397,6 +398,7 @@ func (a *App) updatePrivacySession(msg tea.Msg) (bool, tea.Cmd) {
 	}
 	if p.keyHelp != nil || (p.editor != nil && (p.editor.keyHelp != nil || p.editor.review != nil || p.editor.input.Finding())) ||
 		a.cal.keyHelp != nil || a.cal.review != nil || a.nb.keyHelp != nil || a.nb.review != nil ||
+		(a.nb.sharedActive() && a.nb.shared.help != nil) ||
 		(a.templateChooser != nil && a.templateChooser.keyHelp != nil) {
 		return false, nil
 	}
@@ -547,7 +549,7 @@ func (a *App) updatePrivacy(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 		if key, ok := msg.(tea.KeyMsg); ok {
 			switch key.Type {
 			case tea.KeyF1:
-				p.keyHelp = newKeyHelp("Unlock private notes", unlockBindings(), p.promptErr+"\nUnlock lasts for this process. Do not enter the passphrase into an agent chat.", a.nb.width, a.nb.height)
+				p.keyHelp = newKeyHelp("Unlock notes", unlockBindings(), p.promptErr+"\nUnlock lasts for this process. Do not enter the passphrase into an agent chat.", a.nb.width, a.nb.height)
 				return true, nil
 			case tea.KeyEsc, tea.KeyCtrlC:
 				p.prompt.SetValue("")
@@ -559,6 +561,10 @@ func (a *App) updatePrivacy(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 				p.insertPassphrase(" ")
 				return true, nil
 			case tea.KeyEnter:
+				_, _, minimum := a.unlockLayout()
+				if a.nb.width < 24 || a.nb.height < minimum {
+					return true, nil
+				}
 				secret := []byte(p.prompt.Value())
 				p.prompt.SetValue("")
 				invalid := p.promptInvalid
@@ -653,42 +659,15 @@ func (a *App) privacyView() (string, bool) {
 		return "", false
 	}
 	if a.privacy.closed {
-		return fitView("Private session closed; decrypted views are hidden.\nReview reported recovery errors before terminating the process.", a.nb.width, a.nb.height), true
+		p := a.nb.theme.Palette()
+		footer := p.MutedText.Render("Keep recovery information before closing this terminal.")
+		return screenView("Session closed", "Decrypted views are hidden.", "\n  Review reported recovery errors before terminating the process.", footer, p, a.nb.width, a.nb.height), true
 	}
 	if a.privacy.editor != nil {
 		return a.privacy.editor.View(), true
 	}
 	if a.privacy.prompt != nil {
-		p := a.privacy
-		width, height := a.nb.width, a.nb.height
-		palette := a.nb.theme.Palette()
-		if p.keyHelp != nil {
-			return p.keyHelp.view(palette), true
-		}
-		if p.job != nil {
-			frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-			status := "Unlocking private notes…"
-			if p.job.cancelRequested {
-				status = "Cancelling unlock; waiting for key derivation before locking…"
-			}
-			view := strings.Join([]string{palette.Header.Render("Unlock private notes"), "", frames[p.job.frame%len(frames)] + " " + status, "Esc: cancel and wait"}, "\n")
-			return fitView(view, width, height), true
-		}
-		if width < 24 || height < 8 {
-			return smallTerminal("Unlock private notes", width, height, 24, 8, "F1: help · Esc: cancel"), true
-		}
-		p.prompt.Width = max(1, width-lipgloss.Width(p.prompt.Prompt)-1)
-		controls := wrappedHelp([]helpEntry{
-			{keys: "Enter", label: "unlock", visible: true},
-			{keys: "Esc", label: "cancel", visible: true},
-			{keys: "F1", label: "help", visible: true},
-		}, width)
-		view := strings.Join([]string{
-			palette.Header.Render("Unlock private notes"), "", p.prompt.View(),
-			truncate(oneLine(p.promptErr), width), controls,
-			truncate("Process-scoped unlock. Never share this passphrase with an agent.", width),
-		}, "\n")
-		return fitView(view, width, height), true
+		return a.unlockView(), true
 	}
 	return "", false
 }
@@ -716,6 +695,7 @@ type privateEditor struct {
 	load          func(string) (string, error)
 	canRelock     bool
 	savePolicy    string
+	theme         *themeWatcher // Shared appearance only; the writer starts no watchers.
 	conflicted    bool
 	review        *draftReview
 }
@@ -726,7 +706,7 @@ func newPrivateEditor(date, original string, save Saver, sealRecovery func(strin
 	input.Focus()
 	input.SetWidth(80)
 	input.SetHeight(18)
-	e := &privateEditor{date: date, original: original, input: input, save: save, recover: sealRecovery}
+	e := &privateEditor{date: date, original: original, input: input, save: save, recover: sealRecovery, theme: newThemeWatcher(ThemePrefAuto), savePolicy: "Saving encrypted"}
 	e.resize(80, 24)
 	return e
 }
@@ -748,7 +728,7 @@ func privateRecoveryError(path string, err error) error {
 
 func (e *privateEditor) resize(width, height int) {
 	e.width, e.height = max(0, width), max(0, height)
-	e.input.SetWidth(max(width-2, 1))
+	e.input.SetWidth(max(width-4, 1))
 	e.input.SetHeight(max(height-6, 1))
 	if e.keyHelp != nil {
 		e.keyHelp.resize(width, height)
@@ -831,10 +811,18 @@ func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if helpRequested(key, false) {
 			e.confirm = false
 			details := e.input.Status() + "\n" + e.status + "\n" + e.savePolicy + "\nNo plaintext temporary editor file is created. Saving follows the store's current privacy policy."
-			e.keyHelp = newKeyHelp("Private editor", privateEditorBindings(e.canRelock), details, e.width, e.height)
+			e.keyHelp = newKeyHelp("Write · "+e.date, privateEditorBindings(e.canRelock), details, e.width, e.height)
+			if e.status != "" {
+				e.keyHelp.viewport.GotoBottom()
+			}
 			return e, nil
 		}
 		switch key.Type {
+		case tea.KeyCtrlT:
+			if e.theme != nil {
+				e.theme.SetPref(nextThemePref(e.theme.Pref()))
+			}
+			return e, nil
 		case tea.KeyF2:
 			e.confirm = false
 			if e.conflicted {
@@ -922,51 +910,7 @@ func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return e, cmd
 }
 
-func (e *privateEditor) View() string {
-	if e.done {
-		return ""
-	}
-	if e.review != nil {
-		return e.review.viewer.view(Palette{})
-	}
-	if e.keyHelp != nil {
-		return e.keyHelp.view(Palette{})
-	}
-	controls := wrappedHelp([]helpEntry{
-		{keys: "Ctrl+S", label: "save/return", visible: true},
-		{keys: "F2", label: "review conflict", visible: e.conflicted},
-		{keys: "Ctrl+L", label: "seal/lock", visible: e.canRelock},
-		{keys: "Esc", label: "cancel", visible: true},
-		{keys: "F1", label: "help", visible: true},
-	}, e.width)
-	if e.input.Finding() {
-		controls = wrappedHelp(privateFindBindings(), e.width)
-	}
-	statuses := []string{truncate(oneLine(e.input.Status()), e.width)}
-	for _, status := range []string{e.status} {
-		if status != "" {
-			statuses = append(statuses, truncate(oneLine(status), e.width))
-		}
-	}
-	minHeight := max(8, 3+len(statuses)+viewHeight(controls))
-	if e.width < 24 || e.height < minHeight {
-		return smallTerminal("Private editor · draft retained", e.width, e.height, 24, minHeight, "F1: help · Esc: cancel")
-	}
-	canvasHeight := e.height - 2 - len(statuses) - viewHeight(controls)
-	e.input.SetHeight(canvasHeight)
-	caption := "Built-in editor · no plaintext editor file"
-	if e.savePolicy != "" {
-		caption = e.savePolicy + " · no plaintext editor file"
-	}
-	lines := []string{
-		truncate("Private Markdown · "+e.date, e.width),
-		truncate(caption, e.width),
-		lipgloss.NewStyle().Height(canvasHeight).Render(e.input.View()),
-	}
-	lines = append(lines, statuses...)
-	lines = append(lines, controls)
-	return fitView(strings.Join(lines, "\n"), e.width, e.height)
-}
+func (e *privateEditor) View() string { return e.writerView() }
 
 // EditPrivate opens a standalone in-memory editor for the bare sp flow.
 func EditPrivate(date, original string, save Saver, sealRecovery func(date, content string) (string, error), load ...func(string) (string, error)) error {
@@ -974,6 +918,15 @@ func EditPrivate(date, original string, save Saver, sealRecovery func(date, cont
 	if len(load) > 0 {
 		model.load = load[0]
 	}
+	return runPrivateEditor(model)
+}
+
+// EditPrivateWithTheme uses the same configured appearance as the viewers. The
+// caller still supplies the encryption-pinned saver; this is presentation only.
+func EditPrivateWithTheme(date, original string, save Saver, sealRecovery func(string, string) (string, error), load func(string) (string, error), preference string) error {
+	model := newPrivateEditor(date, original, save, sealRecovery)
+	model.load = load
+	model.theme.SetPref(preference)
 	return runPrivateEditor(model)
 }
 

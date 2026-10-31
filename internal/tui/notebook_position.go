@@ -13,7 +13,7 @@ func (n *Notebook) setReadingContent(content string) {
 	date := n.GetCurrentPage()
 	ready := date != ""
 	if n.privacyEnabled {
-		ready = ready && n.privatePage != nil && n.privateDate == date && n.privatePage.LoadError == ""
+		ready = ready && n.privatePage != nil && n.privateDate == date && n.privatePage.LoadError == "" && !n.privatePage.Locked
 	}
 	n.viewport.SetContent(content)
 	n.layoutViewport()

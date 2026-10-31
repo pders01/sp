@@ -23,6 +23,15 @@ interrupted migration can still leave legacy plaintext until resumed. Shared
 history stays plaintext and readable for **all dates**, not just today. Do not
 put secrets in shared bullets, section names, or source labels.
 
+The primary notebook displays only the personal note. In ordinary calendar or
+notebook viewers, `c` opens a separate read-only **Shared updates** screen for
+the selected date. It is available while locked without an unlock or private
+note load. **Not encrypted** and self-reported provenance labels describe its
+public status, not authenticated authorship. `Esc`/`c` returns to the note with
+its reading offset preserved; when help is open, close that layer first
+(Escape closes help only). This separation changes presentation, not the
+single-file storage or cryptographic boundary.
+
 ## Enable and migrate
 
 1. Stop **all** running SP instances and other note writers. Back up the existing
@@ -149,7 +158,8 @@ with `-`. `--source` is a self-reported label, not an authenticated identity.
   cancels, with confirmation and encrypted recovery for changed text. A locked
   template request also prompts and resumes the intended chooser. Incorrect
   passphrases stay masked and retry with cleared input in both bare editing and
-  recovery. Empty input cancels; no secret is normalized or passed to a shell.
+  recovery. Empty input cancels those CLI prompts; Escape cancels the TUI prompt.
+  No secret is normalized or passed to a shell.
   Follow your build's displayed key help if bindings differ.
 - Privacy mode uses a lossless built-in in-memory editor, with horizontal
   scrolling rather than soft wrapping. Editing opens at the start, with visible
@@ -166,17 +176,32 @@ with `-`. `--source` is a self-reported label, not an authenticated identity.
   status; `?` remains ordinary note text. F1 also opens the TUI's masked unlock
   help without exposing or submitting the passphrase. Closing help returns to the same draft
   or prompt; resizing does not discard either. Small unsupported dimensions show
-  a resize hint rather than overflowing the terminal.
+  a resize hint rather than overflowing the terminal. The unlock prompt reflects
+  the current dimensions and refuses to submit while its form is hidden.
+  The writer's **Write / date** title, themed help/conflict review, and shared
+  `sp`/location chrome do not replace the custom lossless input. Standalone
+  private editing/recovery honors the configured theme too. Physical Ctrl+T
+  cycles appearance except when help/find owns the keys; pasted/literal input
+  retains its existing meaning.
   The initial version does not enable external editing for private content.
-  The plaintext legacy workflow still uses its normal external editor.
+  Neovim/external-private-editor integration remains unresolved, with no
+  plaintext fallback. The plaintext legacy workflow still uses its normal
+  external editor.
 - TUI unlocking shows busy progress without blocking resize/cancel. Cancellation
   waits for owned cryptographic work to finish and then locks; stale completions
   cannot reopen private content. Migration/reversal print bounded stage/count
   progress only, not dates, content, or secrets; these callbacks are not a
   cancellation API. UI closure waits for owned work before releasing keys.
-- Private/shared Markdown is rendered independently under application-owned
-  labels, so an unfinished note fence cannot consume shared provenance. Display
-  escaping of terminal/bidi controls does not alter stored/editor bytes.
+- Personal-note and separate shared-update Markdown is rendered independently
+  under application-owned labels, so an unfinished note fence cannot consume
+  shared provenance. Branded Glamour headings and compact default actions share
+  a common appearance; grouped F1 help retains the full controls and details.
+  Display escaping of terminal/bidi controls does not alter stored/editor bytes.
+- The notebook date strip is ascending: Left/h selects an earlier saved date,
+  Right/l a later one. Today-first startup and session-only per-date reading
+  offsets remain intact. Other key, storage, save/recovery, and cryptographic
+  contracts are unchanged by the redesign; chronology and `c` are the approved
+  navigation changes.
 - Private previews are not automatically decrypted across the calendar/history.
   Private decryption is lazy for the current page after unlock, not a bulk
   background preload. Shared content and public metadata are not private previews.
@@ -324,6 +349,12 @@ If recovery publication also fails, retain the running editor: it keeps the
 in-memory text so you can retry rather than silently discarding it. Do not exit
 or terminate the process assuming an on-disk recovery exists.
 
+The writer persistently shows **Saving encrypted** or **Saving as plaintext**
+for its save policy. Concise outcomes distinguish saved, unchanged, cancelled,
+not saved, and published-but-durability-unconfirmed; F1 retains full details.
+An unconfirmed publication is not a rollback or proof that subsequent edits
+were saved: newer edits are explicitly marked unsaved.
+
 For a private save conflict, repeated Ctrl+S attempts are blocked until review.
 Press **F2** to compare the current saved text with the in-memory draft. Select
 `d` (use the draft as a replacement) or `r` (reload saved text), then confirm with
@@ -378,6 +409,12 @@ permit offline guessing. Earlier plaintext backups remain sensitive forever
 unless independently removed.
 
 ## Verification model and current evidence
+
+The cohesive TUI redesign is implemented. Full normal tests and vet previously
+passed; final redesign race/PTY checks and matching validation hashes/evidence
+are still being collected. Earlier evidence below remains historical, not a
+final-candidate pass or native GUI/Windows, accessibility, audit, or release
+sign-off.
 
 [Privacy testing](privacy-testing.md) specifies deterministic checks and a
 synthetic-only, black-box adversarial exercise. Required checks cover ciphertext

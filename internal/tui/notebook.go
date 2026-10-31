@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/pders01/sp/internal/editor"
 	"github.com/pders01/sp/internal/scratchpad"
 )
@@ -36,9 +37,10 @@ type Notebook struct {
 	today              string // Session-start date for startup and creation.
 	diagnostics        string
 	viewport           viewport.Model
-	positions          map[string]int // Session-only offsets, never private text.
-	viewportDate       string         // The date actually rendered, not an index.
-	viewportReady      bool           // False for transient private/error projections.
+	positions          map[string]int  // Session-only offsets, never private text.
+	personalDates      map[string]bool // Public presence: saved-empty differs from absent.
+	viewportDate       string          // The date actually rendered, not an index.
+	viewportReady      bool            // False for transient private/error projections.
 	width              int
 	height             int
 	quitting           bool
@@ -58,6 +60,8 @@ type Notebook struct {
 	privatePage        *PrivatePage
 	privateDate        string
 	sharedContents     map[string]string
+	shared             *sharedUpdates
+	sharedPositions    map[string]int // Read-only shared offsets; never private text.
 	onChange           func(date, content string)
 	onLoad             func(date, content string)
 	onRecovery         func(scratchpad.RecoveryReference)
@@ -78,16 +82,21 @@ func newNotebookAt(pages []string, today string) *Notebook {
 	owned := append([]string(nil), pages...)
 	sort.Sort(sort.Reverse(sort.StringSlice(owned)))
 	n := &Notebook{
-		pages:     owned,
-		contents:  make(map[string]string),
-		drafts:    make(map[string]editDoneMsg),
-		positions: make(map[string]int),
-		current:   notebookStartIndex(owned, today),
-		today:     today,
-		width:     80,
-		height:    24,
-		icons:     DefaultIconSet(),
-		theme:     newThemeWatcher(ThemePrefAuto),
+		pages:           owned,
+		contents:        make(map[string]string),
+		drafts:          make(map[string]editDoneMsg),
+		positions:       make(map[string]int),
+		personalDates:   make(map[string]bool),
+		sharedPositions: make(map[string]int),
+		current:         notebookStartIndex(owned, today),
+		today:           today,
+		width:           80,
+		height:          24,
+		icons:           DefaultIconSet(),
+		theme:           newThemeWatcher(ThemePrefAuto),
+	}
+	for _, date := range owned {
+		n.personalDates[date] = true
 	}
 	return n
 }
@@ -150,6 +159,9 @@ func (n *Notebook) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editDoneMsg:
 		return n.finishEdit(msg)
 	case tea.KeyMsg:
+		if n.sharedActive() {
+			return n.updateShared(msg)
+		}
 		if n.review != nil {
 			return n.updateDraftReview(msg)
 		}
@@ -169,6 +181,9 @@ func (n *Notebook) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // editor is wired or preparation fails (the caller falls back to
 // quit-with-selected so the orchestrator can run the editor).
 func (n *Notebook) startEdit(date string) tea.Cmd {
+	if n.sharedActive() {
+		return nil
+	}
 	if n.editor == nil && n.editorProvider != nil {
 		ed, err := n.editorProvider()
 		if err != nil {
@@ -240,6 +255,11 @@ func (n *Notebook) flashError(text string) {
 }
 
 func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Multi-rune text and modified rune keys never act as commands. Async
+	// paste messages are ignored by Update rather than forwarded to an editor.
+	if msg.Type == tea.KeyRunes && (msg.Alt || len(msg.Runes) != 1) {
+		return n, nil
+	}
 	if helpRequested(msg, true) {
 		n.keyHelp = newKeyHelp("Notebook", n.keyBindings(), diagnosticDetails(n.theme.StatusText(), n.diagnostics), n.width, n.height)
 		return n, nil
@@ -264,16 +284,19 @@ func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		n.selected = date
 		n.quitting = true
 		return n, nil
+	case "c":
+		n.openShared()
+		return n, nil
 	case "ctrl+t":
 		n.theme.Cycle()
 		return n, nil
 	case "left", "h":
-		if n.current > 0 {
-			n.SetCurrentDate(n.pages[n.current-1])
-		}
-	case "right", "l":
 		if n.current < len(n.pages)-1 {
 			n.SetCurrentDate(n.pages[n.current+1])
+		}
+	case "right", "l":
+		if n.current > 0 {
+			n.SetCurrentDate(n.pages[n.current-1])
 		}
 	case "up", "k":
 		n.viewport.LineUp(1)
@@ -303,6 +326,9 @@ func (n *Notebook) View() string {
 	if n.quitting {
 		return ""
 	}
+	if n.sharedActive() {
+		return n.sharedView()
+	}
 	if n.keyHelp != nil {
 		return n.keyHelp.view(n.theme.Palette())
 	}
@@ -315,11 +341,15 @@ func (n *Notebook) View() string {
 	if n.width < 24 || n.height < minHeight {
 		return smallTerminal("Notebook · "+n.GetCurrentPage(), n.width, n.height, 24, minHeight, "F1: help · q: quit")
 	}
-	return fitView(lipgloss.JoinVertical(lipgloss.Left, header, n.viewport.View(), footer), n.width, n.height)
+	return screenView(n.headerTitle(), n.theme.StatusText(), n.viewport.View(), footer, n.theme.Palette(), n.width, n.height)
+}
+
+func (n *Notebook) headerTitle() string {
+	return withIcon(n.icons.Notebook, "Notebook · "+n.GetCurrentPage()+privacyBadge(n.privacyEnabled, n.privacyState))
 }
 
 func (n *Notebook) renderHeader() string {
-	return viewHeader(withIcon(n.icons.Notebook, "Notebook · "+n.GetCurrentPage()+privacyBadge(n.privacyEnabled, n.privacyState)), n.theme.StatusText(), n.theme.Palette(), n.width)
+	return viewHeader(n.headerTitle(), n.theme.StatusText(), n.theme.Palette(), n.width)
 }
 
 func (n *Notebook) layoutViewport() {
@@ -362,7 +392,8 @@ func (n *Notebook) renderFooter() string {
 	// Build visible page indicators
 	sep := n.theme.Palette().MutedText.Render(separator)
 	var pageIndicators []string
-	for i := startIdx; i < startIdx+maxVisibleDates && i < len(n.pages); i++ {
+	// Internal pages descend; the horizontal strip reads earlier to later.
+	for i := startIdx + maxVisibleDates - 1; i >= startIdx; i-- {
 		page := n.pages[i]
 		if i == n.current {
 			pageIndicators = append(pageIndicators, n.theme.Palette().SelectedDate.Render(page))
@@ -373,49 +404,41 @@ func (n *Notebook) renderFooter() string {
 
 	// Add navigation indicators if there are more pages
 	navLine := strings.Join(pageIndicators, sep)
-	if startIdx > 0 && n.icons.Prev != "" {
+	if startIdx+maxVisibleDates < len(n.pages) && n.icons.Prev != "" {
 		navLine = n.theme.Palette().MutedText.Render(n.icons.Prev) + " " + navLine
 	}
-	if startIdx+maxVisibleDates < len(n.pages) && n.icons.Next != "" {
+	if startIdx > 0 && n.icons.Next != "" {
 		navLine = navLine + " " + n.theme.Palette().MutedText.Render(n.icons.Next)
 	}
-
-	// Horizontal rule separating dates from keybindings
-	rule := n.theme.Palette().Separator.Render(strings.Repeat("─", max(n.width, 0)))
 
 	back := "quit"
 	if n.canPop {
 		back = "back"
 	}
-	help := n.theme.Palette().Help.Render(wrappedHelp([]helpEntry{
-		{keys: "←/→", label: "newer/older", visible: true},
-		{keys: "↑/↓", label: "scroll", visible: true},
+	help := screenFooter([]helpEntry{
+		{keys: "←/→", label: "earlier/later", visible: true},
 		{keys: "enter/e", label: n.editLabel(), visible: true},
-		{keys: "u", label: "unlock", visible: n.privacyEnabled && !privacyIsUnlocked(n.privacyState)},
-		{keys: "Ctrl+L", label: "lock", visible: n.canRelock && privacyIsUnlocked(n.privacyState)},
-		{keys: "a", label: "templates", visible: n.templatesAvailable},
-		{keys: "d", label: "date", visible: n.dateJumpAvailable},
 		{keys: "esc", label: back, visible: true},
 		{keys: "?/F1", label: "help", visible: true},
-		{keys: "q", label: "quit", visible: true},
-	}, n.width))
+	}, n.theme.Palette(), n.width)
 
 	// Center the navigation line
 	navStyle := lipgloss.NewStyle().Width(n.width).Align(lipgloss.Center)
 	navLine = navStyle.Render(truncate(navLine, n.width))
 
-	// Join navigation, rule, and controls vertically
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		navLine,
-		rule,
-		help,
-	)
+	footer := lipgloss.JoinVertical(lipgloss.Left, navLine, help)
+	if n.hasShared() {
+		footer = n.theme.Palette().MutedText.Render(ansi.Wrap("Shared updates available · c view", max(1, n.width), "")) + "\n" + footer
+	}
+	return footer
 }
 
 // updateViewportContent renders the current page's markdown content into the viewport
 func (n *Notebook) updateViewportContent() {
 	n.captureReadingPosition()
+	// Always replace the private viewport, even while the shared pane is open:
+	// relocking must drop its hidden decrypted display projection too.
+	defer n.refreshShared()
 	if len(n.pages) == 0 {
 		n.setReadingContent("")
 		return
@@ -428,11 +451,8 @@ func (n *Notebook) updateViewportContent() {
 		}
 		n.setReadingContent(n.renderPrivateAreas(page))
 		return
-	} else if shared := n.sharedContents[n.pages[n.current]]; strings.TrimSpace(shared) != "" {
-		n.setReadingContent(n.renderPrivateAreas(PrivatePage{Private: content, Shared: shared}))
-		return
 	}
-	n.setReadingContent(n.renderMarkdown(content))
+	n.setReadingContent(n.renderPrivateAreas(PrivatePage{Private: content, HasPrivate: content != "" || n.personalDates[n.pages[n.current]]}))
 }
 
 // SetContents sets the contents for all pages
@@ -444,6 +464,7 @@ func (n *Notebook) SetContents(contents map[string]string) {
 // SetPageContent inserts or refreshes a persisted page without changing focus.
 func (n *Notebook) SetPageContent(date, content string) {
 	n.AddPage(date)
+	n.personalDates[date] = true
 	n.contents[date] = content
 	if len(n.pages) > 0 && n.pages[n.current] == date {
 		n.updateViewportContent()
@@ -475,6 +496,9 @@ func (n *Notebook) GetSelectedDate() string {
 func (n *Notebook) SetCurrentDate(date string) {
 	for i, p := range n.pages {
 		if p == date {
+			if date != n.GetCurrentPage() {
+				n.closeShared()
+			}
 			n.current = i
 			n.updateViewportContent()
 			return

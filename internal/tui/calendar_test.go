@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestNewCalendarPopulatesHasData(t *testing.T) {
@@ -192,8 +193,8 @@ func TestCalendarViewRendersHeaderAndFooter(t *testing.T) {
 	if !strings.Contains(out, "Calendar ·") {
 		t.Errorf("expected header in output, got: %q", out)
 	}
-	if !strings.Contains(out, "Focus:") {
-		t.Errorf("expected focus line in output, got: %q", out)
+	if strings.Contains(out, "Focus:") {
+		t.Errorf("focus details should be reserved for help, got: %q", out)
 	}
 	if !strings.Contains(out, "enter: open") {
 		t.Errorf("expected keybindings in output, got: %q", out)
@@ -293,7 +294,7 @@ func TestCalendarTallViewStacksDocumentPreview(t *testing.T) {
 	cal.SetContents(map[string]string{date: "First line\nMore document content"})
 
 	out := cal.View()
-	if !strings.Contains(out, "More document content") {
+	if !strings.Contains(ansi.Strip(out), "More document content") {
 		t.Errorf("expected stacked document preview, got: %q", out)
 	}
 }
@@ -303,9 +304,12 @@ func TestCalendarFocusLineIncludesPreview(t *testing.T) {
 	date := cal.cursor.Format("2006-01-02")
 	cal.SetContents(map[string]string{date: "# Coffee with team"})
 
-	out := cal.View()
-	if !strings.Contains(out, "Coffee with team") {
-		t.Errorf("expected preview in focus line, got: %q", out)
+	if out := cal.focusLine(); !strings.Contains(out, "Coffee with team") {
+		t.Errorf("expected preview in help focus details, got: %q", out)
+	}
+	cal.Update(tea.KeyMsg{Type: tea.KeyF1})
+	if cal.keyHelp == nil || !strings.Contains(cal.keyHelp.content, cal.focusLine()) {
+		t.Fatal("F1 lost complete focused-date details")
 	}
 }
 

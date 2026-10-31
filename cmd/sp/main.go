@@ -105,13 +105,7 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	cfg := config.Default()
-	var notices []string
-	if path, perr := config.DefaultPath(); perr == nil {
-		cfg, notices = loadConfiguration(path)
-	} else {
-		notices = append(notices, fmt.Sprintf("Configuration path unavailable: %v; using safe defaults.", perr))
-	}
+	cfg, notices := loadUIConfiguration()
 	icons := tui.NewIconSet(cfg.UI.Icons)
 
 	// Encrypted pages must never pass through an external editor or its
@@ -119,7 +113,7 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 	if private {
 		if !calendarFlag && !notebookFlag {
 			printConfigurationNotices(os.Stderr, notices)
-			return editPrivateAndSave(mgr, "")
+			return editPrivateAndSave(mgr, "", cfg.UI.Theme)
 		}
 		return runApp(mgr, nil, icons, cfg, appStartup{notices: notices})
 	}
@@ -184,14 +178,17 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 		app.SetPrivacy(makePrivacyHooks(mgr))
 	} else {
 		sharedContents := make(map[string]string, len(dates))
+		personalPresence := make(map[string]bool, len(dates))
 		for _, d := range dates {
 			shared, readErr := mgr.ReadShared(d)
 			if readErr != nil {
 				continue // Legacy loadAll already retains the per-page error preview.
 			}
 			sharedContents[d] = shared.Content
+			personalPresence[d] = shared.HasPrivate
 		}
 		app.SetSharedContents(sharedContents)
+		app.SetPersonalPresence(personalPresence)
 	}
 	app.SetTemplateResolver(func() error {
 		definitions, err := templateDefinitions(cfg)

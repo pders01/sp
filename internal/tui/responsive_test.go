@@ -86,11 +86,18 @@ func TestResponsiveNotebookBoundsAndStableFocus(t *testing.T) {
 	}
 	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	view := ansi.Strip(app.nb.View())
-	for _, want := range []string{"2026-02-14", "enter/e: edit", "u: unlock", "a: templates", "esc: back", "?/F1: help", "q: quit"} {
+	for _, want := range []string{"2026-02-14", "enter/e: edit", "earlier/later", "esc: back", "?/F1: help"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("visible notebook action/date missing: %q", want)
 		}
 	}
+	app.nb.Update(rawPhysical(tea.KeyF1))
+	for _, want := range []string{"unlock private", "choose template", "q/Ctrl+C"} {
+		if !strings.Contains(app.nb.keyHelp.content, want) {
+			t.Fatalf("secondary action missing from help: %s", want)
+		}
+	}
+	app.nb.Update(rawPhysical(tea.KeyEsc))
 	if got := app.nb.viewport.Height + viewHeight(app.nb.renderHeader()) + viewHeight(app.nb.renderFooter()); got != 24 {
 		t.Fatalf("viewport budget totals %d rows instead of 24", got)
 	}

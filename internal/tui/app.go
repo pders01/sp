@@ -109,6 +109,16 @@ func (a *App) SetSharedContents(contents map[string]string) {
 	a.nb.updateViewportContent()
 }
 
+// SetPersonalPresence supplies public presence metadata for plaintext pages.
+// A saved empty note is not an absent note or a shared-only day.
+func (a *App) SetPersonalPresence(dates map[string]bool) {
+	a.nb.personalDates = make(map[string]bool, len(dates))
+	for date, present := range dates {
+		a.nb.personalDates[date] = present
+	}
+	a.nb.updateViewportContent()
+}
+
 // Init starts the one application-wide appearance subscription. Both views
 // share its preference/resolution without sharing transient status banners.
 func (a *App) Init() tea.Cmd {
@@ -155,6 +165,32 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if handled, cmd := a.updatePrivacySession(msg); handled {
 			return a, cmd
+		}
+	}
+	if key, ok := msg.(tea.KeyMsg); ok && key.Type == tea.KeyCtrlT && a.privacy != nil && a.privacy.editor != nil {
+		e := a.privacy.editor
+		if e.keyHelp == nil && e.review == nil && !e.input.Finding() {
+			a.cycleAppearance()
+			return a, nil
+		}
+	}
+	// Shared updates are a read-only secondary context, not an editing route.
+	// Give it keys before unlock/edit/template/date shortcuts can see them.
+	if a.mode == ModeNotebook && a.nb.sharedActive() {
+		if size, ok := msg.(tea.WindowSizeMsg); ok {
+			a.cal.Update(size)
+			a.nb.Update(size)
+			return a, nil
+		}
+		if key, ok := msg.(tea.KeyMsg); ok {
+			if key.Type == tea.KeyCtrlT && a.nb.keyHelp == nil && a.nb.shared.help == nil {
+				a.cycleAppearance()
+				return a, nil
+			}
+			return a.updateNotebook(msg)
+		}
+		if _, paste := privatePasteText(msg); paste {
+			return a, nil
 		}
 	}
 	// Read-only help must own its keys before privacy shortcuts or the

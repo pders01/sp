@@ -103,7 +103,7 @@ func unlockPrivateWithRetry(prompt privacyPrompter, output io.Writer, unlock fun
 	}
 }
 
-func editPrivateAndSave(mgr *scratchpad.Manager, pickedDate string) error {
+func editPrivateAndSave(mgr *scratchpad.Manager, pickedDate string, preference ...string) error {
 	if !mgr.IsUnlocked() {
 		prompt, err := newTerminalPrompt(os.Stdin, os.Stderr)
 		if err != nil {
@@ -123,5 +123,9 @@ func editPrivateAndSave(mgr *scratchpad.Manager, pickedDate string) error {
 	if err != nil {
 		return fmt.Errorf("failed to load private scratchpad: %w", err)
 	}
-	return tui.EditPrivate(page.Date, page.Content, makePolicySaver(mgr, true), mgr.SealRecovery, makeLoader(mgr))
+	theme := tui.ThemePrefAuto
+	if len(preference) > 0 {
+		theme = preference[0]
+	}
+	return tui.EditPrivateWithTheme(page.Date, page.Content, makePolicySaver(mgr, true), mgr.SealRecovery, makeLoader(mgr), theme)
 }

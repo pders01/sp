@@ -62,7 +62,7 @@ func TestNotebookEmptyPrivateCreationResumesAfterUnlockWithoutPhantomSave(t *tes
 			t.Fatal("creation failed or manufactured a saved note")
 		}
 		app.Update(tea.KeyMsg{Type: tea.KeyEsc})
-		if app.privacy.editor != nil || len(app.cal.hasData) != 0 || saves != 0 || !strings.Contains(app.View(), "No entry for this day") {
+		if app.privacy.editor != nil || len(app.cal.hasData) != 0 || saves != 0 || !strings.Contains(app.View(), "No personal note for this day") {
 			t.Fatal("unchanged cancellation persisted a note or hid absence")
 		}
 	}
