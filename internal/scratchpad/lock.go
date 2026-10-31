@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-// lockNote holds an OS advisory lock only across revision checking and saving.
+// lockNote holds an OS advisory lock across a write or privacy transition.
 // Closing the handle (or process exit) releases the lock. Keep the lock file:
 // removing it would let another writer lock a different inode for the same note.
 func lockNote(dir, date string) (*os.File, error) {

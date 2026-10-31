@@ -342,7 +342,7 @@ func (m *Manager) encodeScratchpad(s *Scratchpad, encrypted bool) ([]byte, *disk
 		if s.disk != nil && s.disk.legacy != nil {
 			legacy.Version = s.disk.legacy.Version
 		}
-		if s.Agent.Content != "" || len(s.Agent.Contributions) != 0 || !s.Agent.Modified.IsZero() {
+		if s.Agent.Content != "" || s.Agent.Contributions != nil || !s.Agent.Modified.IsZero() {
 			legacy.Agent = &s.Agent
 		}
 		data, err := json.MarshalIndent(legacy, "", "  ")

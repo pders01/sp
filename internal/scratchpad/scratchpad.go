@@ -86,8 +86,13 @@ func (m *Manager) GetByDate(date string) (*Scratchpad, error) {
 	if err != nil {
 		return nil, err
 	}
-	if metadata != nil && !m.IsUnlocked() {
-		return nil, ErrLocked
+	if metadata != nil {
+		if metadata.State == "decrypting" {
+			return nil, ErrPrivacyDecrypting
+		}
+		if metadata.State != "disabled" && !m.IsUnlocked() {
+			return nil, ErrLocked
+		}
 	}
 	filename := filepath.Join(m.storageDir, date+".json")
 
@@ -151,6 +156,9 @@ func (m *Manager) saveInternal(scratchpad *Scratchpad, syncDir func(string) erro
 	enabled, err := m.PrivacyEnabled()
 	if err != nil {
 		return err
+	}
+	if migrating && !enabled {
+		return errors.New("privacy policy changed during migration; retry sp privacy enable")
 	}
 	if enabled && !m.IsUnlocked() {
 		return ErrLocked
@@ -266,6 +274,14 @@ func (m *Manager) ListDates() ([]string, error) {
 // Delete removes a scratchpad for a specific date
 func (m *Manager) Delete(date string) error {
 	if err := validateDate(date); err != nil {
+		return err
+	}
+	storeLock, err := lockNote(m.storageDir, "privacy")
+	if err != nil {
+		return err
+	}
+	defer storeLock.Close()
+	if _, err := m.PrivacyEnabled(); err != nil {
 		return err
 	}
 	lock, err := lockNote(m.storageDir, date)

@@ -35,7 +35,10 @@ func TestPrivacyCLIArgumentValidation(t *testing.T) {
 		{"privacy", "enable", "--passphrase", "do-not-accept"},
 		{"privacy", "enable", "--passphrase-file", "ignored"},
 		{"privacy", "change"},
-		{"privacy", "disable"},
+		{"privacy", "disable", "extra"},
+		{"privacy", "disable", "--passphrase", "do-not-accept"},
+		{"privacy", "disable", "--passphrase-file", "ignored"},
+		{"privacy", "disable", "--yes"},
 		{"privacy", "recover"},
 		{"privacy", "recover", "one", "two"},
 		{"privacy", "recover", "one", "--passphrase", "do-not-accept"},
@@ -57,12 +60,12 @@ func TestPrivacyCLIArgumentValidation(t *testing.T) {
 	}
 }
 
-func TestPrivacyEnableRefusesNoninteractiveInput(t *testing.T) {
+func TestPrivacyCommandsRefuseNoninteractiveInput(t *testing.T) {
 	factory := func() (*scratchpad.Manager, error) {
-		t.Fatal("noninteractive enable must not initialize storage")
+		t.Fatal("noninteractive privacy commands must not initialize storage")
 		return nil, errors.New("unexpected manager creation")
 	}
-	for _, args := range [][]string{{"privacy", "enable"}, {"privacy", "recover", "synthetic.age"}} {
+	for _, args := range [][]string{{"privacy", "enable"}, {"privacy", "disable"}, {"privacy", "recover", "synthetic.age"}} {
 		_, _, err := testCLI(factory, args...)
 		if err == nil || !strings.Contains(err.Error(), "interactive terminal") {
 			t.Fatalf("noninteractive %v = %v", args, err)

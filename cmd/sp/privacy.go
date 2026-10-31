@@ -23,12 +23,22 @@ Existing plaintext copies, backups, snapshots, and synced history are NOT erased
 If you forget your passphrase there is NO recovery for your private notes.
 This does not protect against malicious programs running as your user, including
 programs that can capture your passphrase or change sp while it is unlocked.
+When re-enabling a disabled store, use its EXISTING passphrase, not a new one.
 Stop all old sp instances before continuing; old versions do not support privacy.
+`
+
+const privacyDisableWarning = `WARNING: Disabling privacy writes ALL daily private notes back to plaintext.
+Private text, timestamps, and template metadata will be readable by programs and
+people with access to these files, including backups, snapshots, and sync tools.
+Shared contributions are preserved. Existing encrypted backups and recovery files
+stay encrypted; privacy.json retains their passphrase-wrapped key. Keep that file
+and the passphrase. Re-enabling uses the same key and does NOT erase plaintext
+copies or revoke old backups. Stop ALL sp instances before continuing.
 `
 
 func newPrivacyCommand(factory managerFactory) *cobra.Command {
 	cmd := &cobra.Command{
-		Use: "privacy", Short: "Opt in to private-note encryption or inspect migration status",
+		Use: "privacy", Short: "Enable, reverse, or inspect private-note encryption",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
@@ -46,6 +56,22 @@ func newPrivacyCommand(factory managerFactory) *cobra.Command {
 			}
 			defer mgr.Lock()
 			return enablePrivacy(mgr, prompt, cmd.ErrOrStderr())
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use: "disable", Short: "Interactively decrypt daily notes or resume reversal",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			prompt, err := newTerminalPrompt(cmd.InOrStdin(), cmd.ErrOrStderr())
+			if err != nil {
+				return err
+			}
+			mgr, err := factory()
+			if err != nil {
+				return err
+			}
+			defer mgr.Lock()
+			return disablePrivacy(mgr, prompt, cmd.ErrOrStderr())
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -147,6 +173,42 @@ func enablePrivacy(mgr *scratchpad.Manager, prompt privacyPrompter, output io.Wr
 	return writePrivacyStatus(mgr, output)
 }
 
+func disablePrivacy(mgr *scratchpad.Manager, prompt privacyPrompter, output io.Writer) error {
+	status, err := mgr.PrivacyStatus()
+	if err != nil {
+		return err
+	}
+	if !status.Enabled {
+		if err := mgr.DisablePrivacy(nil); err != nil {
+			return err
+		}
+		_, err := fmt.Fprintln(output, "Privacy is already disabled. Daily private notes are plaintext.")
+		return err
+	}
+	if _, err := fmt.Fprint(output, privacyDisableWarning); err != nil {
+		return err
+	}
+	confirmation, err := prompt.Line("Type DECRYPT ALL NOTES to continue: ")
+	if err != nil {
+		return fmt.Errorf("read confirmation: %w", err)
+	}
+	if confirmation != "DECRYPT ALL NOTES" {
+		return errors.New("privacy disable cancelled: confirmation did not match")
+	}
+	passphrase, err := prompt.Password("Existing passphrase: ")
+	defer clear(passphrase)
+	if err != nil {
+		return fmt.Errorf("read passphrase: %w", err)
+	}
+	if err := mgr.DisablePrivacy(passphrase); err != nil {
+		return fmt.Errorf("disable privacy: %w; run sp privacy status and retry sp privacy disable", err)
+	}
+	if _, err := fmt.Fprintln(output, "Privacy disabled. Daily private notes are plaintext; the wrapped key is retained for encrypted backups and recovery files."); err != nil {
+		return err
+	}
+	return writePrivacyStatus(mgr, output)
+}
+
 func writePrivacyStatus(mgr *scratchpad.Manager, output io.Writer) error {
 	status, err := mgr.PrivacyStatus()
 	if err != nil {
@@ -156,6 +218,9 @@ func writePrivacyStatus(mgr *scratchpad.Manager, output io.Writer) error {
 	if status.Enabled {
 		state = "enabled"
 	}
+	if status.Decrypting {
+		state = "decrypting (incomplete)"
+	}
 	if _, writeErr := fmt.Fprintf(output, "Privacy: %s\nEncrypted dates: %d\nShared-only dates: %d\nRemaining plaintext dates (%d):\n",
 		state, len(status.EncryptedDates), len(status.SharedOnlyDates), len(status.PlaintextDates)); writeErr != nil {
 		return writeErr
@@ -164,6 +229,10 @@ func writePrivacyStatus(mgr *scratchpad.Manager, output io.Writer) error {
 		if _, writeErr := fmt.Fprintln(output, "  "+date); writeErr != nil {
 			return writeErr
 		}
+	}
+	if status.Decrypting {
+		_, err = fmt.Fprintln(output, "WARNING: Decryption is incomplete; some private notes may already be plaintext. Normal access is blocked. Run sp privacy disable to resume; stop all sp instances first.")
+		return err
 	}
 	if status.Enabled && len(status.PlaintextDates) > 0 {
 		_, err = fmt.Fprintln(output, "WARNING: Migration is incomplete. Run sp privacy enable to resume; stop old sp instances first.")

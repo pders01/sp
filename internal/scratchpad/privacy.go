@@ -24,6 +24,9 @@ import (
 // ErrLocked means private editing requires a successfully unlocked identity.
 var ErrLocked = errors.New("private scratchpad is locked")
 
+// ErrPrivacyDecrypting blocks normal access until an explicit reversal finishes.
+var ErrPrivacyDecrypting = errors.New("privacy decryption is incomplete; run sp privacy disable to resume")
+
 const (
 	maxMetadataSize   = 64 << 10
 	maxPassphraseSize = 4096
@@ -36,12 +39,14 @@ type privacyMetadata struct {
 	Version         int    `json:"version"`
 	Recipient       string `json:"recipient"`
 	WrappedIdentity string `json:"wrapped_identity"`
+	State           string `json:"state,omitempty"` // v2: decrypting or disabled; key retained for recovery.
 }
 
 // PrivacyStatus describes the on-disk migration state; no configuration boolean
 // or cached flag determines whether privacy is enabled.
 type PrivacyStatus struct {
 	Enabled         bool
+	Decrypting      bool
 	PlaintextDates  []string
 	EncryptedDates  []string
 	SharedOnlyDates []string
@@ -66,8 +71,11 @@ func (m *Manager) readMetadata() (*privacyMetadata, [sha256.Size]byte, error) {
 	if decodeErr := strictJSON(data, &metadata); decodeErr != nil {
 		return nil, zero, fmt.Errorf("invalid privacy metadata: %w", decodeErr)
 	}
-	if metadata.Version != 1 {
-		return nil, zero, errors.New("unsupported privacy metadata version")
+	switch {
+	case metadata.Version == 1 && metadata.State == "":
+	case metadata.Version == 2 && (metadata.State == "decrypting" || metadata.State == "disabled"):
+	default:
+		return nil, zero, errors.New("unsupported privacy metadata version or state")
 	}
 	if _, parseErr := age.ParseX25519Recipient(metadata.Recipient); parseErr != nil {
 		return nil, zero, errors.New("invalid privacy recipient")
@@ -122,7 +130,12 @@ func (m *Manager) PrivacyEnabled() (bool, error) {
 		return false, err
 	}
 	if metadata != nil {
-		return true, nil
+		switch metadata.State {
+		case "decrypting":
+			return true, ErrPrivacyDecrypting
+		case "":
+			return true, nil
+		}
 	}
 	dates, err := m.privacyDates()
 	if err != nil {
@@ -160,7 +173,7 @@ func (m *Manager) PrivacyEnabled() (bool, error) {
 				return false, err
 			}
 			if r.Private != nil {
-				return false, errors.New("encrypted scratchpad exists but privacy metadata is missing")
+				return false, errors.New("encrypted scratchpad exists without an active privacy policy; restore metadata or resume sp privacy disable")
 			}
 		}
 	}
@@ -258,8 +271,8 @@ func (m *Manager) Unlock(passphrase []byte) error {
 
 // EnablePrivacy durably initializes metadata before migrating any notes. A
 // partial migration is still an enabled store: all future private saves encrypt.
-// Calling it again unlocks the existing identity and resumes. Disabling privacy
-// and changing passphrases are intentionally not implemented.
+// Calling it again unlocks the existing identity and resumes. Re-enabling a
+// disabled store reuses the retained key and requires its existing passphrase.
 func (m *Manager) EnablePrivacy(passphrase []byte) error {
 	if err := validatePassphrase(passphrase); err != nil {
 		return err
@@ -308,7 +321,21 @@ func (m *Manager) initializePrivacy(passphrase []byte) error {
 		return err
 	}
 	if metadata != nil {
-		return m.Unlock(passphrase)
+		if metadata.State == "decrypting" {
+			return ErrPrivacyDecrypting
+		}
+		if metadata.State == "disabled" {
+			if _, err := m.PrivacyEnabled(); err != nil {
+				return err
+			}
+		}
+		if err := m.Unlock(passphrase); err != nil {
+			return err
+		}
+		if metadata.State == "disabled" {
+			return m.setPrivacyState(metadata, "", syncDirectory)
+		}
+		return nil
 	}
 	// An orphan ciphertext must never cause generation of a replacement key.
 	if _, privacyErr := m.PrivacyEnabled(); privacyErr != nil {
@@ -346,10 +373,11 @@ func (m *Manager) initializePrivacy(passphrase []byte) error {
 func (m *Manager) PrivacyStatus() (PrivacyStatus, error) {
 	status := PrivacyStatus{}
 	enabled, err := m.PrivacyEnabled()
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrPrivacyDecrypting) {
 		return status, err
 	}
 	status.Enabled = enabled
+	status.Decrypting = errors.Is(err, ErrPrivacyDecrypting)
 	dates, err := m.privacyDates()
 	if err != nil {
 		return status, err

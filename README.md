@@ -76,7 +76,8 @@ sp --version
 
 ```sh
 sp privacy enable   # interactive warnings, confirmation, passphrase twice; migrate
-sp privacy status   # check remaining legacy plaintext dates; enable again to resume
+sp privacy status   # inspect migration/reversal state without unlocking
+sp privacy disable  # confirm + existing passphrase; decrypt daily notes in place
 sp privacy recover <recovery-file> # interactively review encrypted recovery; no auto-merge
 sp append 2026-01-15 --section 'Agent notes' --source 'local-helper' -- '- Public task'
 sp shared 2026-01-15 # shared-only read; no private unlock
@@ -88,8 +89,11 @@ enabled for privacy editing in the initial version. Unlock lasts only in that
 process. Never put a passphrase/private key in arguments, environment, or config.
 Back up `privacy.json` with the notes: losing the passphrase or wrapped identity
 means losing the private writing. Shared bullets and source labels are public,
-self-reported data, not authenticated authorship. No disable, passphrase-rotation,
-or MCP workflow is promised yet. See the [full guide](docs/privacy.md).
+self-reported data, not authenticated authorship. `sp privacy disable` restores
+plaintext editing; interrupted reversal resumes with the same command. It retains
+the wrapped key for encrypted backups/recovery files. Re-enabling uses the existing
+passphrase/key and does not erase plaintext copies. Passphrase rotation and MCP
+access are not implemented. See the [full guide](docs/privacy.md).
 
 ### Flow
 

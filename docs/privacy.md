@@ -65,6 +65,50 @@ snapshots, cloud history, filesystem remnants, earlier temporary files, and old
 exports can retain it. Handle those separately according to your storage and
 backup system; SP makes no secure-erasure claim.
 
+## Reverse encryption (decrypt the store)
+
+To return to the normal plaintext workflow:
+
+1. Stop **all** SP instances and other note writers. Back up the daily files,
+   `privacy.json`, and any encrypted recovery files together.
+2. Run `sp privacy disable` in an interactive terminal. Read the plaintext
+   exposure warning, type `DECRYPT ALL NOTES`, and enter the **existing**
+   passphrase at the hidden-input prompt. Flags, environment variables, and
+   redirected input cannot supply the passphrase or bypass confirmation.
+3. SP authenticates and verifies every daily conversion before writing any
+   plaintext. It then records a durable `decrypting` state, converts private
+   notes one day at a time, and marks privacy disabled only after completion.
+   Private Markdown, timestamps, template history, and shared contributions are
+   preserved. Already plaintext and shared-only daily files are left unchanged.
+4. Check `sp privacy status`. Completed reversal reports privacy disabled and
+   zero encrypted dates. Normal reads/edits no longer require unlock, and the
+   usual plaintext external-editor workflow is restored.
+
+**This deliberately exposes all daily private writing to file readers, backup
+and sync tools.** Plaintext staging files are used during conversion; a process
+crash may leave one behind. There is no secure-erasure guarantee.
+
+If interrupted, some days may already be plaintext. Status reports
+`decrypting (incomplete)`; ordinary private access and all daily writes are
+blocked, while shared-only reads remain available. Resolve the reported problem
+and run `sp privacy disable` again with confirmation and the same passphrase.
+Do not run enable, remove metadata, or hand-edit the state to finish a reversal.
+A post-publication durability error is not a rollback: inspect status and retry.
+
+`privacy.json` **is retained**, containing the passphrase-wrapped key and the
+explicit disabled state. Existing encrypted backups and `.sp-recovery-*.age`
+files are not decrypted or deleted. Keep that metadata and passphrase to read
+those files; `sp privacy recover` can still review a recovery file after unlock,
+with saves following the current plaintext policy. Re-enabling with
+`sp privacy enable` requires confirmation and the existing passphrase and reuses
+this key. It encrypts current daily notes again, but does not erase plaintext
+copies created during reversal or revoke older backups/keys.
+
+Reversal metadata uses a newer format. Older privacy-aware builds reject it;
+very old builds may ignore unknown fields and remain unsafe. Continue using a
+supported build even after disabling. Passphrase changes and key rotation are
+not implemented; disabling and re-enabling is **not** either operation.
+
 ## Daily operation
 
 ```sh
@@ -107,18 +151,23 @@ with `-`. `--source` is a self-reported label, not an authenticated identity.
   Private decryption is lazy for the current page after unlock, not a bulk
   background preload. Shared content and public metadata are not private previews.
 
-There is no promised disable/decrypt-store command or passphrase-change/rotation
-workflow yet. Do not delete `privacy.json` to try to disable privacy. MCP access
-is deferred; this design does not claim an implemented MCP security boundary.
+Use the explicit reversal above rather than deleting `privacy.json` to disable
+privacy. Passphrase-change/rotation and MCP access remain deferred; this design
+does not claim an implemented MCP security boundary.
 
 ## Storage and cryptography
 
 The privacy design uses a random **age X25519 identity**. Its public recipient
 can encrypt without unlocking. The identity is stored only in passphrase-wrapped
 form in the global `privacy.json`, using age's scrypt passphrase encryption. The
-current metadata fields are `version` (1), `recipient` (public age recipient), and
-`wrapped_identity` (base64-encoded passphrase-encrypted age bytes). The passphrase
-unlocks that identity; it is not itself the daily note encryption key.
+enabled metadata fields are `version` (1), `recipient` (public age recipient), and
+`wrapped_identity` (base64-encoded passphrase-encrypted age bytes). Reversal uses
+metadata `version` 2 with `state` set to `decrypting` or `disabled`, retaining the
+same recipient and wrapped identity. Unknown versions/states fail closed, and a
+disabled state with remaining daily ciphertext is rejected, not treated as
+permission to write plaintext. Metadata presence alone does not mean encryption
+is enabled after a completed reversal. The passphrase unlocks that identity; it
+is not itself the daily note encryption key.
 No unwrapped key or password belongs in SP's configuration, arguments, or
 environment. This implementation uses `filippo.io/age` v1.2.1. The identity's
 scrypt work factor is 18 (approximately 256 MiB of working memory); inputs asking
@@ -268,8 +317,8 @@ unless independently removed.
 [Privacy testing](privacy-testing.md) specifies deterministic checks and a
 synthetic-only, black-box adversarial exercise. Required checks cover ciphertext
 at rest for every private date, resumable migration, no-unlock shared hooks,
-protected-payload preservation, locking/conflicts, failure recovery, and the UI
-unlock/editor path. Unit tests are necessary but cannot establish absence of
+protected-payload preservation, locking/conflicts, failure recovery, explicit
+resumable reversal/re-enable, and the UI unlock/editor path. Unit tests are necessary but cannot establish absence of
 side channels, memory disclosure, cryptographic flaws, or same-user compromise.
 
 The [latest validation report](privacy-validation.md) records the real terminal
