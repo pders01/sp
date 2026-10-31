@@ -46,6 +46,7 @@ func NewApp(cal *Calendar, nb *Notebook, mode AppMode) *App {
 		canPop:           mode == ModeCalendar,
 		appliedTemplates: make(map[string]map[string]bool),
 	}
+	nb.canPop = app.canPop
 	cal.onChange, nb.onChange = app.noteChanged, app.noteChanged
 	cal.onLoad, nb.onLoad = app.noteLoaded, app.noteLoaded
 	return app
@@ -110,6 +111,17 @@ func (a *App) Close() {
 // Update routes the message to the active view, then inspects the
 // view's state machine for drill / pop / quit signals and reacts.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Read-only help must own its keys before privacy shortcuts or the
+	// application-level template shortcut can act on the underlying view.
+	if _, key := msg.(tea.KeyMsg); key && a.templateChooser == nil &&
+		(a.privacy == nil || (a.privacy.editor == nil && a.privacy.prompt == nil)) {
+		if a.mode == ModeCalendar && a.cal.keyHelp != nil {
+			return a.updateCalendar(msg)
+		}
+		if a.mode == ModeNotebook && a.nb.keyHelp != nil {
+			return a.updateNotebook(msg)
+		}
+	}
 	if a.privacy != nil && a.templateChooser == nil {
 		if size, ok := msg.(tea.WindowSizeMsg); ok {
 			a.cal.Update(size)
@@ -129,6 +141,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if ws, ok := msg.(tea.WindowSizeMsg); ok {
 			a.cal.Update(ws)
 			a.nb.Update(ws)
+			if a.templateChooser.keyHelp != nil {
+				a.templateChooser.keyHelp.resize(a.cal.width, a.cal.height)
+			}
 			return a, nil
 		}
 		return a.updateTemplateChooser(msg)

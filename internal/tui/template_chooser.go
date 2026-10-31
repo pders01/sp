@@ -42,6 +42,7 @@ type templateChooser struct {
 	selected map[string]bool
 	applying bool
 	cancel   context.CancelFunc
+	keyHelp  *keyHelp
 }
 
 type templateAppliedMsg struct {
@@ -92,6 +93,18 @@ func (a *App) updateTemplateChooser(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 	chooser := a.templateChooser
+	if chooser.keyHelp != nil {
+		if chooser.keyHelp.update(key) {
+			chooser.keyHelp = nil
+		}
+		return a, nil
+	}
+	if helpRequested(key, true) {
+		chooser.keyHelp = newKeyHelp("Templates", templateBindings(chooser.applying),
+			"Sections are saved before editing. Reapplying appends another copy; cancelling the editor does not undo that insertion.",
+			a.cal.width, a.cal.height)
+		return a, nil
+	}
 	if chooser.applying && key.String() != "ctrl+c" && key.String() != "q" {
 		return a, nil
 	}
@@ -213,15 +226,34 @@ func (a *App) renderTemplateChooser() string {
 		width, height = a.nb.width, a.nb.height
 	}
 
+	if chooser.keyHelp != nil {
+		return chooser.keyHelp.view(palette)
+	}
+	innerWidth := max(1, width-4)
+	footer := wrappedHelp([]helpEntry{
+		{keys: "↑/↓", label: "move", visible: true},
+		{keys: "space", label: "toggle", visible: true},
+		{keys: "enter", label: "apply/edit", visible: true},
+		{keys: "esc", label: "cancel", visible: true},
+		{keys: "?/F1", label: "help", visible: true},
+		{keys: "q", label: "quit", visible: true},
+	}, innerWidth)
+	if chooser.applying {
+		footer = "Applying templates…\n" + wrappedHelp([]helpEntry{
+			{keys: "?/F1", label: "help", visible: true},
+			{keys: "q", label: "quit", visible: true},
+		}, innerWidth)
+	}
+	minHeight := 7 + viewHeight(footer)
+	if width < 30 || height < minHeight {
+		return smallTerminal("Templates", width, height, 30, minHeight, "F1: help · Esc: cancel")
+	}
 	lines := []string{
-		palette.Header.Render(fmt.Sprintf(
-			"Templates · %s · %d/%d",
-			chooser.date, chooser.cursor+1, len(a.templates),
-		)),
-		palette.MutedText.Render("Choose sections; select an applied section to reapply it."),
+		palette.Header.Render(truncate(fmt.Sprintf("Templates · %s · %d/%d", chooser.date, chooser.cursor+1, len(a.templates)), innerWidth)),
+		palette.MutedText.Render(truncate("Choose sections; select an applied section to append it again.", innerWidth)),
 		"",
 	}
-	start, end := chooser.visibleRange(len(a.templates), height)
+	start, end := chooser.visibleRange(len(a.templates), height-6-viewHeight(footer))
 	for i := start; i < end; i++ {
 		option := a.templates[i]
 		marker := "[ ]"
@@ -241,24 +273,14 @@ func (a *App) renderTemplateChooser() string {
 			cursor = "▌ "
 			style = style.Foreground(palette.Highlight).Bold(true)
 		}
-		lines = append(lines, cursor+style.Render(marker+" "+option.Name+suffix))
+		lines = append(lines, cursor+style.Render(truncate(marker+" "+oneLine(option.Name)+suffix, innerWidth-2)))
 	}
-	if chooser.applying {
-		lines = append(lines, "", palette.MutedText.Render("Applying templates…"))
-	} else {
-		lines = append(lines, "", palette.Help.Render(renderHelp([]helpEntry{
-			{keys: "↑/k ↓/j", label: "move", visible: true},
-			{keys: "space", label: "toggle", visible: true},
-			{keys: "enter", label: "apply and edit", visible: true},
-			{keys: "esc", label: "cancel", visible: true},
-			{keys: "q", label: "quit", visible: true},
-		})))
-	}
-	return lipgloss.NewStyle().Width(width).Height(height).Padding(1, 2).Render(strings.Join(lines, "\n"))
+	lines = append(lines, "", palette.Help.Render(footer))
+	return fitView(lipgloss.NewStyle().Padding(1, 2).Render(strings.Join(lines, "\n")), width, height)
 }
 
 func (c *templateChooser) visibleRange(total, height int) (start, end int) {
-	capacity := max(height-7, 1) // padding, heading, description, and help
+	capacity := max(height, 1) // Caller has reserved chrome and wrapped controls.
 	if total <= capacity {
 		return 0, total
 	}

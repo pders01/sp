@@ -31,6 +31,17 @@ func TestTruncateUsesDisplayCellsAndPreservesGraphemes(t *testing.T) {
 	}
 }
 
+func TestFitViewProjectsTabsAndCRLFWithoutChangingSource(t *testing.T) {
+	const source = "a\t笔\r\nb\rz"
+	got := fitView(source, 6, 3)
+	if lipgloss.Width(got) > 6 || viewHeight(got) > 3 || strings.ContainsAny(got, "\t\r") {
+		t.Fatalf("terminal controls escaped the frame budget: %q", got)
+	}
+	if displayText(source) != "a    笔\nb␍z" {
+		t.Fatal("display projection did not preserve the visible characters")
+	}
+}
+
 func TestTruncatePreservesANSIWithoutLeakingControlFragments(t *testing.T) {
 	text := "\x1b[31m笔记abcdef\x1b[0m"
 	for width := 0; width <= 10; width++ {

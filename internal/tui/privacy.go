@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/pders01/sp/internal/scratchpad"
 )
 
@@ -48,6 +49,7 @@ type privacyState struct {
 	promptInvalid bool // Sticky until submission/cancellation; never sanitize a secret.
 	editAfter     string
 	editor        *privateEditor
+	keyHelp       *keyHelp
 }
 
 // SetPrivacy switches editing to the in-memory editor. No external editor or
@@ -185,9 +187,10 @@ func (a *App) startUnlock() tea.Cmd {
 	// terminal paste still arrives as literal runes).
 	input.CharLimit = 4097
 	input.KeyMap.Paste.SetEnabled(false)
-	input.Width = 48
+	input.Width = max(1, a.nb.width-lipgloss.Width(input.Prompt)-1)
 	input.Focus()
 	a.privacy.prompt = &input
+	a.privacy.keyHelp = nil
 	a.privacy.promptErr = ""
 	a.privacy.promptInvalid = false
 	return textinput.Blink
@@ -258,8 +261,25 @@ func (a *App) updatePrivacy(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 		return true, cmd
 	}
 	if p.prompt != nil {
+		if size, ok := msg.(tea.WindowSizeMsg); ok {
+			p.prompt.Width = max(1, size.Width-lipgloss.Width(p.prompt.Prompt)-1)
+			p.prompt.SetCursor(p.prompt.Position())
+			if p.keyHelp != nil {
+				p.keyHelp.resize(size.Width, size.Height)
+			}
+		}
+		if p.keyHelp != nil {
+			if key, ok := msg.(tea.KeyMsg); ok && p.keyHelp.update(key) {
+				p.keyHelp = nil
+				return true, textinput.Blink
+			}
+			return true, nil
+		}
 		if key, ok := msg.(tea.KeyMsg); ok {
 			switch key.Type {
+			case tea.KeyF1:
+				p.keyHelp = newKeyHelp("Unlock private notes", unlockBindings(), p.promptErr+"\nUnlock lasts for this process. Do not enter the passphrase into an agent chat.", a.nb.width, a.nb.height)
+				return true, nil
 			case tea.KeyEsc, tea.KeyCtrlC:
 				p.prompt.SetValue("")
 				p.prompt = nil
@@ -364,9 +384,27 @@ func (a *App) privacyView() (string, bool) {
 		return a.privacy.editor.View(), true
 	}
 	if a.privacy.prompt != nil {
-		return "Unlock private notes\n\n" + a.privacy.prompt.View() + "\n\n" +
-			a.privacy.promptErr + "\n\nEnter: unlock · Esc: cancel\n" +
-			"Unlock lasts for this process. Do not enter this passphrase into an agent chat.", true
+		p := a.privacy
+		width, height := a.nb.width, a.nb.height
+		palette := a.nb.theme.Palette()
+		if p.keyHelp != nil {
+			return p.keyHelp.view(palette), true
+		}
+		if width < 24 || height < 8 {
+			return smallTerminal("Unlock private notes", width, height, 24, 8, "F1: help · Esc: cancel"), true
+		}
+		p.prompt.Width = max(1, width-lipgloss.Width(p.prompt.Prompt)-1)
+		controls := wrappedHelp([]helpEntry{
+			{keys: "Enter", label: "unlock", visible: true},
+			{keys: "Esc", label: "cancel", visible: true},
+			{keys: "F1", label: "help", visible: true},
+		}, width)
+		view := strings.Join([]string{
+			palette.Header.Render("Unlock private notes"), "", p.prompt.View(),
+			truncate(oneLine(p.promptErr), width), controls,
+			truncate("Process-scoped unlock. Never share this passphrase with an agent.", width),
+		}, "\n")
+		return fitView(view, width, height), true
 	}
 	return "", false
 }
@@ -399,18 +437,20 @@ func renderPrivatePage(page PrivatePage) string {
 // failures use the caller's encrypted recovery mechanism; failed recovery keeps
 // the text in the running editor rather than discarding the only copy.
 type privateEditor struct {
-	date        string
-	original    string
-	input       privateInput
-	save        Saver
-	recover     func(string, string) (string, error)
-	status      string
-	confirm     bool
-	done        bool
-	outcome     editOutcome
-	published   bool // This Update published a save, even if durability is uncertain.
-	err         error
-	unconfirmed bool // Save published this baseline, but durability needs retry.
+	date          string
+	original      string
+	input         privateInput
+	save          Saver
+	recover       func(string, string) (string, error)
+	status        string
+	confirm       bool
+	done          bool
+	outcome       editOutcome
+	published     bool // This Update published a save, even if durability is uncertain.
+	err           error
+	unconfirmed   bool // Save published this baseline, but durability needs retry.
+	width, height int
+	keyHelp       *keyHelp
 }
 
 func newPrivateEditor(date, original string, save Saver, sealRecovery func(string, string) (string, error)) *privateEditor {
@@ -419,7 +459,9 @@ func newPrivateEditor(date, original string, save Saver, sealRecovery func(strin
 	input.Focus()
 	input.SetWidth(80)
 	input.SetHeight(18)
-	return &privateEditor{date: date, original: original, input: input, save: save, recover: sealRecovery}
+	e := &privateEditor{date: date, original: original, input: input, save: save, recover: sealRecovery}
+	e.resize(80, 24)
+	return e
 }
 
 func (e *privateEditor) Init() tea.Cmd { return nil }
@@ -438,8 +480,12 @@ func privateRecoveryError(path string, err error) error {
 }
 
 func (e *privateEditor) resize(width, height int) {
+	e.width, e.height = max(0, width), max(0, height)
 	e.input.SetWidth(max(width-2, 1))
 	e.input.SetHeight(max(height-6, 1))
+	if e.keyHelp != nil {
+		e.keyHelp.resize(width, height)
+	}
 }
 
 func (e *privateEditor) recovery() (string, error) {
@@ -454,7 +500,19 @@ func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if size, ok := msg.(tea.WindowSizeMsg); ok {
 		e.resize(size.Width, size.Height)
 	}
+	if e.keyHelp != nil {
+		if key, ok := msg.(tea.KeyMsg); ok && e.keyHelp.update(key) {
+			e.keyHelp = nil
+		}
+		return e, nil
+	}
 	if key, ok := msg.(tea.KeyMsg); ok {
+		if helpRequested(key, false) {
+			e.confirm = false
+			details := e.input.err + "\n" + e.status + "\nNo plaintext temporary editor file is created. Saving follows the store's current privacy policy."
+			e.keyHelp = newKeyHelp("Private editor", privateEditorBindings(), details, e.width, e.height)
+			return e, nil
+		}
 		switch key.Type {
 		case tea.KeyCtrlS:
 			e.confirm = false
@@ -533,14 +591,34 @@ func (e *privateEditor) View() string {
 	if e.done {
 		return ""
 	}
-	return strings.Join([]string{
-		"Private Markdown · " + e.date,
-		"Built-in editor · no plaintext editor file",
-		e.input.View(),
-		e.input.err,
-		e.status,
-		"Ctrl+S: save and return · Esc: cancel (changed text requires confirmation)",
-	}, "\n")
+	if e.keyHelp != nil {
+		return e.keyHelp.view(Palette{})
+	}
+	controls := wrappedHelp([]helpEntry{
+		{keys: "Ctrl+S", label: "save/return", visible: true},
+		{keys: "Esc", label: "cancel", visible: true},
+		{keys: "F1", label: "help", visible: true},
+	}, e.width)
+	var statuses []string
+	for _, status := range []string{e.input.err, e.status} {
+		if status != "" {
+			statuses = append(statuses, truncate(oneLine(status), e.width))
+		}
+	}
+	minHeight := max(8, 3+len(statuses)+viewHeight(controls))
+	if e.width < 24 || e.height < minHeight {
+		return smallTerminal("Private editor · draft retained", e.width, e.height, 24, minHeight, "F1: help · Esc: cancel")
+	}
+	canvasHeight := e.height - 2 - len(statuses) - viewHeight(controls)
+	e.input.SetHeight(canvasHeight)
+	lines := []string{
+		truncate("Private Markdown · "+e.date, e.width),
+		truncate("Built-in editor · no plaintext editor file", e.width),
+		lipgloss.NewStyle().Height(canvasHeight).Render(e.input.View()),
+	}
+	lines = append(lines, statuses...)
+	lines = append(lines, controls)
+	return fitView(strings.Join(lines, "\n"), e.width, e.height)
 }
 
 // EditPrivate opens a standalone in-memory editor for the bare sp flow.

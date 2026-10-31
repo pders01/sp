@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/pders01/sp/internal/editor"
 )
 
@@ -50,6 +51,8 @@ type Notebook struct {
 	sharedContents     map[string]string
 	onChange           func(date, content string)
 	onLoad             func(date, content string)
+	canPop             bool
+	keyHelp            *keyHelp
 }
 
 // NewNotebook creates a new notebook instance. Pages are copied and
@@ -100,12 +103,12 @@ func (n *Notebook) Close() {
 func (n *Notebook) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		n.width = msg.Width
-		n.height = msg.Height
-		vpHeight := n.height - 4 // 1 header + 3 footer lines (nav, rule, help)
-		n.viewport.Width = n.width
-		n.viewport.Height = vpHeight
+		n.width, n.height = max(0, msg.Width), max(0, msg.Height)
 		n.updateViewportContent()
+		n.layoutViewport()
+		if n.keyHelp != nil {
+			n.keyHelp.resize(n.width, n.height)
+		}
 		return n, nil
 	case themeChangedMsg:
 		var cmds []tea.Cmd
@@ -122,6 +125,12 @@ func (n *Notebook) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editDoneMsg:
 		return n.finishEdit(msg)
 	case tea.KeyMsg:
+		if n.keyHelp != nil {
+			if n.keyHelp.update(msg) {
+				n.keyHelp = nil
+			}
+			return n, nil
+		}
 		return n.handleKey(msg)
 	}
 	return n, nil
@@ -185,6 +194,11 @@ func (n *Notebook) flashError(text string) {
 }
 
 func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if helpRequested(msg, true) {
+		n.keyHelp = newKeyHelp("Notebook", n.keyBindings(), n.theme.StatusText(), n.width, n.height)
+		return n, nil
+	}
+	n.layoutViewport()
 	switch msg.String() {
 	case "ctrl+c", "q":
 		n.quitting = true
@@ -228,9 +242,9 @@ func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "pgdown", "f":
 		n.viewport.SetYOffset(n.viewport.YOffset + n.viewport.Height)
 	case "ctrl+u":
-		n.viewport.SetYOffset(n.viewport.YOffset - n.viewport.Height/2)
+		n.viewport.SetYOffset(n.viewport.YOffset - max(1, n.viewport.Height/2))
 	case "ctrl+d":
-		n.viewport.SetYOffset(n.viewport.YOffset + n.viewport.Height/2)
+		n.viewport.SetYOffset(n.viewport.YOffset + max(1, n.viewport.Height/2))
 	case "g":
 		n.viewport.GotoTop()
 	case "G":
@@ -244,52 +258,46 @@ func (n *Notebook) View() string {
 	if n.quitting {
 		return ""
 	}
+	if n.keyHelp != nil {
+		return n.keyHelp.view(n.theme.Palette())
+	}
 	if len(n.pages) == 0 {
-		return n.theme.Palette().MutedText.Render("No scratchpad pages found.")
+		return fitView(n.theme.Palette().MutedText.Render("No scratchpad pages found.\nF1: help · q: quit"), n.width, n.height)
 	}
-
-	header := n.theme.Palette().Header.Render(
-		withIcon(n.icons.Notebook, fmt.Sprintf("Notebook · %s", n.pages[n.current])),
-	)
-	if status := n.theme.StatusText(); status != "" {
-		header = lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			header,
-			"   ",
-			n.theme.Palette().MutedText.Render(status),
-		)
+	n.layoutViewport()
+	header, footer := n.renderHeader(), n.renderFooter()
+	minHeight := viewHeight(header) + viewHeight(footer) + 1
+	if n.width < 24 || n.height < minHeight {
+		return smallTerminal("Notebook · "+n.GetCurrentPage(), n.width, n.height, 24, minHeight, "F1: help · q: quit")
 	}
-
-	footer := n.renderFooter()
-
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		n.viewport.View(),
-		footer,
-	)
+	return fitView(lipgloss.JoinVertical(lipgloss.Left, header, n.viewport.View(), footer), n.width, n.height)
 }
 
-// renderFooter renders the bottom navigation bar
+func (n *Notebook) renderHeader() string {
+	return viewHeader(withIcon(n.icons.Notebook, "Notebook · "+n.GetCurrentPage()), n.theme.StatusText(), n.theme.Palette(), n.width)
+}
+
+func (n *Notebook) layoutViewport() {
+	n.viewport.Width = max(1, n.width)
+	n.viewport.Height = max(1, n.height-viewHeight(n.renderHeader())-viewHeight(n.renderFooter()))
+	n.viewport.SetYOffset(n.viewport.YOffset)
+}
+
+// renderFooter budgets dates independently of the controls below them.
 func (n *Notebook) renderFooter() string {
 	if len(n.pages) == 0 {
 		return ""
 	}
 
-	// Calculate how many dates we can show in the available width
-	// Reserve space for controls and separators
-	controlsWidth := 60                           // Approximate width for controls
-	separatorWidth := 3                           // " | " width
-	availableWidth := n.width - controlsWidth - 4 // 4 for padding
-
-	// Calculate width per date (approximate)
-	avgDateWidth := 11 // "YYYY-MM-DD" width
-	maxVisibleDates := availableWidth / (avgDateWidth + separatorWidth)
-
-	// Ensure we show at least 3 dates (current + 2 neighbors) if possible
-	if maxVisibleDates < 3 {
-		maxVisibleDates = 3
+	separator := " " + n.icons.Sep + " "
+	reserved := 0
+	for _, icon := range []string{n.icons.Prev, n.icons.Next} {
+		if icon != "" {
+			reserved += lipgloss.Width(icon) + 1
+		}
 	}
+	maxVisibleDates := max(1, (n.width-reserved+lipgloss.Width(separator))/(10+lipgloss.Width(separator)))
+	maxVisibleDates = min(maxVisibleDates, len(n.pages))
 
 	// Calculate start index to show current date with neighbors
 	// Try to center the current date
@@ -307,7 +315,7 @@ func (n *Notebook) renderFooter() string {
 	}
 
 	// Build visible page indicators
-	sep := n.theme.Palette().MutedText.Render(" " + n.icons.Sep + " ")
+	sep := n.theme.Palette().MutedText.Render(separator)
 	var pageIndicators []string
 	for i := startIdx; i < startIdx+maxVisibleDates && i < len(n.pages); i++ {
 		page := n.pages[i]
@@ -330,24 +338,24 @@ func (n *Notebook) renderFooter() string {
 	// Horizontal rule separating dates from keybindings
 	rule := n.theme.Palette().Separator.Render(strings.Repeat("─", max(n.width, 0)))
 
-	// Controls on separate line
-	help := n.theme.Palette().Help.Render(renderHelp([]helpEntry{
-		{keys: "←/h", label: "prev", visible: true},
-		{keys: "→/l", label: "next", visible: true},
-		{keys: "↑/k", label: "up", visible: true},
-		{keys: "↓/j", label: "down", visible: true},
-		{keys: "Ctrl+u/d", label: "page up/down", visible: true},
+	back := "quit"
+	if n.canPop {
+		back = "back"
+	}
+	help := n.theme.Palette().Help.Render(wrappedHelp([]helpEntry{
+		{keys: "←/→", label: "newer/older", visible: true},
+		{keys: "↑/↓", label: "scroll", visible: true},
 		{keys: "enter/e", label: "edit", visible: true},
-		{keys: "u", label: "unlock private", visible: n.privacyEnabled},
+		{keys: "u", label: "unlock", visible: n.privacyEnabled},
 		{keys: "a", label: "templates", visible: n.templatesAvailable},
-		{keys: "esc", label: "back", visible: true},
-		{keys: "Ctrl+t", label: "theme", visible: true},
+		{keys: "esc", label: back, visible: true},
+		{keys: "?/F1", label: "help", visible: true},
 		{keys: "q", label: "quit", visible: true},
-	}))
+	}, n.width))
 
 	// Center the navigation line
 	navStyle := lipgloss.NewStyle().Width(n.width).Align(lipgloss.Center)
-	navLine = navStyle.Render(navLine)
+	navLine = navStyle.Render(truncate(navLine, n.width))
 
 	// Join navigation, rule, and controls vertically
 	return lipgloss.JoinVertical(
@@ -376,18 +384,19 @@ func (n *Notebook) updateViewportContent() {
 	}
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(n.theme.Style()),
-		glamour.WithWordWrap(n.width-4),
+		glamour.WithWordWrap(max(n.width-4, 20)),
 	)
 	if err != nil {
-		n.viewport.SetContent(content)
+		n.viewport.SetContent(ansi.Wrap(displayText(content), max(n.width, 20), ""))
 		return
 	}
 	rendered, err := renderer.Render(content)
 	if err != nil {
-		n.viewport.SetContent(content)
-		return
+		rendered = content
 	}
-	n.viewport.SetContent(rendered)
+	// Long code lines and renderer fallbacks must remain readable by scrolling,
+	// rather than losing their right-hand text at the final frame boundary.
+	n.viewport.SetContent(ansi.Wrap(displayText(rendered), max(n.width, 20), ""))
 }
 
 // SetContents sets the contents for all pages

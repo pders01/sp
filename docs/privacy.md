@@ -145,6 +145,11 @@ with `-`. `--source` is a self-reported label, not an authenticated identity.
   arrows/Home/End, Ctrl+A/E for line start/end, Ctrl+K/U to delete after/before
   the cursor, Tab for a literal tab, and Ctrl+S to save. Terminal bracketed paste
   is supported; the editor/unlock prompt never invokes system clipboard commands.
+  Press **F1** for the editor's scrollable key reference and full error/recovery
+  status; `?` remains ordinary note text. F1 also opens the TUI's masked unlock
+  help without exposing or submitting the passphrase. Closing help returns to the same draft
+  or prompt; resizing does not discard either. Small unsupported dimensions show
+  a resize hint rather than overflowing the terminal.
   The initial version does not enable external editing for private content.
   The plaintext legacy workflow still uses its normal external editor.
 - Private previews are not automatically decrypted across the calendar/history.

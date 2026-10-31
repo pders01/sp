@@ -117,6 +117,13 @@ notebook.
 The tables below describe navigation; privacy-aware builds also provide `u` for
 masked unlock. Private previews are not automatically decrypted across history.
 
+Footers wrap essential actions to the terminal width. Press `?` or `F1` in a
+viewer or template chooser for a scrollable key reference and full status details.
+In the built-in editor or TUI unlock prompt, use **F1 only**: `?` stays literal.
+Within help, `Esc`/`F1`/`q` closes only the reference; arrows, Page Up/Down, and
+`g`/`G` scroll it. Unsupported screen sizes show a resize hint without discarding
+notes, drafts, passphrases, or template selections.
+
 #### Calendar
 
 | Key                | Action                                |
@@ -130,6 +137,7 @@ masked unlock. Private previews are not automatically decrypted across history.
 | `m` `y`            | switch to month / year view           |
 | `t`                | reset cursor to today                 |
 | `Ctrl+T`           | cycle theme: auto → light → dark      |
+| `?` `F1`           | key reference and status details      |
 | `q` `Ctrl+C` `Esc` | quit                                  |
 
 Month/year jumps clamp to the target month's last valid day and remember the
@@ -143,7 +151,7 @@ with `■` meaning at least one entry in that range and `·` meaning none.
 
 | Key                  | Action                          |
 | -------------------- | ------------------------------- |
-| `←/h` `→/l`          | previous / next page            |
+| `←/h` `→/l`          | newer / older page              |
 | `↑/k` `↓/j`          | scroll content                  |
 | `Ctrl+u` `Ctrl+d`    | half-page up / down             |
 | `b` `f` `pgup`/`pgdn`| full-page up / down             |
@@ -152,6 +160,7 @@ with `■` meaning at least one entry in that range and `·` meaning none.
 | `a`                  | choose template sections         |
 | `Esc` `Backspace`    | pop back to calendar (when -c)  |
 | `Ctrl+T`             | cycle theme                     |
+| `?` `F1`             | key reference and status details |
 | `q` `Ctrl+C`         | quit                            |
 
 ## Configuration

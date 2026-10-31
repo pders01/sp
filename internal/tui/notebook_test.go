@@ -51,7 +51,7 @@ func TestNotebook_Update_WindowSize(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, 100, updatedNotebook.width)
 	assert.Equal(t, 30, updatedNotebook.height)
-	assert.Equal(t, 26, updatedNotebook.viewport.Height) // height - 4 (header + footer)
+	assert.Equal(t, 25, updatedNotebook.viewport.Height) // title/status + date/rule/help
 	assert.Equal(t, 100, updatedNotebook.viewport.Width)
 	assert.Nil(t, cmd)
 }
@@ -261,8 +261,8 @@ func TestNotebook_View_WithContent(t *testing.T) {
 	// Should contain header with current page (pages are sorted in reverse order)
 	assert.Contains(t, view, "Notebook · 2024-01-16")
 
-	// Should contain navigation controls
-	assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • enter/e: edit • esc: back • Ctrl+t: theme • q: quit")
+	// Keep essential actions visible; the full key reference is expandable.
+	assert.Contains(t, view, "enter/e: edit • esc: quit • ?/F1: help • q: quit")
 
 	// Should contain page indicators
 	assert.Contains(t, view, "2024-01-15")
@@ -426,7 +426,7 @@ func TestNotebook_FooterScrolling(t *testing.T) {
 		// Should always show current page
 		assert.Contains(t, view, notebook.pages[i])
 
-		// Should show navigation controls
-		assert.Contains(t, view, "←/h: prev • →/l: next • ↑/k: up • ↓/j: down • Ctrl+u/d: page up/down • enter/e: edit • esc: back • Ctrl+t: theme • q: quit")
+		// Essential controls remain visible as the date strip moves.
+		assert.Contains(t, view, "enter/e: edit • esc: quit • ?/F1: help • q: quit")
 	}
 }

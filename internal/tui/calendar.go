@@ -53,6 +53,7 @@ type Calendar struct {
 	loadErrors         map[string]string
 	onChange           func(date, content string)
 	onLoad             func(date, content string)
+	keyHelp            *keyHelp
 }
 
 // NewCalendar creates a calendar seeded with the given dates as "has data".
@@ -143,8 +144,10 @@ func (c *Calendar) Close() { c.theme.stop() }
 func (c *Calendar) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		c.width = msg.Width
-		c.height = msg.Height
+		c.width, c.height = max(0, msg.Width), max(0, msg.Height)
+		if c.keyHelp != nil {
+			c.keyHelp.resize(c.width, c.height)
+		}
 		return c, nil
 	case themeChangedMsg:
 		var cmds []tea.Cmd
@@ -160,6 +163,12 @@ func (c *Calendar) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editDoneMsg:
 		return c.finishEdit(msg)
 	case tea.KeyMsg:
+		if c.keyHelp != nil {
+			if c.keyHelp.update(msg) {
+				c.keyHelp = nil
+			}
+			return c, nil
+		}
 		return c.handleKey(msg)
 	}
 	return c, nil
@@ -183,6 +192,14 @@ func (c *Calendar) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
 }
 
 func (c *Calendar) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if helpRequested(msg, true) {
+		context := "month"
+		if c.view == ViewYear {
+			context = "year"
+		}
+		c.keyHelp = newKeyHelp("Calendar · "+context, c.keyBindings(), c.focusLine()+"\n"+c.theme.StatusText(), c.width, c.height)
+		return c, nil
+	}
 	switch msg.String() {
 	case "ctrl+c", "q", "esc":
 		c.quitting = true
@@ -289,71 +306,41 @@ func (c *Calendar) View() string {
 		return ""
 	}
 
-	bodyHeight := c.height - 4 // header + focus + rule + help
-	if bodyHeight < 1 {
-		bodyHeight = 1
+	palette := c.theme.Palette()
+	if c.keyHelp != nil {
+		return c.keyHelp.view(palette)
 	}
-
-	var headerText, body, helpText string
-	switch c.view {
-	case ViewYear:
-		headerText = withIcon(c.icons.Calendar, fmt.Sprintf("Calendar · %d", c.cursor.Year()))
+	year := c.view == ViewYear
+	title := "Calendar · " + c.cursor.Format("2006-01")
+	minWidth, minBodyHeight := minCellWidth*7, weekHeaderRow+c.monthRows()*minCellHeight
+	if year {
+		title = fmt.Sprintf("Calendar · %d", c.cursor.Year())
+		minWidth, minBodyHeight = yearColumns*14, 12/yearColumns*5
+	}
+	header := viewHeader(withIcon(c.icons.Calendar, title), c.theme.StatusText(), palette, c.width)
+	help := palette.Help.Render(wrappedHelp([]helpEntry{
+		{keys: "enter", label: "open", visible: true},
+		{keys: "e", label: "edit", visible: !year},
+		{keys: "u", label: "unlock", visible: c.privacyEnabled},
+		{keys: "a", label: "templates", visible: !year && c.templatesAvailable},
+		{keys: "?/F1", label: "help", visible: true},
+		{keys: "q", label: "quit", visible: true},
+	}, c.width))
+	minHeight := viewHeight(header) + minBodyHeight + 2 + viewHeight(help)
+	if c.width < minWidth || c.height < minHeight {
+		return smallTerminal("Calendar · "+c.cursor.Format(time.DateOnly), c.width, c.height, minWidth, minHeight, "F1: help · q: quit")
+	}
+	bodyHeight := c.height - viewHeight(header) - 2 - viewHeight(help)
+	var body string
+	if year {
 		body = c.renderYear(c.width, bodyHeight)
-		helpText = renderHelp([]helpEntry{
-			{keys: "←/h/→/l", label: "month", visible: true},
-			{keys: "↑/k/↓/j", label: "row", visible: true},
-			{keys: "H/L", label: "year", visible: true},
-			{keys: "enter", label: "open", visible: true},
-			{keys: "m", label: "month view", visible: true},
-			{keys: "t", label: "today", visible: true},
-			{keys: "Ctrl+t", label: "theme", visible: true},
-			{keys: "q", label: "quit", visible: true},
-		})
-	default:
-		headerText = withIcon(c.icons.Calendar, fmt.Sprintf("Calendar · %s", c.cursor.Format("2006-01")))
+	} else {
 		body = c.renderMonthLayout(c.width, bodyHeight)
-		helpText = renderHelp([]helpEntry{
-			{keys: "←/h/→/l", label: "day", visible: true},
-			{keys: "↑/k/↓/j", label: "week", visible: true},
-			{keys: "H/L", label: "month", visible: true},
-			{keys: "enter", label: "open", visible: true},
-			{keys: "e", label: "edit", visible: true},
-			{keys: "u", label: "unlock private", visible: c.privacyEnabled},
-			{keys: "a", label: "templates", visible: c.templatesAvailable},
-			{keys: "y", label: "year view", visible: true},
-			{keys: "t", label: "today", visible: true},
-			{keys: "Ctrl+t", label: "theme", visible: true},
-			{keys: "q", label: "quit", visible: true},
-		})
 	}
-
-	header := c.theme.Palette().Header.Render(headerText)
-	if status := c.theme.StatusText(); status != "" {
-		header = lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			header,
-			"   ",
-			c.theme.Palette().MutedText.Render(status),
-		)
-	}
-	bodyBlock := lipgloss.NewStyle().
-		Width(c.width).
-		Height(bodyHeight).
-		Align(lipgloss.Center, lipgloss.Top).
-		Render(body)
-
-	rule := c.theme.Palette().Separator.Render(strings.Repeat("─", max(c.width, 0)))
-	focus := c.theme.Palette().MutedText.Render(truncate(c.focusLine(), c.width))
-	help := c.theme.Palette().Help.Render(truncate(helpText, c.width))
-
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		bodyBlock,
-		focus,
-		rule,
-		help,
-	)
+	bodyBlock := lipgloss.NewStyle().Width(c.width).Height(bodyHeight).Align(lipgloss.Center, lipgloss.Top).Render(body)
+	rule := palette.Separator.Render(strings.Repeat("─", c.width))
+	focus := palette.MutedText.Render(truncate(c.focusLine(), c.width))
+	return fitView(lipgloss.JoinVertical(lipgloss.Left, header, bodyBlock, focus, rule, help), c.width, c.height)
 }
 
 func (c *Calendar) focusLine() string {
@@ -452,7 +439,7 @@ func (c *Calendar) renderDocumentPreview(width, height int) string {
 	if available > 0 {
 		body += "\n\n" + strings.Join(lines, "\n")
 	}
-	return lipgloss.NewStyle().Width(width).Height(height).Padding(0, 1).Render(body)
+	return fitView(lipgloss.NewStyle().Width(width).Height(height).Padding(0, 1).Render(body), width, height)
 }
 
 // renderMonth renders a 7-column day grid sized to fill the given area.
