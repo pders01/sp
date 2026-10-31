@@ -136,6 +136,8 @@ Month/year jumps clamp to the target month's last valid day and remember the
 chosen day: January 31 → February 28 → March 31 (February 29 in leap years).
 Moving by a day/week, returning to today, or selecting a date resets that
 preferred day. Year view has four columns; Up/Down moves one visual row.
+Year timelines cover the complete month: narrow tiles group consecutive days,
+with `■` meaning at least one entry in that range and `·` meaning none.
 
 #### Notebook
 

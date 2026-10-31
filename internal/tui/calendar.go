@@ -357,6 +357,9 @@ func (c *Calendar) View() string {
 }
 
 func (c *Calendar) focusLine() string {
+	if c.view == ViewYear {
+		return fmt.Sprintf("Focus: %s · timeline: ■ active range, · none (full month)", c.cursor.Format("January 2006"))
+	}
 	date := c.cursor.Format("2006-01-02")
 	weekday := c.cursor.Format("Mon")
 	focus := fmt.Sprintf("Focus: %s (%s)", date, weekday)
@@ -632,21 +635,30 @@ func (c *Calendar) renderMonthTile(year int, month time.Month, w, h int) string 
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, content)
 }
 
-// monthSparkline returns one row of glyphs (one per day) with filled markers
-// for days that have data, fitting within w columns.
+// monthSparkline covers the complete month, grouping consecutive days when the
+// width is smaller than the day count. A filled cell means any day in its range
+// has an entry; full-width timelines retain one cell per day.
 func (c *Calendar) monthSparkline(first, last time.Time, w int) string {
-	if w < 4 {
+	if w < 4 || last.Before(first) || first.Year() != last.Year() || first.Month() != last.Month() {
 		return ""
 	}
+	days := last.Day() - first.Day() + 1
+	cells := min(w, days)
 	var b strings.Builder
-	written := 0
-	for d := first; !d.After(last) && written < w; d = d.AddDate(0, 0, 1) {
-		if c.hasData[d.Format("2006-01-02")] {
+	for cell := range cells {
+		active := false
+		for offset := cell * days / cells; offset < (cell+1)*days/cells; offset++ {
+			date := first.AddDate(0, 0, offset).Format(time.DateOnly)
+			if c.hasData[date] {
+				active = true
+				break
+			}
+		}
+		if active {
 			b.WriteString("■")
 		} else {
 			b.WriteString("·")
 		}
-		written++
 	}
 	return c.theme.Palette().MutedText.Render(b.String())
 }
