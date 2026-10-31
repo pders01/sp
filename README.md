@@ -132,6 +132,11 @@ masked unlock. Private previews are not automatically decrypted across history.
 | `Ctrl+T`           | cycle theme: auto → light → dark      |
 | `q` `Ctrl+C` `Esc` | quit                                  |
 
+Month/year jumps clamp to the target month's last valid day and remember the
+chosen day: January 31 → February 28 → March 31 (February 29 in leap years).
+Moving by a day/week, returning to today, or selecting a date resets that
+preferred day. Year view has four columns; Up/Down moves one visual row.
+
 #### Notebook
 
 | Key                  | Action                          |

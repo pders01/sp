@@ -45,6 +45,7 @@ func TestCalendarMonthNavigation(t *testing.T) {
 
 func TestCalendarYearNavigation(t *testing.T) {
 	cal := NewCalendar(nil)
+	cal.SetCursor("2024-03-15")
 	cal.view = ViewYear
 	start := cal.cursor
 
@@ -417,6 +418,7 @@ func TestCalendarMonthKeysFullCoverage(t *testing.T) {
 	}
 	for _, tc := range cases {
 		cal := NewCalendar(nil)
+		cal.SetCursor("2024-03-15")
 		start := cal.cursor
 		want := start.AddDate(tc.deltaY, tc.deltaM, tc.deltaD)
 		model, _ := cal.Update(tc.key)
@@ -436,13 +438,18 @@ func TestCalendarYearKeysFullCoverage(t *testing.T) {
 	}{
 		{tea.KeyMsg{Type: tea.KeyLeft}, 0, -1, 0},
 		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}, 0, -1, 0},
-		{tea.KeyMsg{Type: tea.KeyUp}, 0, -3, 0},
-		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}, 0, -3, 0},
-		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, 0, 3, 0},
+		{tea.KeyMsg{Type: tea.KeyRight}, 0, 1, 0},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}, 0, 1, 0},
+		{tea.KeyMsg{Type: tea.KeyUp}, 0, -4, 0},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}, 0, -4, 0},
+		{tea.KeyMsg{Type: tea.KeyDown}, 0, 4, 0},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, 0, 4, 0},
 		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'H'}}, 0, 0, -1},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'L'}}, 0, 0, 1},
 	}
 	for _, tc := range cases {
 		cal := NewCalendar(nil)
+		cal.SetCursor("2024-03-15")
 		cal.view = ViewYear
 		start := cal.cursor
 		want := start.AddDate(tc.deltaY, tc.deltaM, tc.deltaD)

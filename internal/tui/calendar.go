@@ -25,6 +25,7 @@ const (
 	maxCellHeight    = 6
 	weekHeaderRow    = 1
 	minPreviewHeight = 10
+	yearColumns      = 4
 )
 
 // Calendar is a full-screen month/year calendar that drills down to a day.
@@ -34,6 +35,7 @@ type Calendar struct {
 	previews           map[string]string
 	contents           map[string]string
 	cursor             time.Time
+	preferredDay       int // Retained across clamped period jumps; zero uses cursor day.
 	today              time.Time
 	view               CalendarView
 	selected           string
@@ -190,6 +192,7 @@ func (c *Calendar) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return c, nil
 	case "t", "T":
 		c.cursor = c.today
+		c.preferredDay = 0
 		return c, nil
 	case "y", "Y":
 		c.view = ViewYear
@@ -230,17 +233,17 @@ func (c *Calendar) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (c *Calendar) handleMonthKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "left", "h":
-		c.cursor = c.cursor.AddDate(0, 0, -1)
+		c.shiftDays(-1)
 	case "right", "l":
-		c.cursor = c.cursor.AddDate(0, 0, 1)
+		c.shiftDays(1)
 	case "up", "k":
-		c.cursor = c.cursor.AddDate(0, 0, -7)
+		c.shiftDays(-7)
 	case "down", "j":
-		c.cursor = c.cursor.AddDate(0, 0, 7)
+		c.shiftDays(7)
 	case "H":
-		c.cursor = c.cursor.AddDate(0, -1, 0)
+		c.shiftPeriod(0, -1)
 	case "L":
-		c.cursor = c.cursor.AddDate(0, 1, 0)
+		c.shiftPeriod(0, 1)
 	}
 	return c, nil
 }
@@ -248,19 +251,36 @@ func (c *Calendar) handleMonthKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (c *Calendar) handleYearKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "left", "h":
-		c.cursor = c.cursor.AddDate(0, -1, 0)
+		c.shiftPeriod(0, -1)
 	case "right", "l":
-		c.cursor = c.cursor.AddDate(0, 1, 0)
+		c.shiftPeriod(0, 1)
 	case "up", "k":
-		c.cursor = c.cursor.AddDate(0, -3, 0)
+		c.shiftPeriod(0, -yearColumns)
 	case "down", "j":
-		c.cursor = c.cursor.AddDate(0, 3, 0)
+		c.shiftPeriod(0, yearColumns)
 	case "H":
-		c.cursor = c.cursor.AddDate(-1, 0, 0)
+		c.shiftPeriod(-1, 0)
 	case "L":
-		c.cursor = c.cursor.AddDate(1, 0, 0)
+		c.shiftPeriod(1, 0)
 	}
 	return c, nil
+}
+
+func (c *Calendar) shiftDays(days int) {
+	c.cursor = c.cursor.AddDate(0, 0, days)
+	c.preferredDay = 0
+}
+
+// Anchor period arithmetic on day one so Go cannot normalize January 31 plus
+// one month into March. Remember the chosen day through shorter months/years.
+func (c *Calendar) shiftPeriod(years, months int) {
+	if c.preferredDay == 0 {
+		c.preferredDay = c.cursor.Day()
+	}
+	zone := c.cursor.Location()
+	first := time.Date(c.cursor.Year()+years, c.cursor.Month()+time.Month(months), 1, 0, 0, 0, 0, zone)
+	day := min(c.preferredDay, first.AddDate(0, 1, -1).Day())
+	c.cursor = time.Date(first.Year(), first.Month(), day, 0, 0, 0, 0, zone)
 }
 
 // View renders the calendar full-screen.
@@ -545,7 +565,7 @@ func (c *Calendar) cellAnnotation(day time.Time, dateStr string, w int) string {
 
 // renderYear renders 12 month tiles in a 4x3 grid sized to fill the area.
 func (c *Calendar) renderYear(width, height int) string {
-	cols, gridRows := 4, 3
+	cols, gridRows := yearColumns, 12/yearColumns
 	tileW := width / cols
 	if tileW < 14 {
 		tileW = 14
@@ -697,6 +717,7 @@ func (c *Calendar) SetCursor(date string) {
 		return
 	}
 	c.cursor = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, c.cursor.Location())
+	c.preferredDay = 0
 	c.view = ViewMonth
 }
 
