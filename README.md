@@ -225,10 +225,16 @@ and command stdout become separate `##` sections; commands receive the selected
 date in `SP_DATE`. Relative Markdown file paths resolve from the directory that
 contains `config.toml`. Existing content is only appended to, never replaced.
 Applied template IDs are stored in scratchpad JSON metadata to prevent duplicate
-application without adding markers to the Markdown. Select an already-applied
-template again to force a reapply—for example, after manually removing its
-section. The built-in **Workday timebox** template remains opt-in like every
-configured template.
+application without adding markers to the Markdown. Selection checkboxes are
+separate from `[applied]` history. Selecting an applied section means **append
+again**: another copy is added, not refreshed or replaced.
+
+Enter is **SAVE NOW, then edit**. Cancelling the subsequent editor does not undo
+template insertion. Escape while applying requests cancellation and waits for
+the actual outcome; an insertion already published is not rolled back. Errors
+retain selections and full details for correction/retry. Closing the application
+also cancels and waits for owned template work. The built-in **Workday timebox**
+template remains opt-in like every configured template.
 
 > **Security:** Command templates are disabled unless
 > `templates.allow_commands = true`. Enabling them runs explicitly configured

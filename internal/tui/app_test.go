@@ -306,8 +306,8 @@ func TestAppTemplateChooserCanForceReapply(t *testing.T) {
 
 	app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 	app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-	if !strings.Contains(app.View(), "reapply") {
-		t.Fatalf("chooser does not indicate forced reapply: %q", app.View())
+	if !strings.Contains(app.View(), "append again") {
+		t.Fatalf("chooser does not indicate appending another copy: %q", app.View())
 	}
 	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {

@@ -117,6 +117,7 @@ func (a *App) Init() tea.Cmd {
 // Close releases resources held by the sub-views. Safe to call after
 // the program exits.
 func (a *App) Close() {
+	a.closeTemplateWork()
 	a.cal.Close()
 	a.nb.Close()
 }

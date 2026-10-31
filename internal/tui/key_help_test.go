@@ -92,6 +92,7 @@ func TestKeyHelpResizesScrollsAndRetainsFullStatus(t *testing.T) {
 func TestPrivateEditorHelpDoesNotConsumeLiteralQuestionMarksOrSave(t *testing.T) {
 	calls := 0
 	e := newPrivateEditor("2026-01-01", "draft", func(_, _, _ string) error { calls++; return nil }, nil)
+	e.Update(rawPhysical(tea.KeyCtrlEnd))
 	e.Update(privacyKey("?F1"))
 	if e.keyHelp != nil || e.input.Value() != "draft?F1" {
 		t.Fatal("literal text was interpreted as a help key")
@@ -161,9 +162,9 @@ func TestUnlockHelpNeverEchoesOrSubmitsSecret(t *testing.T) {
 func TestTemplateHelpPreservesSelectionsAndDescribesPendingActions(t *testing.T) {
 	app := workflowApp(t, ModeCalendar, map[string]string{"2026-01-01": ""})
 	app.SetTemplates([]DayTemplate{{ID: "one", Name: "One"}}, nil,
-		func(context.Context, string, []TemplateSelection) (TemplateApplyResult, error) {
-			t.Fatal("help must not apply templates")
-			return TemplateApplyResult{}, nil
+		func(ctx context.Context, _ string, _ []TemplateSelection) (TemplateApplyResult, error) {
+			<-ctx.Done()
+			return TemplateApplyResult{}, ctx.Err()
 		})
 	app.Update(privacyKey("a"))
 	app.Update(rawPhysical(tea.KeySpace))
@@ -182,5 +183,5 @@ func TestTemplateHelpPreservesSelectionsAndDescribesPendingActions(t *testing.T)
 		t.Fatal("pending help describes a cancellation action that is currently unavailable")
 	}
 	app.Update(rawPhysical(tea.KeyEsc))
-	app.Update(privacyKey("q")) // Release the owned pending context without running it.
+	app.Update(privacyKey("q")) // Cancel the owned operation; Close waits for it.
 }
