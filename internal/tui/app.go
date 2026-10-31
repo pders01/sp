@@ -39,11 +39,44 @@ type App struct {
 // notebook. canPop is true only when starting in ModeCalendar — the
 // notebook needs the calendar behind it to back-nav into.
 func NewApp(cal *Calendar, nb *Notebook, mode AppMode) *App {
-	return &App{
-		cal:    cal,
-		nb:     nb,
-		mode:   mode,
-		canPop: mode == ModeCalendar,
+	app := &App{
+		cal:              cal,
+		nb:               nb,
+		mode:             mode,
+		canPop:           mode == ModeCalendar,
+		appliedTemplates: make(map[string]map[string]bool),
+	}
+	cal.onChange, nb.onChange = app.noteChanged, app.noteChanged
+	cal.onLoad, nb.onLoad = app.noteLoaded, app.noteLoaded
+	return app
+}
+
+// noteChanged projects a persisted snapshot through every editing path. Private
+// text must never enter the calendar or the notebook's shared content caches.
+func (a *App) noteChanged(date, content string) {
+	if a.privacy != nil {
+		a.nb.AddPage(date)
+		a.cal.hasData[date] = true
+		a.cal.privateDates[date] = true
+		a.refreshPublicPage(date)
+		if a.mode == ModeNotebook && a.nb.GetCurrentPage() == date {
+			a.refreshPrivatePage()
+		}
+		return
+	}
+	a.nb.SetPageContent(date, content)
+	preview := content
+	if preview == "" {
+		preview = a.nb.sharedContents[date]
+	}
+	a.cal.MarkDate(date, preview)
+}
+
+// noteLoaded refreshes an existing plaintext snapshot without manufacturing an
+// entry when an editor merely opens a new, empty date.
+func (a *App) noteLoaded(date, content string) {
+	if a.privacy == nil && (a.cal.HasData(date) || content != "") {
+		a.noteChanged(date, content)
 	}
 }
 
@@ -163,15 +196,9 @@ func (a *App) updateNotebook(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case a.nb.IsPopping():
-		// Esc / Backspace: pop to calendar when one is behind us, else
-		// quit. Sync any inline-edit changes into the calendar's data
-		// so the cell paints correctly when we return, and move the
-		// calendar cursor to wherever the user landed in the notebook
-		// so the pop doesn't feel stale.
-		date, content := a.nb.CurrentContent()
-		if content != "" {
-			a.cal.MarkDate(date, content)
-		}
+		// Saved state is already synchronized at publication. Back navigation
+		// only moves focus; visiting a date must not manufacture a saved entry.
+		date := a.nb.GetCurrentPage()
 		if date != "" {
 			a.cal.SetCursor(date)
 		}

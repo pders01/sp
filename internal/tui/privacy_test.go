@@ -21,7 +21,7 @@ func TestRenderPrivatePageOmitsEmptySharedSection(t *testing.T) {
 	}{
 		{"unlocked", PrivatePage{Private: "private text"}, "# Private notes\n\nprivate text"},
 		{"locked", PrivatePage{Locked: true, HasPrivate: true}, "# Private notes\n\nLocked. Press u to unlock private notes."},
-		{"empty", PrivatePage{HasPrivate: true}, "# Private notes\n\n(No private content.)"},
+		{"empty", PrivatePage{HasPrivate: true}, "# Private notes\n\n(Private note is empty.)"},
 	} {
 		for _, shared := range []struct {
 			name    string

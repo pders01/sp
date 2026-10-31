@@ -48,6 +48,8 @@ type Notebook struct {
 	privatePage        *PrivatePage
 	privateDate        string
 	sharedContents     map[string]string
+	onChange           func(date, content string)
+	onLoad             func(date, content string)
 }
 
 // NewNotebook creates a new notebook instance. Pages are copied and
@@ -141,8 +143,12 @@ func (n *Notebook) startEdit(date string) tea.Cmd {
 			return n.theme.expireStatusCmd(2 * time.Second)
 		}
 		original = content
-		n.contents[date] = content
-		n.updateViewportContent()
+		if n.onLoad != nil {
+			n.onLoad(date, content)
+		} else {
+			n.contents[date] = content
+			n.updateViewportContent()
+		}
 	}
 	cmd, path, cleanup, err := n.editor.Prepare(original)
 	if err != nil {
@@ -158,35 +164,20 @@ func (n *Notebook) startEdit(date string) tea.Cmd {
 // the rendered viewport. Failures retain the buffer and show its path
 // without a timeout; cleanup happens only after success or an unchanged edit.
 func (n *Notebook) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
-	fail := func(stage string, err error) (tea.Model, tea.Cmd) {
-		text := fmt.Sprintf("%s: %v", stage, err)
-		if msg.path != "" {
-			text += fmt.Sprintf("; buffer path: %s", msg.path)
+	result := completeExternalEdit(msg, n.save)
+	if result.published {
+		if n.onChange != nil {
+			n.onChange(msg.date, result.content)
+		} else {
+			n.SetPageContent(msg.date, result.content)
 		}
-		n.theme.SetStatus(text, 0)
+	}
+	if result.err != nil {
+		n.theme.SetStatus(result.status, 0)
 		return n, nil
 	}
-	if msg.err != nil {
-		return fail("editor", msg.err)
-	}
-	newContent, rerr := editor.ReadEdited(msg.path)
-	if rerr != nil {
-		return fail("read", rerr)
-	}
-	var cmd tea.Cmd
-	if newContent != msg.original {
-		if serr := n.save(msg.date, msg.original, newContent); serr != nil {
-			return fail("save", serr)
-		}
-		n.contents[msg.date] = newContent
-		n.theme.SetStatus("Saved", 1500*time.Millisecond)
-		n.updateViewportContent()
-		cmd = n.theme.expireStatusCmd(1500 * time.Millisecond)
-	}
-	if msg.cleanup != nil {
-		msg.cleanup()
-	}
-	return n, cmd
+	n.theme.SetStatus(result.status, 1500*time.Millisecond)
+	return n, n.theme.expireStatusCmd(1500 * time.Millisecond)
 }
 
 func (n *Notebook) flashError(text string) {
@@ -375,7 +366,7 @@ func (n *Notebook) updateViewportContent() {
 	}
 	content := n.contents[n.pages[n.current]]
 	if n.privacyEnabled {
-		page := PrivatePage{Shared: content, Locked: true}
+		page := PrivatePage{Shared: content, Locked: true, HasPrivate: true}
 		if n.privatePage != nil && n.privateDate == n.pages[n.current] {
 			page = *n.privatePage
 		}
@@ -405,12 +396,12 @@ func (n *Notebook) SetContents(contents map[string]string) {
 	n.updateViewportContent()
 }
 
-// SetPageContent refreshes one page after templates are applied.
+// SetPageContent inserts or refreshes a persisted page without changing focus.
 func (n *Notebook) SetPageContent(date, content string) {
+	n.AddPage(date)
 	n.contents[date] = content
 	if len(n.pages) > 0 && n.pages[n.current] == date {
 		n.updateViewportContent()
-		n.viewport.GotoTop()
 	}
 }
 
@@ -485,8 +476,17 @@ func (n *Notebook) AddPage(date string) {
 			return
 		}
 	}
+	currentDate := n.GetCurrentPage()
 	n.pages = append(n.pages, date)
 	sort.Sort(sort.Reverse(sort.StringSlice(n.pages)))
+	if currentDate != "" {
+		for i, page := range n.pages {
+			if page == currentDate {
+				n.current = i
+				break
+			}
+		}
+	}
 	if _, ok := n.contents[date]; !ok {
 		n.contents[date] = ""
 	}

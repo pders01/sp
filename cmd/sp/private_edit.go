@@ -10,18 +10,26 @@ import (
 )
 
 func makePrivacyHooks(mgr *scratchpad.Manager) tui.PrivacyHooks {
+	inspect := func(date string) (tui.PublicPage, error) {
+		shared, err := mgr.ReadShared(date)
+		if err != nil {
+			return tui.PublicPage{}, err
+		}
+		return tui.PublicPage{Shared: shared.Content, HasPrivate: shared.HasPrivate || shared.Legacy}, nil
+	}
 	return tui.PrivacyHooks{
+		Inspect:    inspect,
 		IsUnlocked: mgr.IsUnlocked,
 		Unlock:     mgr.Unlock,
 		Load: func(date string) (tui.PrivatePage, error) {
 			// Read only the explicitly shared area before deciding whether a
 			// private read is allowed. Legacy plaintext is never a preview.
-			shared, err := mgr.ReadShared(date)
+			shared, err := inspect(date)
 			if err != nil {
 				return tui.PrivatePage{}, err
 			}
 			page := tui.PrivatePage{
-				Shared: shared.Content, HasPrivate: shared.HasPrivate || shared.Legacy,
+				Shared: shared.Shared, HasPrivate: shared.HasPrivate,
 				Locked: !mgr.IsUnlocked(),
 			}
 			if page.Locked {

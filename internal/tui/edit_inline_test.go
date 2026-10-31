@@ -254,8 +254,8 @@ func TestNotebookFinishEditCleansUnchangedBuffer(t *testing.T) {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("unchanged buffer not cleaned up: %v", err)
 	}
-	if cmd != nil {
-		t.Error("unchanged buffer should not schedule a command")
+	if nb.theme.StatusText() != "No changes." || cmd == nil {
+		t.Error("unchanged edit should report no changes with a transient status")
 	}
 }
 

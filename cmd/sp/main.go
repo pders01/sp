@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -282,10 +283,10 @@ func makeTemplateApplier(mgr *scratchpad.Manager, definitions []templates.Defini
 			return tui.TemplateApplyResult{}, contextErr
 		}
 		sp, err := mgr.ApplyTemplateSections(date, sections)
-		if err != nil {
+		if err != nil && (!errors.Is(err, scratchpad.ErrDurabilityUnconfirmed) || sp == nil) {
 			return tui.TemplateApplyResult{}, err
 		}
-		return tui.TemplateApplyResult{Content: sp.Content, Applied: sp.AppliedTemplates}, nil
+		return tui.TemplateApplyResult{Content: sp.Content, Applied: sp.AppliedTemplates, Published: err != nil}, err
 	}
 }
 
@@ -359,6 +360,9 @@ func editAndSave(mgr *scratchpad.Manager, ed *editor.Editor, pickedDate string) 
 	if newContent != sp.Content {
 		sp.Content = newContent
 		if err := mgr.Save(sp); err != nil {
+			if errors.Is(err, scratchpad.ErrDurabilityUnconfirmed) {
+				return fmt.Errorf("scratchpad saved, but durability is unconfirmed: %w; buffer path: %s", err, path)
+			}
 			return fmt.Errorf("failed to save scratchpad: %w; buffer path: %s", err, path)
 		}
 		fmt.Println("Scratchpad saved!")

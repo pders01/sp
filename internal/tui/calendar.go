@@ -47,6 +47,10 @@ type Calendar struct {
 	loader             func(date string) (string, error)
 	templatesAvailable bool
 	privacyEnabled     bool
+	privateDates       map[string]bool // Public presence only; never private previews.
+	loadErrors         map[string]string
+	onChange           func(date, content string)
+	onLoad             func(date, content string)
 }
 
 // NewCalendar creates a calendar seeded with the given dates as "has data".
@@ -58,16 +62,18 @@ func NewCalendar(dates []string) *Calendar {
 	now := time.Now()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	return &Calendar{
-		icons:    DefaultIconSet(),
-		hasData:  hasData,
-		previews: make(map[string]string),
-		contents: make(map[string]string),
-		cursor:   today,
-		today:    today,
-		view:     ViewMonth,
-		width:    80,
-		height:   24,
-		theme:    newThemeWatcher(ThemePrefAuto),
+		icons:        DefaultIconSet(),
+		hasData:      hasData,
+		previews:     make(map[string]string),
+		contents:     make(map[string]string),
+		privateDates: make(map[string]bool),
+		loadErrors:   make(map[string]string),
+		cursor:       today,
+		today:        today,
+		view:         ViewMonth,
+		width:        80,
+		height:       24,
+		theme:        newThemeWatcher(ThemePrefAuto),
 	}
 }
 
@@ -158,41 +164,19 @@ func (c *Calendar) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (c *Calendar) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
-	fail := func(stage string, err error) (tea.Model, tea.Cmd) {
-		text := fmt.Sprintf("%s: %v", stage, err)
-		if msg.path != "" {
-			text += fmt.Sprintf("; buffer path: %s", msg.path)
+	result := completeExternalEdit(msg, c.save)
+	if result.published {
+		if c.onChange != nil {
+			c.onChange(msg.date, result.content)
+		} else {
+			c.MarkDate(msg.date, result.content)
 		}
-		c.theme.SetStatus(text, 0)
+	}
+	if result.err != nil {
+		c.theme.SetStatus(result.status, 0)
 		return c, nil
 	}
-	if msg.err != nil {
-		return fail("editor", msg.err)
-	}
-	newContent, rerr := editor.ReadEdited(msg.path)
-	if rerr != nil {
-		return fail("read", rerr)
-	}
-	if c.save != nil && newContent != msg.original {
-		if serr := c.save(msg.date, msg.original, newContent); serr != nil {
-			return fail("save", serr)
-		}
-	}
-	// Reflect the new entry in the calendar's data so cells repaint.
-	delete(c.previews, msg.date)
-	if newContent != "" {
-		c.hasData[msg.date] = true
-		c.contents[msg.date] = newContent
-		if preview := extractPreview(newContent); preview != "" {
-			c.previews[msg.date] = preview
-		}
-	} else {
-		delete(c.contents, msg.date)
-	}
-	if msg.cleanup != nil {
-		msg.cleanup()
-	}
-	c.theme.SetStatus("Saved", 1500*time.Millisecond)
+	c.theme.SetStatus(result.status, 1500*time.Millisecond)
 	return c, c.theme.expireStatusCmd(1500 * time.Millisecond)
 }
 
@@ -355,10 +339,17 @@ func (c *Calendar) View() string {
 func (c *Calendar) focusLine() string {
 	date := c.cursor.Format("2006-01-02")
 	weekday := c.cursor.Format("Mon")
-	if preview, ok := c.previews[date]; ok {
-		return fmt.Sprintf("Focus: %s (%s) — %s", date, weekday, preview)
+	focus := fmt.Sprintf("Focus: %s (%s)", date, weekday)
+	if c.loadErrors[date] != "" {
+		return focus + " — entry unavailable"
 	}
-	return fmt.Sprintf("Focus: %s (%s)", date, weekday)
+	if preview, ok := c.previews[date]; ok {
+		return focus + " — " + preview
+	}
+	if c.privacyEnabled && c.privateDates[date] {
+		return focus + " — private note hidden"
+	}
+	return focus
 }
 
 // renderMonthLayout stacks the document preview below the calendar so the
@@ -400,9 +391,24 @@ func (c *Calendar) renderDocumentPreview(width, height int) string {
 		fmt.Sprintf("%s · %s", date, c.cursor.Format("Monday")),
 	)
 	content := c.contents[date]
-	if strings.TrimSpace(content) == "" {
-		content = c.theme.Palette().MutedText.Render("No entry for this day.")
-	} else {
+	switch {
+	case c.loadErrors[date] != "":
+		content = c.theme.Palette().MutedText.Render("Entry unavailable: " + c.loadErrors[date])
+	case strings.TrimSpace(content) == "":
+		message := "No entry for this day."
+		if c.privacyEnabled && c.privateDates[date] {
+			message = "Private note hidden. Press Enter to open."
+		} else if c.hasData[date] {
+			message = "Entry is empty."
+			if c.privacyEnabled {
+				message = "Shared-only entry; no shared content."
+			}
+		}
+		content = c.theme.Palette().MutedText.Render(message)
+	default:
+		if c.privacyEnabled {
+			title += c.theme.Palette().MutedText.Render(" · shared")
+		}
 		renderer, err := glamour.NewTermRenderer(
 			glamour.WithStandardStyle(c.theme.Style()),
 			glamour.WithWordWrap(max(width-4, 1)),
@@ -515,11 +521,21 @@ func (c *Calendar) renderDayCell(day time.Time, month time.Month, w, h int) stri
 }
 
 func (c *Calendar) cellAnnotation(day time.Time, dateStr string, w int) string {
+	if c.loadErrors[dateStr] != "" {
+		return c.theme.Palette().MutedText.Render(truncate("unavailable", w))
+	}
 	if preview := c.previews[dateStr]; preview != "" {
 		return c.theme.Palette().MutedText.Render(truncate(preview, w))
 	}
 	if c.hasData[dateStr] {
-		return c.theme.Palette().MutedText.Render(truncate("• entry", w))
+		label := "• entry"
+		if c.privacyEnabled {
+			label = "• shared"
+			if c.privateDates[dateStr] {
+				label = "• private"
+			}
+		}
+		return c.theme.Palette().MutedText.Render(truncate(label, w))
 	}
 	if day.Equal(c.today) {
 		return c.theme.Palette().MutedText.Render(truncate("today", w))
@@ -706,6 +722,11 @@ func (c *Calendar) startEdit(date string) tea.Cmd {
 	if lerr != nil {
 		c.theme.SetStatus(fmt.Sprintf("load: %v", lerr), 2*time.Second)
 		return c.theme.expireStatusCmd(2 * time.Second)
+	}
+	if c.onLoad != nil {
+		c.onLoad(date, content)
+	} else if c.HasData(date) || content != "" {
+		c.MarkDate(date, content)
 	}
 	cmd, path, cleanup, perr := c.editor.Prepare(content)
 	if perr != nil {

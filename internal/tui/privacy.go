@@ -19,12 +19,21 @@ type PrivatePage struct {
 	Shared     string
 	Locked     bool
 	HasPrivate bool
+	LoadError  string   // A failed load is neither an empty note nor a locked note.
 	Applied    []string // Private template metadata, populated only after unlock.
 }
 
-// PrivacyHooks keeps key handling and persistence outside the UI. Load is called
-// only for the current notebook page, never to populate calendar previews.
+// PublicPage contains only deliberately shared text and public presence metadata.
+// Inspecting it must never decrypt or return private writing.
+type PublicPage struct {
+	Shared     string
+	HasPrivate bool
+}
+
+// PrivacyHooks keeps key handling and persistence outside the UI. Inspect can
+// populate public projections; Load reads only the active private page.
 type PrivacyHooks struct {
+	Inspect    func(string) (PublicPage, error)
 	IsUnlocked func() bool
 	Unlock     func([]byte) error
 	Load       func(string) (PrivatePage, error)
@@ -50,9 +59,41 @@ func (a *App) SetPrivacy(hooks PrivacyHooks) {
 	// Defense in depth: do not leave an external editing path wired.
 	a.nb.editor, a.nb.save, a.nb.loader = nil, nil, nil
 	a.cal.editor, a.cal.save, a.cal.loader = nil, nil, nil
+	for date := range a.cal.hasData {
+		// Without an inspector, treat presence conservatively rather than
+		// claiming a known date has no entry. Production hooks inspect it.
+		a.cal.privateDates[date] = true
+		a.refreshPublicPage(date)
+	}
 	if a.mode == ModeNotebook {
 		a.refreshPrivatePage()
 	}
+}
+
+func (a *App) refreshPublicPage(date string) {
+	if a.privacy.hooks.Inspect == nil {
+		return
+	}
+	page, err := a.privacy.hooks.Inspect(date)
+	if err != nil {
+		a.cal.loadErrors[date] = err.Error()
+		return
+	}
+	delete(a.cal.loadErrors, date)
+	a.cal.privateDates[date] = page.HasPrivate
+	a.cal.MarkDate(date, page.Shared)
+	a.nb.contents[date] = page.Shared
+	a.nb.updateViewportContent()
+}
+
+func (a *App) privateLoadFailed(date string, err error) {
+	a.cal.loadErrors[date] = err.Error()
+	if a.nb.GetCurrentPage() == date {
+		a.nb.privatePage = &PrivatePage{LoadError: err.Error()}
+		a.nb.privateDate = date
+		a.nb.updateViewportContent()
+	}
+	a.setPrivacyStatus(fmt.Sprintf("load: %v", err))
 }
 
 func (a *App) refreshPrivatePage() {
@@ -66,9 +107,11 @@ func (a *App) refreshPrivatePage() {
 	page, err := a.privacy.hooks.Load(date)
 	if err != nil {
 		// Never leave the previously decrypted page visible after a load error.
-		page = PrivatePage{Locked: true}
-		a.nb.theme.SetStatus(fmt.Sprintf("load: %v", err), 0)
+		a.privateLoadFailed(date, err)
+		return
 	}
+	delete(a.cal.loadErrors, date)
+	a.cal.privateDates[date] = page.HasPrivate || page.Private != ""
 	a.nb.privatePage, a.nb.privateDate = &page, date
 	if !page.Locked {
 		a.setPrivateApplied(date, page.Applied)
@@ -116,7 +159,7 @@ func (a *App) startPrivateEdit(date string) tea.Cmd {
 	}
 	page, err := a.privacy.hooks.Load(date)
 	if err != nil {
-		a.setPrivacyStatus(fmt.Sprintf("load: %v", err))
+		a.privateLoadFailed(date, err)
 		return nil
 	}
 	if page.Locked {
@@ -190,15 +233,26 @@ func (a *App) updatePrivacy(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 		return false, nil
 	}
 	if p.editor != nil {
-		_, cmd = p.editor.Update(msg)
-		if p.editor.done {
-			if p.editor.err != nil {
-				a.setPrivacyStatus(p.editor.err.Error())
-			} else {
+		e := p.editor
+		_, cmd = e.Update(msg)
+		if e.published {
+			a.noteChanged(e.date, "")
+		}
+		if e.done {
+			switch {
+			case e.err != nil:
+				a.setPrivacyStatus(e.err.Error())
+			case e.outcome == editSaved:
 				a.setPrivacyStatus("Private note saved.")
+			case e.outcome == editCancelled:
+				a.setPrivacyStatus("Edit cancelled. No changes.")
+			default:
+				a.setPrivacyStatus("No changes to save.")
 			}
 			p.editor = nil
-			a.refreshPrivatePage()
+			if !e.published {
+				a.refreshPrivatePage()
+			}
 			return true, nil
 		}
 		return true, cmd
@@ -315,12 +369,21 @@ func (a *App) privacyView() (string, bool) {
 }
 
 func renderPrivatePage(page PrivatePage) string {
+	if page.LoadError != "" {
+		return "Private note unavailable: " + page.LoadError
+	}
+	if !page.HasPrivate && page.Private == "" {
+		if strings.TrimSpace(page.Shared) != "" {
+			return "# Agent contributions · shared\n\n" + page.Shared
+		}
+		return "No entry for this day. Press e to create a private note."
+	}
 	private := page.Private
 	switch {
 	case page.Locked:
 		private = "Locked. Press u to unlock private notes."
 	case private == "":
-		private = "(No private content.)"
+		private = "(Private note is empty.)"
 	}
 	content := "# Private notes\n\n" + private
 	if strings.TrimSpace(page.Shared) != "" {
@@ -341,6 +404,8 @@ type privateEditor struct {
 	status      string
 	confirm     bool
 	done        bool
+	outcome     editOutcome
+	published   bool // This Update published a save, even if durability is uncertain.
 	err         error
 	unconfirmed bool // Save published this baseline, but durability needs retry.
 }
@@ -382,6 +447,7 @@ func (e *privateEditor) recovery() (string, error) {
 }
 
 func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	e.published = false
 	if size, ok := msg.(tea.WindowSizeMsg); ok {
 		e.resize(size.Width, size.Height)
 	}
@@ -404,17 +470,20 @@ func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				err = e.save(e.date, e.original, e.input.Value())
 			}
 			if err == nil {
-				e.done = true
+				e.done, e.published, e.outcome = true, true, editSaved
 				return e, tea.Quit
 			}
 			if errors.Is(err, scratchpad.ErrDurabilityUnconfirmed) {
 				// Publication succeeded: a retry must compare against our own
 				// published text, not the superseded on-disk baseline.
 				e.original = e.input.Value()
-				e.unconfirmed = true
+				e.unconfirmed, e.published = true, true
 			}
 			path, recoveryErr := e.recovery()
 			e.status = fmt.Sprintf("Save failed: %v", err)
+			if e.published {
+				e.status = fmt.Sprintf("Saved, but durability is unconfirmed: %v", err)
+			}
 			if recoveryErr == nil {
 				e.status += "; encrypted recovery: " + path
 			} else {
@@ -423,12 +492,15 @@ func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return e, nil
 		case tea.KeyEsc, tea.KeyCtrlC:
 			if !e.needsRecovery() {
-				e.done = true
+				e.done, e.outcome = true, editCancelled
 				return e, tea.Quit
 			}
 			if !e.confirm {
 				e.confirm = true
 				e.status = "Unsaved changes. Press Esc/Ctrl+C again to leave with encrypted recovery, or Ctrl+S to save."
+				if e.unconfirmed {
+					e.status = "Save durability is unconfirmed. Press Esc/Ctrl+C again to leave with encrypted recovery, or Ctrl+S to retry."
+				}
 				return e, nil
 			}
 			path, err := e.recovery()
@@ -437,7 +509,10 @@ func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return e, nil
 			}
 			e.err = fmt.Errorf("edit cancelled; encrypted recovery: %s", path)
-			e.done = true
+			if e.unconfirmed {
+				e.err = fmt.Errorf("editor closed with save durability unconfirmed; encrypted recovery: %s", path)
+			}
+			e.done, e.outcome = true, editCancelled
 			return e, tea.Quit
 		default:
 			e.confirm = false

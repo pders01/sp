@@ -343,6 +343,10 @@ func TestPrivatePreviewsAndHooks(t *testing.T) {
 				t.Fatal(unlockErr)
 			}
 		}
+		public, inspectErr := hooks.Inspect(date)
+		if inspectErr != nil || !public.HasPrivate || !strings.Contains(public.Shared, "shared preview") || strings.Contains(public.Shared, "private preview sentinel") {
+			t.Fatalf("public inspection unlocked=%v: %+v, %v", unlock, public, inspectErr)
+		}
 		dates, contents, applied, loadErr := loadAll(mgr)
 		if loadErr != nil {
 			t.Fatal(loadErr)
@@ -402,6 +406,10 @@ func TestPartialPrivacyNeverPreviewsLegacyPrivateContent(t *testing.T) {
 			if unlockErr := hooks.Unlock([]byte(passphrase)); unlockErr != nil {
 				t.Fatal(unlockErr)
 			}
+		}
+		public, inspectErr := hooks.Inspect(date)
+		if inspectErr != nil || !public.HasPrivate || strings.Contains(public.Shared, "legacy private sentinel") {
+			t.Fatalf("public legacy inspection unlocked=%v: %+v, %v", unlocked, public, inspectErr)
 		}
 		_, contents, _, loadErr := loadAll(mgr)
 		if loadErr != nil || strings.Contains(contents[date], "legacy private sentinel") {

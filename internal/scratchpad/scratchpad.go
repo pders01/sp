@@ -208,8 +208,13 @@ func (m *Manager) saveInternal(scratchpad *Scratchpad, syncDir func(string) erro
 
 // ApplyTemplateSections appends previously unused template sections to date.
 // Applied IDs live in JSON metadata, keeping implementation markers out of the
-// user's Markdown. Existing content is never replaced.
+// user's Markdown. Existing content is never replaced. A published replacement
+// with unconfirmed durability returns the updated note alongside its error.
 func (m *Manager) ApplyTemplateSections(date string, sections []templates.Section) (*Scratchpad, error) {
+	return m.applyTemplateSections(date, sections, syncDirectory)
+}
+
+func (m *Manager) applyTemplateSections(date string, sections []templates.Section, syncDir func(string) error) (*Scratchpad, error) {
 	scratchpad, err := m.GetByDate(date)
 	if err != nil {
 		return nil, err
@@ -244,7 +249,10 @@ func (m *Manager) ApplyTemplateSections(date string, sections []templates.Sectio
 		return scratchpad, nil
 	}
 	scratchpad.Content = content
-	if err := m.Save(scratchpad); err != nil {
+	if err := m.save(scratchpad, syncDir); err != nil {
+		if errors.Is(err, ErrDurabilityUnconfirmed) {
+			return scratchpad, err
+		}
 		return nil, err
 	}
 	return scratchpad, nil

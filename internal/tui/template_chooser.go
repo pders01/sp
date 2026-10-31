@@ -2,12 +2,14 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/pders01/sp/internal/scratchpad"
 )
 
 // DayTemplate is one named section shown in the day-template chooser.
@@ -19,8 +21,9 @@ type DayTemplate struct {
 // TemplateApplyResult refreshes the active day after selected sections have
 // been rendered and persisted.
 type TemplateApplyResult struct {
-	Content string
-	Applied []string
+	Content   string
+	Applied   []string
+	Published bool // A replacement was visible despite a durability error.
 }
 
 // TemplateSelection describes a chosen section. Force explicitly reapplies a
@@ -143,7 +146,7 @@ func (a *App) finishTemplateApply(msg templateAppliedMsg) (tea.Model, tea.Cmd) {
 		a.templateChooser.cancel()
 	}
 	a.templateChooser = nil
-	if msg.err != nil {
+	if msg.err != nil && !(msg.result.Published && errors.Is(msg.err, scratchpad.ErrDurabilityUnconfirmed)) {
 		cmd := a.templateStatus(fmt.Sprintf("template: %v", msg.err), true)
 		return a, cmd
 	}
@@ -155,15 +158,22 @@ func (a *App) finishTemplateApply(msg templateAppliedMsg) (tea.Model, tea.Cmd) {
 	}
 	if a.privacy != nil {
 		// Template output is private; never feed it into shared calendar caches.
-		a.cal.hasData[msg.date] = true
-		a.nb.AddPage(msg.date)
-		a.refreshPrivatePage()
-		editCmd := a.startPrivateEdit(msg.date)
-		return a, editCmd
+		a.noteChanged(msg.date, "")
+	} else {
+		a.noteChanged(msg.date, msg.result.Content)
 	}
-	a.cal.MarkDate(msg.date, msg.result.Content)
-	a.nb.SetPageContent(msg.date, msg.result.Content)
+	if msg.err != nil {
+		watcher := a.cal.theme
+		if a.mode == ModeNotebook {
+			watcher = a.nb.theme
+		}
+		watcher.SetStatus(fmt.Sprintf("Templates saved, but durability is unconfirmed: %v", msg.err), 0)
+		return a, nil
+	}
 
+	if a.privacy != nil {
+		return a, a.startPrivateEdit(msg.date)
+	}
 	var editorCmd tea.Cmd
 	if a.mode == ModeCalendar {
 		editorCmd = a.cal.startEdit(msg.date)
