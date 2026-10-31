@@ -158,8 +158,14 @@ with `-`. `--source` is a self-reported label, not an authenticated identity.
   cancels, with confirmation and encrypted recovery for changed text. A locked
   template request also prompts and resumes the intended chooser. Incorrect
   passphrases stay masked and retry with cleared input in both bare editing and
-  recovery. Empty input cancels those CLI prompts; Escape cancels the TUI prompt.
-  No secret is normalized or passed to a shell.
+  recovery. Those standalone actions now use the same themed masked unlock form,
+  not an inline CLI password line. Escape or an empty submission cancels them;
+  Escape cancels the viewer's unlock prompt. The calling operation continues
+  unlocked only after successful completion; cancellation/signals wait and lock
+  before returning.
+  No secret is passed to a shell. The standalone form preserves valid UTF-8 and
+  bracketed-paste bytes, rejecting invalid/control input instead of authenticating
+  a normalized prefix.
   Follow your build's displayed key help if bindings differ.
 - Privacy mode uses a lossless built-in in-memory editor, with horizontal
   scrolling rather than soft wrapping. Editing opens at the start, with visible

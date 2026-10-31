@@ -15,6 +15,20 @@ func (e *privateEditor) palette() Palette {
 	return darkPalette()
 }
 
+func (a *App) unlockTitle() string {
+	if a.privacy.unlockTitle != "" {
+		return a.privacy.unlockTitle
+	}
+	return "Unlock notes"
+}
+
+func (a *App) unlockExitLabel() string {
+	if a.privacy.unlockExitLabel != "" {
+		return a.privacy.unlockExitLabel
+	}
+	return "return"
+}
+
 func (a *App) unlockView() string {
 	p := a.privacy
 	width, height := a.nb.width, a.nb.height
@@ -24,14 +38,14 @@ func (a *App) unlockView() string {
 	}
 	body, footer, minimum := a.unlockLayout()
 	if width < 24 || height < minimum {
-		return smallTerminal("Unlock notes", width, height, 24, minimum, "F1: help · Esc: return")
+		return smallTerminal(a.unlockTitle(), width, height, 24, minimum, "F1: help · Esc: "+a.unlockExitLabel())
 	}
 	date := a.privateDate()
 	caption := "Session only"
 	if date != "" {
 		caption += " · " + date
 	}
-	return screenView("Unlock notes", caption, body, footer, palette, width, height)
+	return screenView(a.unlockTitle(), caption, body, footer, palette, width, height)
 }
 
 // A form is supported only when its field, current error and actions are all
@@ -64,7 +78,7 @@ func (a *App) unlockLayout() (string, string, int) {
 		} else {
 			body = append(body, "", lipgloss.NewStyle().PaddingLeft(2).Render(palette.MutedText.Render(wrap("Unlock lasts until you lock or close SP."))))
 		}
-		actions = []helpEntry{{keys: "Enter", label: "unlock", visible: true}, {keys: "Esc", label: "return", visible: true}, {keys: "F1", label: "help", visible: true}}
+		actions = []helpEntry{{keys: "Enter", label: "unlock", visible: true}, {keys: "Esc", label: a.unlockExitLabel(), visible: true}, {keys: "F1", label: "help", visible: true}}
 	}
 	content := strings.Join(body, "\n")
 	footer := screenFooter(actions, palette, width)

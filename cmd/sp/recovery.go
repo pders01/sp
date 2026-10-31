@@ -81,7 +81,7 @@ func newRecoverCommand(factory managerFactory) *cobra.Command {
 				return runApp(mgr, ed, tui.NewIconSet(cfg.UI.Icons), cfg,
 					appStartup{recovery: &scratchpad.RecoveryReference{Date: plaintextDate, Path: path}, notices: notices})
 			}
-			prompt, err := newTerminalPrompt(cmd.InOrStdin(), cmd.ErrOrStderr())
+			_, err := newTerminalPrompt(cmd.InOrStdin(), cmd.ErrOrStderr())
 			if err != nil {
 				return err
 			}
@@ -90,7 +90,9 @@ func newRecoverCommand(factory managerFactory) *cobra.Command {
 				return err
 			}
 			defer mgr.Lock()
-			if err := unlockPrivateWithRetry(prompt, cmd.ErrOrStderr(), mgr.Unlock, "Unlock recovery — passphrase (empty cancels): ", "Unlocking encrypted recovery…"); err != nil {
+			cfg, notices := loadUIConfiguration()
+			printConfigurationNotices(cmd.ErrOrStderr(), notices)
+			if err := unlockPrivateInteractive(mgr, cmd.InOrStdin(), cmd.ErrOrStderr(), cfg.UI.Theme, "Unlock recovery"); err != nil {
 				return err
 			}
 			recovery, err := mgr.ReadRecovery(args[0])
@@ -106,8 +108,6 @@ func newRecoverCommand(factory managerFactory) *cobra.Command {
 				return err
 			}
 			fmt.Fprintln(cmd.ErrOrStderr(), policy+". Review before saving: this replaces private Markdown, not an automatic merge. The recovery file is retained.")
-			cfg, notices := loadUIConfiguration()
-			printConfigurationNotices(cmd.ErrOrStderr(), notices)
 			return tui.EditRecoveredPrivateWithPolicy(recovery.Date, current.Content, recovery.Content, makePolicySaver(mgr, policy == "Saving encrypted"), mgr.SealRecovery, makeLoader(mgr), policy, cfg.UI.Theme)
 		},
 	}

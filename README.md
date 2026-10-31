@@ -156,6 +156,10 @@ masked unlock. Private previews are not automatically decrypted across history.
 Shared `sp`/location chrome and branded Glamour headings unify the screens.
 Compact footers show fewer default actions; press `?` or `F1` in a viewer or
 template chooser for the full grouped, scrollable key reference and status details.
+Bare `sp` and encrypted recovery use the same themed, masked unlock screen as
+the viewers—not a separate inline password prompt. Enter unlocks; Escape or an
+empty submission cancels these standalone screens. F1 shows contextual help.
+
 In the built-in editor or TUI unlock prompt, use **F1 only**: `?` stays literal.
 The in-memory private writer is titled **Write / date**, with themed help and
 conflict review. It opens at the start and provides Ctrl+Z/Y

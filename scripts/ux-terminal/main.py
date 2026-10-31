@@ -11,6 +11,7 @@ from pathlib import Path
 import secrets
 import subprocess
 import sys
+import signal
 import time
 
 sys.dont_write_bytecode = True
@@ -65,11 +66,11 @@ def environment(name, content="BASE_PLAIN", config='[ui]\ntheme="dark"\nicons="u
     return env, store, note
 
 
-def run(args, env, operation):
+def run(args, env, operation, expected=0):
     terminal = module.Terminal(binary, args, env)
     try:
         operation(terminal)
-        assert terminal.wait() == 0
+        assert terminal.wait() == expected
         assert secret.encode() not in terminal.output
     finally:
         terminal.close()
@@ -200,6 +201,25 @@ run(["privacy", "enable"], env, enable)
 original = note.read_bytes()
 
 
+def bare_unlock_cancel(terminal):
+    terminal.expect("Unlock notes")
+    terminal.expect("Passphrase:")
+    terminal.send("wrong-synthetic-attempt\r")
+    terminal.expect("Unlock failed")
+    terminal.send(b"\x1bOP")
+    terminal.expect("Unlock notes / Help")
+    terminal.send("\x1b")
+    terminal.expect("Passphrase:")
+    terminal.send("\r")
+    assert "Unlock private notes — passphrase".encode() not in terminal.output
+    assert b"wrong-synthetic-attempt" not in terminal.output
+
+
+run([], env, bare_unlock_cancel, expected=1)
+assert note.read_bytes() == original
+print("PASS: bare unlock uses the masked shared screen, retries, contextual help and empty cancellation")
+
+
 def session(terminal):
     terminal.expect("Note locked.")
     terminal.send("a")
@@ -261,7 +281,9 @@ run(["privacy", "disable"], env, disable)
 
 
 def recovery(terminal):
-    terminal.password(secret, "Unlock recovery")
+    terminal.expect("Unlock recovery")
+    terminal.expect("Passphrase:")
+    terminal.send(secret + "\r")
     terminal.expect("Write · " + today)
     terminal.expect("Saving as plaintext")
     terminal.send(b"\x13")
@@ -312,8 +334,65 @@ def concurrent_policy(terminal):
 run(["-n"], env, concurrent_policy)
 assert json.loads(note.read_text())["content"] == "XBASE_PRIVATE"
 print("PASS: concurrent disable cannot silently publish an open private draft as plaintext")
+special_env, special_store, special_note = environment("standalone-utf8", "SYNTHETIC_EXACT_NOTE")
+special_secret = " leading \ufffd trailing "
+
+
+def enable_special(terminal):
+    terminal.expect("Type ENABLE PRIVACY")
+    terminal.send("ENABLE PRIVACY\n")
+    terminal.password(special_secret, "Passphrase: ")
+    terminal.password(special_secret, "Confirm passphrase: ")
+    terminal.expect("Privacy enabled.")
+
+
+run(["privacy", "enable"], special_env, enable_special)
+special_before = special_note.read_bytes()
+
+
+def exact_unlock(terminal):
+    terminal.expect("Unlock notes")
+    terminal.expect("Passphrase:")
+    terminal.send("\x1b[200~prefix\t\r\nsuffix\x1b[201~")
+    terminal.expect("Input rejected")
+    terminal.send("\r")
+    terminal.expect("invalid input cleared")
+    terminal.send(b"\x1b[200~prefix\xffsuffix\x1b[201~")
+    terminal.expect("Input rejected")
+    terminal.send("\r")
+    terminal.expect("invalid input cleared")
+    terminal.send(special_secret + "\r")
+    terminal.expect("Write ·")
+    terminal.send(b"\x13")
+    assert special_secret.encode() not in terminal.output
+
+
+run([], special_env, exact_unlock)
+assert special_note.read_bytes() == special_before
+
+
+def pasted_unlock(terminal):
+    terminal.expect("Passphrase:")
+    terminal.send("\x1b[200~" + special_secret + "\x1b[201~\r")
+    terminal.expect("Write ·")
+    terminal.send(b"\x13")
+    assert special_secret.encode() not in terminal.output
+
+
+run([], special_env, pasted_unlock)
+assert special_note.read_bytes() == special_before
+
+
+def interrupted_unlock(terminal):
+    terminal.expect("Passphrase:")
+    os.kill(terminal.pid, signal.SIGTERM)  # This owned synthetic terminal only.
+
+
+run([], special_env, interrupted_unlock, expected=1)
+assert special_note.read_bytes() == special_before
+print("PASS: standalone UTF-8/paste secrets stay exact; controls reject and signals cancel without writes")
 print(json.dumps({
-    "status": "passed", "workflow_groups": 7,
+    "status": "passed", "workflow_groups": 9,
     "duration_seconds": round(time.monotonic() - started, 2),
     "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
     "fixtures": str(root.relative_to(repo)), "transcript_saved": False,

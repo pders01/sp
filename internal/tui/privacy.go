@@ -48,16 +48,18 @@ type PrivacyHooks struct {
 }
 
 type privacyState struct {
-	hooks         PrivacyHooks
-	prompt        *privatePassphraseInput
-	promptErr     string
-	promptInvalid bool // Sticky until submission/cancellation; never sanitize a secret.
-	editAfter     string
-	templateAfter string
-	job           *privateUnlockJob
-	closed        bool
-	editor        *privateEditor
-	keyHelp       *keyHelp
+	hooks           PrivacyHooks
+	prompt          *privatePassphraseInput
+	promptErr       string
+	unlockTitle     string // Optional standalone context; never contains a secret.
+	unlockExitLabel string
+	promptInvalid   bool // Sticky until submission/cancellation; never sanitize a secret.
+	editAfter       string
+	templateAfter   string
+	job             *privateUnlockJob
+	closed          bool
+	editor          *privateEditor
+	keyHelp         *keyHelp
 }
 
 // SetPrivacy switches editing to the in-memory editor. No external editor or
@@ -549,7 +551,11 @@ func (a *App) updatePrivacy(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 		if key, ok := msg.(tea.KeyMsg); ok {
 			switch key.Type {
 			case tea.KeyF1:
-				p.keyHelp = newKeyHelp("Unlock notes", unlockBindings(), p.promptErr+"\nUnlock lasts for this process. Do not enter the passphrase into an agent chat.", a.nb.width, a.nb.height)
+				details := p.promptErr + "\nUnlock lasts for this process. Do not enter the passphrase into an agent chat."
+				if p.unlockExitLabel == "cancel" {
+					details += "\nEscape or an empty submission cancels this operation without loading a note."
+				}
+				p.keyHelp = newKeyHelp(a.unlockTitle(), unlockBindings(), details, a.nb.width, a.nb.height)
 				return true, nil
 			case tea.KeyEsc, tea.KeyCtrlC:
 				p.prompt.SetValue("")

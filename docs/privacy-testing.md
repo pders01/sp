@@ -92,6 +92,20 @@ a provider restriction. Terminal results are redacted and transcripts are not
 saved. Preserve explicit distinctions between zero reachable advisories and
 advisories elsewhere in imported/required dependencies.
 
+### Standalone unlock follow-up
+
+Bare editing and encrypted recovery now reuse the masked form instead of an
+inline CLI password prompt. Full unit/race suites and vet pass; 11 privacy PTY
+checks and 9 UX workflow groups pass against candidate SHA256
+`01c089ff3636ebad43ef279e22a493aa705187347d2be8e3ad87401d86a44423`.
+Synthetic fixtures: `terminal-7412a712c9ccce94` and
+`ux-terminal-504c9a3468d13db7` under `.privacy-adversarial/`; no transcript saved.
+The added standalone checks cover retry/help/cancel, exact typed/pasted U+FFFD
+and surrounding spaces, rejected control/malformed-UTF-8 pastes, signal
+cancellation, and unchanged ciphertext after an untouched edit. No user store/config was accessed.
+The byte/paste adapter is scoped to this standalone form; other legacy decoder
+contexts are a separate follow-up, not covered by these new claims.
+
 ### Cohesive redesign: completed local validation
 
 The redesign is implemented, separately from the completed 40-item UX backlog.

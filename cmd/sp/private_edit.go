@@ -6,8 +6,6 @@ import (
 	"io"
 	"os"
 
-	"filippo.io/age"
-
 	"github.com/pders01/sp/internal/scratchpad"
 	"github.com/pders01/sp/internal/tui"
 )
@@ -21,22 +19,13 @@ func makePrivacyHooks(mgr *scratchpad.Manager) tui.PrivacyHooks {
 		return tui.PublicPage{Shared: shared.Content, HasPrivate: shared.HasPrivate || shared.Legacy}, nil
 	}
 	return tui.PrivacyHooks{
-		Inspect:     inspect,
-		IsUnlocked:  mgr.IsUnlocked,
-		Unlock:      mgr.Unlock,
-		Lock:        mgr.Lock,
-		AsyncUnlock: true,
+		Inspect: inspect, IsUnlocked: mgr.IsUnlocked, Unlock: mgr.Unlock, Lock: mgr.Lock, AsyncUnlock: true,
 		Load: func(date string) (tui.PrivatePage, error) {
-			// Read only the explicitly shared area before deciding whether a
-			// private read is allowed. Legacy plaintext is never a preview.
 			shared, err := inspect(date)
 			if err != nil {
 				return tui.PrivatePage{}, err
 			}
-			page := tui.PrivatePage{
-				Shared: shared.Shared, HasPrivate: shared.HasPrivate,
-				Locked: !mgr.IsUnlocked(),
-			}
+			page := tui.PrivatePage{Shared: shared.Shared, HasPrivate: shared.HasPrivate, Locked: !mgr.IsUnlocked()}
 			if page.Locked {
 				return page, nil
 			}
@@ -52,64 +41,28 @@ func makePrivacyHooks(mgr *scratchpad.Manager) tui.PrivacyHooks {
 			page.Applied = append([]string(nil), private.AppliedTemplates...)
 			return page, nil
 		},
-		Save:    makePolicySaver(mgr, true),
-		Recover: mgr.SealRecovery,
+		Save: makePolicySaver(mgr, true), Recover: mgr.SealRecovery,
 	}
 }
 
-// unlockPrivateWithRetry never rewrites a secret or offers an unmasked fallback.
-// Only authentication failures retry; storage/metadata errors retain their cause.
-func unlockPrivateWithRetry(prompt privacyPrompter, output io.Writer, unlock func([]byte) error, labels ...string) error {
-	passwordPrompt, progress := "Unlock private notes — passphrase (empty cancels): ", "Unlocking private notes…"
-	if len(labels) > 0 {
-		passwordPrompt = labels[0]
+func unlockPrivateInteractive(mgr *scratchpad.Manager, input io.Reader, output io.Writer, theme, title string) error {
+	prompt, err := newTerminalPrompt(input, output)
+	if err != nil {
+		return err
 	}
-	if len(labels) > 1 {
-		progress = labels[1]
-	}
-	for {
-		passphrase, err := prompt.Password(passwordPrompt)
-		if err != nil {
-			clear(passphrase)
-			return fmt.Errorf("read passphrase: %w", err)
-		}
-		if len(passphrase) == 0 {
-			clear(passphrase)
-			return errors.New("unlock private notes cancelled")
-		}
-		if validationErr := scratchpad.ValidatePassphrase(passphrase); validationErr != nil {
-			clear(passphrase)
-			if _, err := fmt.Fprintf(output, "Invalid passphrase input: %v. Try again, or submit empty input to cancel.\n", validationErr); err != nil {
-				return err
-			}
-			continue
-		}
-		if _, err := fmt.Fprintln(output, progress); err != nil {
-			clear(passphrase)
-			return err
-		}
-		err = unlock(passphrase)
-		clear(passphrase)
-		if err == nil {
-			return nil
-		}
-		var mismatch *age.NoIdentityMatchError
-		if !errors.As(err, &mismatch) {
-			return fmt.Errorf("unlock private notes: %w", err)
-		}
-		if _, err := fmt.Fprintln(output, "Incorrect passphrase. Try again, or submit an empty passphrase to cancel."); err != nil {
-			return fmt.Errorf("write unlock retry: %w", err)
-		}
-	}
+	return tui.UnlockNotes(tui.UnlockOptions{
+		Input: prompt.input, Output: output.(*os.File), Theme: theme, Title: title,
+		IsUnlocked: mgr.IsUnlocked, Unlock: mgr.Unlock, Lock: mgr.Lock,
+	})
 }
 
 func editPrivateAndSave(mgr *scratchpad.Manager, pickedDate string, preference ...string) error {
+	theme := tui.ThemePrefAuto
+	if len(preference) > 0 {
+		theme = preference[0]
+	}
 	if !mgr.IsUnlocked() {
-		prompt, err := newTerminalPrompt(os.Stdin, os.Stderr)
-		if err != nil {
-			return err
-		}
-		if err := unlockPrivateWithRetry(prompt, os.Stderr, mgr.Unlock); err != nil {
+		if err := unlockPrivateInteractive(mgr, os.Stdin, os.Stderr, theme, "Unlock notes"); err != nil {
 			return err
 		}
 	}
@@ -122,10 +75,6 @@ func editPrivateAndSave(mgr *scratchpad.Manager, pickedDate string, preference .
 	}
 	if err != nil {
 		return fmt.Errorf("failed to load private scratchpad: %w", err)
-	}
-	theme := tui.ThemePrefAuto
-	if len(preference) > 0 {
-		theme = preference[0]
 	}
 	return tui.EditPrivateWithTheme(page.Date, page.Content, makePolicySaver(mgr, true), mgr.SealRecovery, makeLoader(mgr), theme)
 }

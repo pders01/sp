@@ -151,6 +151,7 @@ func TestTemplateWorkflowEscapeCancelsAndWaitsWithoutLeavingApp(t *testing.T) {
 	for _, mode := range []AppMode{ModeCalendar, ModeNotebook} {
 		t.Run(fmt.Sprint(mode), func(t *testing.T) {
 			app := templateWorkflowApp(t, mode, func(ctx context.Context, _ string, _ []TemplateSelection) (TemplateApplyResult, error) {
+				<-ctx.Done() // Accepted work may start before the UI sends Escape.
 				if !errors.Is(ctx.Err(), context.Canceled) {
 					t.Fatal("Escape did not cancel the applier context")
 				}

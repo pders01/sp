@@ -181,7 +181,9 @@ class Suite:
             assert path.stat().st_mode & 0o077 == 0, "published note/key permissions too broad"
 
     def open_editor(self, terminal):
-        terminal.password(self.secret, "Unlock private notes")
+        terminal.expect("Unlock notes")
+        terminal.expect("Passphrase:")
+        terminal.send(self.secret + "\r")
         terminal.expect("Write · " + self.today)
 
     @staticmethod
@@ -277,7 +279,9 @@ class Suite:
         self.results.append("confirmed cancellation seals encrypted recovery without replacing current note")
 
         def recover(t):
-            t.password(self.secret, "Unlock recovery")
+            t.expect("Unlock recovery")
+            t.expect("Passphrase:")
+            t.send(self.secret + "\r")
             t.expect("Write · " + self.today)
             t.expect("Saving encrypted")
             t.expect(self.recovered)
