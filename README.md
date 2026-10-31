@@ -175,6 +175,9 @@ Moving by a day/week, returning to today, or selecting a date resets that
 preferred day. Year view has four columns; Up/Down moves one visual row.
 Year timelines cover the complete month: narrow tiles group consecutive days,
 with `■` meaning at least one entry in that range and `·` meaning none.
+Month layout uses compact cells when needed to show a labelled excerpt at ordinary
+terminal heights. Enter opens the full note; calendar previews remain public-only
+in privacy mode and never trigger private decryption.
 
 #### Notebook
 
@@ -196,7 +199,11 @@ with `■` meaning at least one entry in that range and `·` meaning none.
 ## Configuration
 
 Optional TOML at `~/.sp/config.toml`. Missing fields fall back to the
-defaults shown in `config.example.toml`:
+defaults shown in `config.example.toml`. Unknown keys and invalid UI values produce
+specific warnings while preserving valid settings; syntax errors use safe defaults.
+Warnings remain in viewer F1 details after later status messages. Read-only
+browsing does not resolve an editor or validate template actions until requested:
+a broken EDITOR or untrusted/invalid template definition does not hide your notes.
 
 ```toml
 [ui]
@@ -218,7 +225,9 @@ command = ["/path/to/issue-template", "--markdown"]
 
 `auto` resolves via `GLAMOUR_STYLE` → `COLORFGBG` → terminal
 detection → macOS `AppleInterfaceStyle`. Send `SIGUSR1` (`pkill -USR1
-sp`) to re-detect after a manual switch.
+sp`) to re-detect after a manual switch. Calendar/notebook share one application
+appearance preference. Ctrl+T acknowledges preference changes even if the resolved
+colors stay the same; changes are session-only and do not rewrite `config.toml`.
 
 Press `a` on a day to open the multi-select template chooser. Markdown files
 and command stdout become separate `##` sections; commands receive the selected
@@ -246,10 +255,12 @@ template remains opt-in like every configured template.
 ## Editor support
 
 **Legacy plaintext mode only:** privacy mode uses the built-in in-memory editor,
-not an external editor. External editor plugins, swap files, and backups have no
+not an external editor. Viewer private/shared sections are independently rendered
+under UI-level labels, so note Markdown cannot consume the shared provenance
+boundary; empty shared areas stay hidden. External editor plugins, swap files, and backups have no
 privacy guarantee. See [private editing and recovery](docs/privacy.md#edit-failures-recovery-and-backups).
 
-In legacy mode, `sp` resolves the editor via `$EDITOR`, then `$VISUAL`, then
+In legacy mode, an explicit edit resolves the editor via `$EDITOR`, then `$VISUAL`, then
 platform-specific fallbacks (vim, nvim, nano, micro, emacs, code,
 etc.).
 

@@ -32,6 +32,7 @@ type App struct {
 	templates        []DayTemplate
 	appliedTemplates map[string]map[string]bool
 	applyTemplates   TemplateApplier
+	templateResolver func() error
 	templateChooser  *templateChooser
 	privacy          *privacyState
 	dateJump         *dateJumpPrompt
@@ -62,6 +63,7 @@ func NewApp(cal *Calendar, nb *Notebook, mode AppMode) *App {
 	cal.onLoad, nb.onLoad = app.noteLoaded, app.noteLoaded
 	cal.onRecovery, nb.onRecovery = app.trackRecovery, app.trackRecovery
 	cal.onConsumed, nb.onConsumed = app.consumedRecovery, app.consumedRecovery
+	nb.theme.SetPref(cal.theme.Pref())
 	return app
 }
 
@@ -107,11 +109,10 @@ func (a *App) SetSharedContents(contents map[string]string) {
 	a.nb.updateViewportContent()
 }
 
-// Init kicks off both sub-views' watchers up front. They only emit
-// events when something signals them, so running both is cheap and
-// avoids a re-init delay when popping back to the calendar.
+// Init starts the one application-wide appearance subscription. Both views
+// share its preference/resolution without sharing transient status banners.
 func (a *App) Init() tea.Cmd {
-	return tea.Batch(a.cal.Init(), a.nb.Init())
+	return a.cal.Init()
 }
 
 // Close releases resources held by the sub-views. Safe to call after
@@ -125,6 +126,9 @@ func (a *App) Close() {
 // Update routes the message to the active view, then inspects the
 // view's state machine for drill / pop / quit signals and reacts.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if _, changed := msg.(themeChangedMsg); changed {
+		return a.appearanceChanged()
+	}
 	if a.dateJump != nil {
 		if size, ok := msg.(tea.WindowSizeMsg); ok {
 			a.cal.Update(size)
@@ -175,6 +179,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a.updateTemplateChooser(msg)
 	}
+	if key, ok := msg.(tea.KeyMsg); ok && key.Type == tea.KeyCtrlT {
+		a.cycleAppearance()
+		return a, nil
+	}
 	if key, ok := msg.(tea.KeyMsg); ok && key.Type == tea.KeyRunes && !key.Alt && len(key.Runes) == 1 && key.Runes[0] == 'd' {
 		current := a.privateDate()
 		if current == "" {
@@ -183,7 +191,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.dateJump = newDateJumpPrompt(current, a.cal.width, a.cal.height)
 		return a, nil
 	}
-	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "a" && a.startTemplateChooser() {
+	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "a" && a.openTemplateChooser() {
 		return a, nil
 	}
 

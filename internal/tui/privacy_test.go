@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func privacyKey(s string) tea.KeyMsg {
@@ -19,9 +20,9 @@ func TestRenderPrivatePageOmitsEmptySharedSection(t *testing.T) {
 		page PrivatePage
 		want string
 	}{
-		{"unlocked", PrivatePage{Private: "private text"}, "# Private notes\n\nprivate text"},
-		{"locked", PrivatePage{Locked: true, HasPrivate: true}, "# Private notes\n\nLocked. Press u to unlock private notes."},
-		{"empty", PrivatePage{HasPrivate: true}, "# Private notes\n\n(Private note is empty.)"},
+		{"unlocked", PrivatePage{Private: "private text"}, "private text"},
+		{"locked", PrivatePage{Locked: true, HasPrivate: true}, "Locked. Press u to unlock private notes."},
+		{"empty", PrivatePage{HasPrivate: true}, "Private note is empty"},
 	} {
 		for _, shared := range []struct {
 			name    string
@@ -34,12 +35,19 @@ func TestRenderPrivatePageOmitsEmptySharedSection(t *testing.T) {
 			t.Run(private.name+"/"+shared.name, func(t *testing.T) {
 				page := private.page
 				page.Shared = shared.content
-				want := private.want
-				if shared.name == "present" {
-					want += "\n\n---\n\n# Agent contributions · shared\n\n" + shared.content
+				n := NewNotebook(nil)
+				defer n.Close()
+				n.privacyEnabled = true
+				got := ansi.Strip(n.renderPrivateAreas(page))
+				if !strings.Contains(got, private.want) {
+					t.Fatalf("private area = %q, want %q", got, private.want)
 				}
-				if got := renderPrivatePage(page); got != want {
-					t.Fatalf("renderPrivatePage() = %q, want %q", got, want)
+				if shared.name == "present" {
+					if !strings.Contains(got, "Agent contributions · shared") || !strings.Contains(got, "shared contribution") {
+						t.Fatal("populated shared area was hidden")
+					}
+				} else if strings.Contains(got, "Agent contributions") {
+					t.Fatal("empty shared area was rendered")
 				}
 			})
 		}

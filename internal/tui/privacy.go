@@ -62,6 +62,7 @@ func (a *App) SetPrivacy(hooks PrivacyHooks) {
 	// Defense in depth: do not leave an external editing path wired.
 	a.nb.editor, a.nb.save, a.nb.loader = nil, nil, nil
 	a.cal.editor, a.cal.save, a.cal.loader = nil, nil, nil
+	a.nb.editorProvider, a.cal.editorProvider = nil, nil
 	for date := range a.cal.hasData {
 		// Without an inspector, treat presence conservatively rather than
 		// claiming a known date has no entry. Production hooks inspect it.

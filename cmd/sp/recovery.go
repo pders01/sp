@@ -80,7 +80,7 @@ func newRecoverCommand(factory managerFactory) *cobra.Command {
 				}
 				cfg := config.Default()
 				return runApp(mgr, ed, tui.NewIconSet(cfg.UI.Icons), cfg,
-					scratchpad.RecoveryReference{Date: plaintextDate, Path: path})
+					appStartup{recovery: &scratchpad.RecoveryReference{Date: plaintextDate, Path: path}})
 			}
 			prompt, err := newTerminalPrompt(cmd.InOrStdin(), cmd.ErrOrStderr())
 			if err != nil {

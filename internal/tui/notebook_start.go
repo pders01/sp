@@ -42,14 +42,15 @@ func (n *Notebook) emptyView() string {
 	}
 	controls := wrappedHelp([]helpEntry{
 		{keys: "Enter/e/i", label: "create today", visible: true},
-		{keys: "u", label: "unlock", visible: n.privacyEnabled},
+		{keys: "u", label: "unlock", visible: n.privacyEnabled && !privacyIsUnlocked(n.privacyState)},
+		{keys: "Ctrl+L", label: "lock", visible: n.canRelock && privacyIsUnlocked(n.privacyState)},
 		{keys: "d", label: "date", visible: n.dateJumpAvailable},
 		{keys: "?/F1", label: "help", visible: true},
 		{keys: "Esc", label: back, visible: true},
 		{keys: "q", label: "quit", visible: true},
 	}, n.width)
 	view := strings.Join([]string{
-		viewHeader("Notebook · "+n.today, n.theme.StatusText(), palette, n.width),
+		viewHeader("Notebook · "+n.today+privacyBadge(n.privacyEnabled, n.privacyState), n.theme.StatusText(), palette, n.width),
 		palette.MutedText.Render("No scratchpad pages found."), controls,
 	}, "\n")
 	minHeight := viewHeight(view)

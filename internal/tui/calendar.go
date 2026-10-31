@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/pders01/sp/internal/editor"
 	"github.com/pders01/sp/internal/scratchpad"
 )
@@ -25,13 +26,14 @@ const (
 	minCellHeight    = 2
 	maxCellHeight    = 6
 	weekHeaderRow    = 1
-	minPreviewHeight = 10
+	minPreviewHeight = 4
 	yearColumns      = 4
 )
 
 // Calendar is a full-screen month/year calendar that drills down to a day.
 type Calendar struct {
 	icons              IconSet
+	diagnostics        string
 	hasData            map[string]bool
 	previews           map[string]string
 	contents           map[string]string
@@ -46,11 +48,14 @@ type Calendar struct {
 	height             int
 	theme              *themeWatcher
 	editor             *editor.Editor
+	editorProvider     EditorProvider
 	save               Saver
 	loader             func(date string) (string, error)
 	templatesAvailable bool
 	dateJumpAvailable  bool
 	privacyEnabled     bool
+	privacyState       func() string
+	canRelock          bool
 	privateDates       map[string]bool // Public presence only; never private previews.
 	loadErrors         map[string]string
 	onChange           func(date, content string)
@@ -100,6 +105,7 @@ func (c *Calendar) SetThemePref(pref string) {
 // can run the editor itself.
 func (c *Calendar) SetEditor(ed *editor.Editor, save Saver, load func(date string) (string, error)) {
 	c.editor = ed
+	c.editorProvider = nil
 	c.save = save
 	c.loader = load
 }
@@ -219,7 +225,7 @@ func (c *Calendar) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if c.view == ViewYear {
 			context = "year"
 		}
-		c.keyHelp = newKeyHelp("Calendar · "+context, c.keyBindings(), c.focusLine()+"\n"+c.theme.StatusText(), c.width, c.height)
+		c.keyHelp = newKeyHelp("Calendar · "+context, c.keyBindings(), c.focusLine()+"\n"+diagnosticDetails(c.theme.StatusText(), c.diagnostics), c.width, c.height)
 		return c, nil
 	}
 	switch msg.String() {
@@ -349,11 +355,13 @@ func (c *Calendar) View() string {
 		title = fmt.Sprintf("Calendar · %d", c.cursor.Year())
 		minWidth, minBodyHeight = yearColumns*14, 12/yearColumns*5
 	}
+	title += privacyBadge(c.privacyEnabled, c.privacyState)
 	header := viewHeader(withIcon(c.icons.Calendar, title), c.theme.StatusText(), palette, c.width)
 	help := palette.Help.Render(wrappedHelp([]helpEntry{
 		{keys: "enter", label: "open", visible: true},
 		{keys: "e", label: c.editLabel(), visible: !year},
-		{keys: "u", label: "unlock", visible: !year && c.privacyEnabled},
+		{keys: "u", label: "unlock", visible: !year && c.privacyEnabled && !privacyIsUnlocked(c.privacyState)},
+		{keys: "Ctrl+L", label: "lock", visible: !year && c.canRelock && privacyIsUnlocked(c.privacyState)},
 		{keys: "Esc", label: "month", visible: year},
 		{keys: "a", label: "templates", visible: !year && c.templatesAvailable},
 		{keys: "d", label: "date", visible: c.dateJumpAvailable},
@@ -388,7 +396,7 @@ func (c *Calendar) focusLine() string {
 		return focus + " — entry unavailable"
 	}
 	if preview, ok := c.previews[date]; ok {
-		return focus + " — " + preview
+		return focus + " — " + safeMarkdownDisplay(preview)
 	}
 	if c.privacyEnabled && c.privateDates[date] {
 		return focus + " — private note hidden"
@@ -396,16 +404,18 @@ func (c *Calendar) focusLine() string {
 	return focus
 }
 
-// renderMonthLayout stacks the document preview below the calendar so the
-// full terminal width remains available to both. The calendar gets its full
-// useful height first; the preview appears only when the remaining space is
-// large enough to show meaningful content.
+// renderMonthLayout reserves a useful preview before growing day cells. Every
+// week remains visible, even in a six-week month. At minimum frame heights the
+// grid takes priority; taller frames grow whole cell rows, then the excerpt.
 func (c *Calendar) renderMonthLayout(width, height int) string {
-	calendarH := weekHeaderRow + c.monthRows()*maxCellHeight
-	previewH := height - calendarH - 1
-	if previewH < minPreviewHeight {
+	rows := c.monthRows()
+	calendarH := weekHeaderRow + rows*minCellHeight
+	if height-calendarH-1 < minPreviewHeight {
 		return c.renderMonth(width, height)
 	}
+	cellH := clamp((height-weekHeaderRow-1-minPreviewHeight)/rows, minCellHeight, maxCellHeight)
+	calendarH = weekHeaderRow + rows*cellH
+	previewH := height - calendarH - 1
 
 	rule := c.theme.Palette().Separator.Render(strings.Repeat("─", max(width, 0)))
 	return lipgloss.JoinVertical(
@@ -431,9 +441,10 @@ func (c *Calendar) renderDocumentPreview(width, height int) string {
 	}
 
 	date := c.cursor.Format("2006-01-02")
-	title := c.theme.Palette().MutedText.Bold(true).Render(
-		fmt.Sprintf("%s · %s", date, c.cursor.Format("Monday")),
-	)
+	title := fmt.Sprintf("Preview · %s · %s", date, c.cursor.Format("Monday"))
+	contentWidth := max(width-2, 0)
+	// Only the cached public projection belongs here. Rendering must not call a
+	// loader or decrypt private notes, even when the notebook is unlocked.
 	content := c.contents[date]
 	switch {
 	case c.loadErrors[date] != "":
@@ -451,28 +462,41 @@ func (c *Calendar) renderDocumentPreview(width, height int) string {
 		content = c.theme.Palette().MutedText.Render(message)
 	default:
 		if c.privacyEnabled {
-			title += c.theme.Palette().MutedText.Render(" · shared")
+			title += " · shared"
 		}
 		renderer, err := glamour.NewTermRenderer(
 			glamour.WithStandardStyle(c.theme.Style()),
-			glamour.WithWordWrap(max(width-4, 1)),
+			glamour.WithWordWrap(max(contentWidth-4, 1)),
 		)
 		if err == nil {
-			if rendered, renderErr := renderer.Render(content); renderErr == nil {
+			if rendered, renderErr := renderer.Render(safeMarkdownDisplay(content)); renderErr == nil {
 				content = strings.Trim(rendered, "\n")
 			}
 		}
 	}
 
 	lines := strings.Split(content, "\n")
+	// Glamour's document margins can be ANSI-styled spaces, not just newlines.
+	// Do not spend the short excerpt on those otherwise invisible rows.
+	for len(lines) > 0 && strings.TrimSpace(ansi.Strip(lines[0])) == "" {
+		lines = lines[1:]
+	}
+	for len(lines) > 0 && strings.TrimSpace(ansi.Strip(lines[len(lines)-1])) == "" {
+		lines = lines[:len(lines)-1]
+	}
 	available := max(height-2, 0)
+	hint := "Enter: full note"
 	if len(lines) > available {
 		lines = lines[:available]
+		hint = "… · " + hint
 	}
-	body := title
+	body := c.theme.Palette().MutedText.Bold(true).Render(truncate(title, contentWidth))
 	if available > 0 {
-		body += "\n\n" + strings.Join(lines, "\n")
+		body += "\n" + fitView(strings.Join(lines, "\n"), contentWidth, available)
 	}
+	// Keep the full-note action visible even when the excerpt is clipped.
+	body = lipgloss.NewStyle().Height(max(height-1, 0)).Render(body)
+	body += "\n" + c.theme.Palette().MutedText.Render(truncate(hint, contentWidth))
 	return fitView(lipgloss.NewStyle().Width(width).Height(height).Padding(0, 1).Render(body), width, height)
 }
 
@@ -553,6 +577,11 @@ func (c *Calendar) renderDayCell(day time.Time, month time.Month, w, h int) stri
 		rendered = dayStyle.Render(dayLabel)
 	}
 
+	// Compact cells retain their blank separator row, but presence must not
+	// depend on color alone when there is no room for an annotation.
+	if h == minCellHeight && !outOfMonth && (hasData || c.privacyEnabled && c.privateDates[dateStr]) {
+		rendered += p.MutedText.Render("•")
+	}
 	lines := []string{rendered}
 	if h > minCellHeight && !outOfMonth {
 		if ann := c.cellAnnotation(day, dateStr, innerW); ann != "" {
@@ -750,6 +779,13 @@ func (c *Calendar) MarkDate(date, content string) {
 // nil when no editor is wired or preparation fails (caller falls back to
 // quit-with-direct-edit so the orchestrator can run the editor).
 func (c *Calendar) startEdit(date string) tea.Cmd {
+	if c.editor == nil && c.editorProvider != nil {
+		ed, err := c.editorProvider()
+		if err != nil {
+			return unavailableEdit(func(text string) { c.theme.SetStatus(text, 0) }, err)
+		}
+		c.editor = ed
+	}
 	if c.editor == nil || c.save == nil || c.loader == nil {
 		return nil
 	}

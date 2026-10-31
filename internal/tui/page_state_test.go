@@ -24,7 +24,10 @@ func TestPrivatePageStatesDistinguishHiddenAbsentSharedAndUnavailable(t *testing
 		{"unavailable", PrivatePage{LoadError: "damaged document"}, "Private note unavailable: damaged document", []string{"No entry", "Locked.", "is empty"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			view := renderPrivatePage(tc.page)
+			n := NewNotebook(nil)
+			defer n.Close()
+			n.privacyEnabled = true
+			view := n.renderPrivateAreas(tc.page)
 			if !strings.Contains(view, tc.want) {
 				t.Fatalf("page state = %q, want %q", view, tc.want)
 			}

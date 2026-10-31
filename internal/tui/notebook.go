@@ -8,9 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/pders01/sp/internal/editor"
 	"github.com/pders01/sp/internal/scratchpad"
 )
@@ -36,6 +34,7 @@ type Notebook struct {
 	contents           map[string]string
 	current            int
 	today              string // Session-start date for startup and creation.
+	diagnostics        string
 	viewport           viewport.Model
 	positions          map[string]int // Session-only offsets, never private text.
 	viewportDate       string         // The date actually rendered, not an index.
@@ -48,11 +47,14 @@ type Notebook struct {
 	icons              IconSet
 	theme              *themeWatcher
 	editor             *editor.Editor
+	editorProvider     EditorProvider
 	save               Saver
 	loader             func(date string) (string, error)
 	templatesAvailable bool
 	dateJumpAvailable  bool
 	privacyEnabled     bool
+	privacyState       func() string
+	canRelock          bool
 	privatePage        *PrivatePage
 	privateDate        string
 	sharedContents     map[string]string
@@ -102,6 +104,7 @@ func (n *Notebook) SetThemePref(pref string) {
 // Without an editor or saver, those keys fall back to quit-with-selected.
 func (n *Notebook) SetEditor(ed *editor.Editor, save Saver, load func(date string) (string, error)) {
 	n.editor = ed
+	n.editorProvider = nil
 	n.save = save
 	n.loader = load
 }
@@ -166,6 +169,13 @@ func (n *Notebook) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // editor is wired or preparation fails (the caller falls back to
 // quit-with-selected so the orchestrator can run the editor).
 func (n *Notebook) startEdit(date string) tea.Cmd {
+	if n.editor == nil && n.editorProvider != nil {
+		ed, err := n.editorProvider()
+		if err != nil {
+			return unavailableEdit(func(text string) { n.theme.SetStatus(text, 0) }, err)
+		}
+		n.editor = ed
+	}
 	if n.editor == nil || n.save == nil {
 		return nil
 	}
@@ -231,7 +241,7 @@ func (n *Notebook) flashError(text string) {
 
 func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if helpRequested(msg, true) {
-		n.keyHelp = newKeyHelp("Notebook", n.keyBindings(), n.theme.StatusText(), n.width, n.height)
+		n.keyHelp = newKeyHelp("Notebook", n.keyBindings(), diagnosticDetails(n.theme.StatusText(), n.diagnostics), n.width, n.height)
 		return n, nil
 	}
 	n.layoutViewport()
@@ -309,7 +319,7 @@ func (n *Notebook) View() string {
 }
 
 func (n *Notebook) renderHeader() string {
-	return viewHeader(withIcon(n.icons.Notebook, "Notebook · "+n.GetCurrentPage()), n.theme.StatusText(), n.theme.Palette(), n.width)
+	return viewHeader(withIcon(n.icons.Notebook, "Notebook · "+n.GetCurrentPage()+privacyBadge(n.privacyEnabled, n.privacyState)), n.theme.StatusText(), n.theme.Palette(), n.width)
 }
 
 func (n *Notebook) layoutViewport() {
@@ -381,7 +391,8 @@ func (n *Notebook) renderFooter() string {
 		{keys: "←/→", label: "newer/older", visible: true},
 		{keys: "↑/↓", label: "scroll", visible: true},
 		{keys: "enter/e", label: n.editLabel(), visible: true},
-		{keys: "u", label: "unlock", visible: n.privacyEnabled},
+		{keys: "u", label: "unlock", visible: n.privacyEnabled && !privacyIsUnlocked(n.privacyState)},
+		{keys: "Ctrl+L", label: "lock", visible: n.canRelock && privacyIsUnlocked(n.privacyState)},
 		{keys: "a", label: "templates", visible: n.templatesAvailable},
 		{keys: "d", label: "date", visible: n.dateJumpAvailable},
 		{keys: "esc", label: back, visible: true},
@@ -415,25 +426,13 @@ func (n *Notebook) updateViewportContent() {
 		if n.privatePage != nil && n.privateDate == n.pages[n.current] {
 			page = *n.privatePage
 		}
-		content = renderPrivatePage(page)
+		n.setReadingContent(n.renderPrivateAreas(page))
+		return
 	} else if shared := n.sharedContents[n.pages[n.current]]; strings.TrimSpace(shared) != "" {
-		content = renderPrivatePage(PrivatePage{Private: content, Shared: shared})
-	}
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(n.theme.Style()),
-		glamour.WithWordWrap(max(n.width-4, 20)),
-	)
-	if err != nil {
-		n.setReadingContent(ansi.Wrap(displayText(content), max(n.width, 20), ""))
+		n.setReadingContent(n.renderPrivateAreas(PrivatePage{Private: content, Shared: shared}))
 		return
 	}
-	rendered, err := renderer.Render(content)
-	if err != nil {
-		rendered = content
-	}
-	// Long code lines and renderer fallbacks must remain readable by scrolling,
-	// rather than losing their right-hand text at the final frame boundary.
-	n.setReadingContent(ansi.Wrap(displayText(rendered), max(n.width, 20), ""))
+	n.setReadingContent(n.renderMarkdown(content))
 }
 
 // SetContents sets the contents for all pages

@@ -252,10 +252,10 @@ func TestCalendarSetContentsBuildsPreviews(t *testing.T) {
 	}
 }
 
-func TestCalendarShortViewHidesDocumentPreview(t *testing.T) {
+func TestCalendarTooShortViewHidesDocumentPreview(t *testing.T) {
 	cal := NewCalendar(nil)
 	cal.width = 100
-	cal.height = 30
+	cal.height = 18
 	cal.cursor = time.Date(2026, time.July, 18, 0, 0, 0, 0, time.UTC)
 	date := cal.cursor.Format("2006-01-02")
 	cal.SetContents(map[string]string{date: "# Daily standup\nUnique second document line."})

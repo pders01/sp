@@ -106,12 +106,11 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 	}
 
 	cfg := config.Default()
+	var notices []string
 	if path, perr := config.DefaultPath(); perr == nil {
-		if loaded, lerr := config.Load(path); lerr == nil {
-			cfg = loaded
-		} else {
-			fmt.Fprintf(os.Stderr, "sp: %v\n", lerr)
-		}
+		cfg, notices = loadConfiguration(path)
+	} else {
+		notices = append(notices, fmt.Sprintf("Configuration path unavailable: %v; using safe defaults.", perr))
 	}
 	icons := tui.NewIconSet(cfg.UI.Icons)
 
@@ -119,10 +118,15 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 	// plaintext temporary files, including during editor resolution.
 	if private {
 		if !calendarFlag && !notebookFlag {
+			printConfigurationNotices(os.Stderr, notices)
 			return editPrivateAndSave(mgr, "")
 		}
-		return runApp(mgr, nil, icons, cfg)
+		return runApp(mgr, nil, icons, cfg, appStartup{notices: notices})
 	}
+	if calendarFlag || notebookFlag {
+		return runApp(mgr, nil, icons, cfg, appStartup{notices: notices})
+	}
+	printConfigurationNotices(os.Stderr, notices)
 	ed, eerr := editor.NewEditor()
 	if eerr != nil {
 		return fmt.Errorf("failed to initialize editor: %w", eerr)
@@ -134,7 +138,11 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 	return runApp(mgr, ed, icons, cfg)
 }
 
-func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *config.Config, recovery ...scratchpad.RecoveryReference) error {
+func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *config.Config, startup ...appStartup) error {
+	var options appStartup
+	if len(startup) > 0 {
+		options = startup[0]
+	}
 	private, err := mgr.PrivacyEnabled()
 	if err != nil {
 		return err
@@ -148,7 +156,11 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 	cal.SetThemePref(cfg.UI.Theme)
 	cal.SetContents(contents)
 	if !private {
-		cal.SetEditor(ed, makeSaver(mgr), makeLoader(mgr))
+		if ed == nil {
+			cal.SetEditorProvider(editor.NewEditor, makeSaver(mgr), makeLoader(mgr))
+		} else {
+			cal.SetEditor(ed, makeSaver(mgr), makeLoader(mgr))
+		}
 	}
 
 	nb := tui.NewNotebook(dates)
@@ -156,11 +168,15 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 	nb.SetThemePref(cfg.UI.Theme)
 	nb.SetContents(contents)
 	if !private {
-		nb.SetEditor(ed, makeSaver(mgr), makeLoader(mgr))
+		if ed == nil {
+			nb.SetEditorProvider(editor.NewEditor, makeSaver(mgr), makeLoader(mgr))
+		} else {
+			nb.SetEditor(ed, makeSaver(mgr), makeLoader(mgr))
+		}
 	}
 
 	mode := tui.ModeCalendar
-	if notebookFlag && !calendarFlag || len(recovery) > 0 {
+	if notebookFlag && !calendarFlag || options.recovery != nil {
 		mode = tui.ModeNotebook
 	}
 	app := tui.NewApp(cal, nb, mode)
@@ -177,20 +193,26 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 		}
 		app.SetSharedContents(sharedContents)
 	}
-	definitions, err := templateDefinitions(cfg)
-	if err != nil {
-		return err
-	}
-	options := make([]tui.DayTemplate, 0, len(definitions))
-	for _, definition := range definitions {
-		options = append(options, tui.DayTemplate{ID: definition.ID, Name: definition.Name})
-	}
-	app.SetTemplates(options, applied, makeTemplateApplier(mgr, definitions))
+	app.SetTemplateResolver(func() error {
+		definitions, err := templateDefinitions(cfg)
+		if err != nil {
+			return err
+		}
+		options := make([]tui.DayTemplate, 0, len(definitions))
+		for _, definition := range definitions {
+			options = append(options, tui.DayTemplate{ID: definition.ID, Name: definition.Name})
+		}
+		app.SetTemplates(options, applied, makeTemplateApplier(mgr, definitions))
+		return nil
+	})
 	app.SetRecoveryRecorder(mgr.RecordBufferRecovery, mgr.ForgetBufferRecovery)
-	defer app.Close()
-	defer app.ReportRecoveries(os.Stderr)
-	if len(recovery) > 0 {
-		if err := app.ReviewExternalRecovery(recovery[0].Date, recovery[0].Path); err != nil {
+	defer func() {
+		app.Close()
+		app.ReportRecoveries(os.Stderr)
+	}()
+	app.SetConfigurationNotices(options.notices)
+	if options.recovery != nil {
+		if err := app.ReviewExternalRecovery(options.recovery.Date, options.recovery.Path); err != nil {
 			return err
 		}
 	}

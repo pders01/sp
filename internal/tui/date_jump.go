@@ -91,7 +91,7 @@ func (p *dateJumpPrompt) update(msg tea.Msg) (date string, close bool) {
 	case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete, tea.KeyCtrlD, tea.KeyCtrlK:
 		p.input, _ = p.input.Update(msg)
 		p.err, p.rejected = "", false
-	default:
+	case tea.KeyLeft, tea.KeyRight, tea.KeyHome, tea.KeyEnd, tea.KeyCtrlA, tea.KeyCtrlE:
 		p.input, _ = p.input.Update(msg)
 	}
 	return "", false
