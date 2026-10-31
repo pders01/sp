@@ -11,7 +11,7 @@ import (
 // platform-independent policy tests. This does not resolve symlinks or wrappers.
 func editorBaseName(command string) string {
 	name := strings.ToLower(path.Base(strings.ReplaceAll(command, `\`, "/")))
-	return strings.TrimSuffix(name, ".exe")
+	return strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(name, ".exe"), ".cmd"), ".bat")
 }
 
 type guiCompletionPolicy struct {
@@ -32,7 +32,7 @@ func guiPolicy(command string) (guiCompletionPolicy, bool) {
 	case "notepad++":
 		// A separate process, not a request handed off to an existing instance.
 		return guiCompletionPolicy{flag: "-multiInst"}, true
-	case "notepad", "textedit", "open", "gnome-text-editor":
+	case "notepad", "textedit", "open", "gnome-text-editor", "electron":
 		return guiCompletionPolicy{}, true
 	default:
 		return guiCompletionPolicy{}, false
@@ -61,6 +61,15 @@ func editorCompletionArgs(command string, supplied []string) ([]string, error) {
 		end = len(args)
 	}
 	name := editorBaseName(command)
+	rawBase := strings.ToLower(path.Base(strings.ReplaceAll(command, `\`, "/")))
+	// Electron GUI executables do not implement the CLI wrapper's wait-marker
+	// lifecycle. A --wait flag alone is not proof that a GUI handoff blocks.
+	if strings.HasSuffix(rawBase, ".exe") {
+		switch name {
+		case "code", "code-insiders", "code - insiders", "code-oss", "codium", "vscodium", "cursor", "windsurf", "atom", "sublime_text":
+			return nil, fmt.Errorf("GUI executable %q can hand off before editing finishes; configure EDITOR (or VISUAL) to a blocking CLI launcher or terminal editor, not the direct GUI executable", command)
+		}
+	}
 	for _, arg := range args[:end] {
 		if (name == "gvim" || name == "mvim") && strings.HasPrefix(arg, "--remote") && !strings.HasPrefix(arg, "--remote-wait") && !strings.HasPrefix(arg, "--remote-tab-wait") {
 			return nil, fmt.Errorf("editor launcher %q option %q can return before editing finishes; configure EDITOR (or VISUAL) without remote options or use --remote-wait", command, arg)

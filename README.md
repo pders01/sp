@@ -256,7 +256,8 @@ Both bare `sp` and TUI editing wait for the prepared editor process to finish,
 not for the first file modification. Recognized GUI launchers receive their
 supported wait/foreground option (`code --wait`, `kate --block`, `gvim --nofork`,
 etc.); supplied options are retained. Unsupported detached launchers such as
-`open`, TextEdit, and modern Notepad are rejected with configuration advice.
+`open`, TextEdit, modern Notepad, and direct Electron GUI `.exe` binaries are
+rejected with configuration advice; a GUI binary is not its blocking CLI wrapper.
 Custom wrappers must remain in the foreground until editing is finished.
 Closing unchanged returns normally; intermediate saves do not finish the edit.
 

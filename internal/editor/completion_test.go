@@ -22,16 +22,16 @@ func TestGUICompletionOptions(t *testing.T) {
 		want    []string
 	}{
 		{"/Applications/VS Code/bin/code", []string{"--new-window"}, []string{"--new-window", "--wait"}},
-		{`C:\Program Files\VS Code\Code.EXE`, []string{"--profile", "synthetic profile", "-w"}, []string{"--profile", "synthetic profile", "-w"}},
+		{`C:\Program Files\VS Code\code.cmd`, []string{"--profile", "synthetic profile", "-w"}, []string{"--profile", "synthetic profile", "-w"}},
 		{"/opt/code-insiders", nil, []string{"--wait"}},
-		{`C:\Program Files\VS Code Insiders\Code - Insiders.exe`, nil, []string{"--wait"}},
-		{"codium.exe", nil, []string{"--wait"}},
-		{"VSCodium.exe", nil, []string{"--wait"}},
+		{`C:\Program Files\VS Code Insiders\code-insiders.cmd`, nil, []string{"--wait"}},
+		{"codium.cmd", nil, []string{"--wait"}},
+		{"VSCodium.cmd", nil, []string{"--wait"}},
 		{"cursor", nil, []string{"--wait"}},
 		{"windsurf", nil, []string{"--wait"}},
 		{"subl", []string{"--new-window", "-w"}, []string{"--new-window", "-w"}},
 		{"subl.exe", nil, []string{"--wait"}},
-		{`C:\Program Files\Sublime Text\sublime_text.exe`, []string{"-w"}, []string{"-w"}},
+		{`C:\Program Files\Sublime Text\subl.exe`, []string{"-w"}, []string{"-w"}},
 		{"atom", nil, []string{"--wait"}},
 		{"gedit", []string{"--standalone"}, []string{"--standalone", "--wait"}},
 		{"gedit", []string{"--wait"}, []string{"--wait"}},
@@ -85,7 +85,7 @@ func TestGUIClassificationUsesBasename(t *testing.T) {
 }
 
 func TestUnsafeLaunchersFailBeforeBufferCreation(t *testing.T) {
-	for _, name := range []string{"notepad", "TextEdit", "open", "gnome-text-editor"} {
+	for _, name := range []string{"notepad", "TextEdit", "open", "gnome-text-editor", "Code", "Code - Insiders", "VSCodium", "Cursor", "sublime_text", "Electron"} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			useSyntheticTempDir(t, dir)
@@ -192,7 +192,7 @@ func TestGUIProcessFinishedContract(t *testing.T) {
 	}
 	name := "code"
 	if runtime.GOOS == "windows" {
-		name += ".exe"
+		name = "subl.exe" // Native blocking CLI, not a direct Electron GUI binary.
 	}
 	launcher := filepath.Join(dir, name)
 	if err := os.WriteFile(launcher, binary, 0o700); err != nil {

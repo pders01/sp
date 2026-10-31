@@ -129,20 +129,21 @@ func parseEditorCommand(cmd string) (*Editor, error) {
 	}
 
 	// Check if command exists
-	if _, err := exec.LookPath(parts[0]); err != nil {
+	resolved, err := exec.LookPath(parts[0])
+	if err != nil {
 		return nil, fmt.Errorf("editor not found: %s", parts[0])
 	}
 
 	// Reject known nonblocking launchers before any editor buffer is created.
 	// Prepare repeats this check and adds flags for both CLI and TUI callers.
-	if _, err := editorCompletionArgs(parts[0], parts[1:]); err != nil {
+	if _, err := editorCompletionArgs(resolved, parts[1:]); err != nil {
 		return nil, err
 	}
 
 	editor := &Editor{
-		command: parts[0],
+		command: resolved,
 		args:    parts[1:],
-		isGUI:   isGUIEditor(parts[0]),
+		isGUI:   isGUIEditor(resolved),
 	}
 
 	return editor, nil
