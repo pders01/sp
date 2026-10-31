@@ -160,10 +160,16 @@ func detectEditor() (*Editor, error) {
 	return nil, fmt.Errorf("no suitable editor found")
 }
 
-// parseEditorCommand parses an editor command string
+// parseEditorCommand parses arguments without shell execution or expansion.
 func parseEditorCommand(cmd string) (*Editor, error) {
-	parts := strings.Fields(cmd)
-	if len(parts) == 0 {
+	if strings.TrimSpace(cmd) == "" {
+		return nil, fmt.Errorf("empty editor command")
+	}
+	parts, err := splitEditorCommand(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("invalid editor command: %w", err)
+	}
+	if len(parts) == 0 || parts[0] == "" {
 		return nil, fmt.Errorf("empty editor command")
 	}
 

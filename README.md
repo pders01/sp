@@ -223,7 +223,14 @@ etc.).
 ```sh
 export EDITOR=vim
 export EDITOR="code --wait"
+export EDITOR='nvim -u "/path with spaces/init.vim"'
 ```
+
+SP parses quoted executable paths and arguments, then launches the argument
+vector directly. POSIX builds support single/double quotes and backslash escapes;
+Windows uses native Windows argument quoting. There is no implicit shell:
+variables, `~`, globs, pipes, and command substitutions are not expanded. Malformed
+POSIX quoting is rejected before launch rather than silently changing arguments.
 
 **Caveat:** GUI editors that fork-and-detach (VS Code without
 `--wait`, Sublime, Atom) will return immediately when invoked from

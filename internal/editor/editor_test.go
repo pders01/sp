@@ -2,27 +2,36 @@ package editor
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
 
 func TestParseEditorCommand(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
 		name    string
 		command string
+		want    []string
 		wantErr bool
 	}{
-		{"simple command", "vim", false},
-		{"command with args", "vim -c 'set number'", false},
-		{"empty command", "", true},
-		{"whitespace only", "   ", true},
+		{"simple command", editorTestCommand(exe), nil, false},
+		{"command with args", editorTestCommand(exe, "-c", "set number"), []string{"-c", "set number"}, false},
+		{"empty command", "", nil, true},
+		{"whitespace only", "   ", nil, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := parseEditorCommand(tt.command)
+			ed, err := parseEditorCommand(tt.command)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("parseEditorCommand() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("parseEditorCommand() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err == nil && (ed.command != exe || !slices.Equal(ed.args, tt.want)) {
+				t.Fatalf("parsed command/args = %q %q, want %q %q", ed.command, ed.args, exe, tt.want)
 			}
 		})
 	}
