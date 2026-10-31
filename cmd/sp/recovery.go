@@ -10,7 +10,7 @@ import (
 func newRecoverCommand(factory managerFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "recover <recovery-file>",
-		Short: "Unlock an encrypted recovery file for review in the built-in editor",
+		Short: "Unlock encrypted recovery for review before saving",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			prompt, err := newTerminalPrompt(cmd.InOrStdin(), cmd.ErrOrStderr())

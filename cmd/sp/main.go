@@ -39,28 +39,32 @@ func main() {
 	Execute()
 }
 
-var rootCmd = &cobra.Command{
-	Use:     "sp",
-	Version: VersionInfo(),
-	Short:   "A daily scratchpad for quick notes and todos",
-	Long: `sp is a CLI/TUI-based scratchpad application for quickly storing notes,
-todos, and thoughts. It automatically creates a new scratchpad for each day
-and allows you to browse historical entries through a calendar interface.
+var rootCmd = newRootCommand(scratchpad.NewManager)
 
-Flow:
-  sp        edit today's page directly
-  sp -n     notebook viewer; Enter/e drills into the editor
-  sp -c     calendar; Enter drills into the notebook at that day, then
-            Enter again drills into the editor. Press 'e' in the calendar
-            to skip the notebook preview and edit immediately.`,
-	Args: cobra.NoArgs,
-	RunE: runScratchpad,
-}
-
-func init() {
-	rootCmd.Flags().BoolVarP(&calendarFlag, "calendar", "c", false, "Open calendar view to select a date")
-	rootCmd.Flags().BoolVarP(&notebookFlag, "notebook", "n", false, "Open notebook view to browse all notes")
-	rootCmd.AddCommand(newPrivacyCommand(scratchpad.NewManager), newAppendCommand(scratchpad.NewManager), newSharedCommand(scratchpad.NewManager))
+func newRootCommand(factory managerFactory) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "sp",
+		Version: VersionInfo(),
+		Short:   "A daily scratchpad for notes and todos",
+		Example: `  sp      # Edit today
+  sp -n   # Notebook (Enter/e: edit)
+  sp -c   # Calendar (Enter: notebook; e: edit directly)`,
+		Args: cobra.NoArgs,
+		RunE: runScratchpad,
+	}
+	cmd.Flags().BoolVarP(&calendarFlag, "calendar", "c", false, "Browse dates")
+	cmd.Flags().BoolVarP(&notebookFlag, "notebook", "n", false, "Browse notes")
+	cmd.AddGroup(
+		&cobra.Group{ID: "shared", Title: "Shared notes:"},
+		&cobra.Group{ID: "privacy", Title: "Privacy:"},
+		&cobra.Group{ID: "utilities", Title: "Utilities:"},
+	)
+	appendCmd, sharedCmd, privacyCmd := newAppendCommand(factory), newSharedCommand(factory), newPrivacyCommand(factory)
+	appendCmd.GroupID, sharedCmd.GroupID, privacyCmd.GroupID = "shared", "shared", "privacy"
+	cmd.AddCommand(appendCmd, sharedCmd, privacyCmd)
+	cmd.SetHelpCommandGroupID("utilities")
+	cmd.SetCompletionCommandGroupID("utilities")
+	return cmd
 }
 
 func Execute() {

@@ -38,12 +38,12 @@ copies or revoke old backups. Stop ALL sp instances before continuing.
 
 func newPrivacyCommand(factory managerFactory) *cobra.Command {
 	cmd := &cobra.Command{
-		Use: "privacy", Short: "Enable, reverse, or inspect private-note encryption",
+		Use: "privacy", Short: "Manage private-note encryption",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
 	cmd.AddCommand(&cobra.Command{
-		Use: "enable", Short: "Interactively enable privacy or resume migration",
+		Use: "enable", Short: "Encrypt daily notes or resume migration",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			prompt, err := newTerminalPrompt(cmd.InOrStdin(), cmd.ErrOrStderr())
@@ -59,7 +59,7 @@ func newPrivacyCommand(factory managerFactory) *cobra.Command {
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
-		Use: "disable", Short: "Interactively decrypt daily notes or resume reversal",
+		Use: "disable", Short: "Decrypt daily notes or resume reversal",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			prompt, err := newTerminalPrompt(cmd.InOrStdin(), cmd.ErrOrStderr())
@@ -75,7 +75,7 @@ func newPrivacyCommand(factory managerFactory) *cobra.Command {
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
-		Use: "status", Short: "Show privacy and remaining plaintext dates without unlocking",
+		Use: "status", Short: "Inspect encryption state without unlocking",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			mgr, err := factory()
@@ -245,7 +245,7 @@ func newAppendCommand(factory managerFactory) *cobra.Command {
 	var section, source string
 	cmd := &cobra.Command{
 		Use:   "append <date> --section <name> [--source <name>] -- '- bullet'...",
-		Short: "Append bullets to the readable shared area without unlocking private notes",
+		Short: "Append shared bullets without unlocking",
 		Args:  cobra.MinimumNArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
 			mgr, err := factory()
@@ -264,7 +264,7 @@ func newAppendCommand(factory managerFactory) *cobra.Command {
 
 func newSharedCommand(factory managerFactory) *cobra.Command {
 	return &cobra.Command{
-		Use: "shared <date>", Short: "Read only a page's readable shared area, without unlocking",
+		Use: "shared <date>", Short: "Read shared notes without unlocking",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mgr, err := factory()
