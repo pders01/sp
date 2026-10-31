@@ -77,7 +77,10 @@ selecting a view. Explicit `--calendar=false`/`--notebook=false` values are allo
 Notebook startup prefers today, then the newest earlier saved date, then the
 nearest future date; fallback choices are labelled. An empty notebook stays open:
 Enter/e/i starts today's note (unlocking first in privacy mode). Opening or
-quitting the empty viewer does not save a note.
+quitting the empty viewer does not save a note. Reading positions are remembered
+per date for the current session, including calendar round-trips, and clamped
+when content or layout changes. The position cache holds offsets, not note text,
+and is not persisted.
 
 ### Opt-in privacy usage (privacy-aware builds)
 

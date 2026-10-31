@@ -68,6 +68,14 @@ func TestNotebookEmptyPrivateCreationResumesAfterUnlockWithoutPhantomSave(t *tes
 	}
 }
 
+func TestEmptyNotebookLiteralEnterTextDoesNotCreate(t *testing.T) {
+	app := workflowApp(t, ModeNotebook, nil)
+	app.Update(privacyKey("enter"))
+	if len(app.nb.pages) != 0 || app.IsQuitting() {
+		t.Fatal("literal key-name text triggered an empty-state creation")
+	}
+}
+
 func TestNotebookEmptyViewIsBoundedAndClosingDoesNotCreate(t *testing.T) {
 	app := workflowApp(t, ModeNotebook, nil)
 	for _, size := range layoutSizes {

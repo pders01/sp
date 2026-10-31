@@ -37,6 +37,9 @@ type Notebook struct {
 	current            int
 	today              string // Session-start date for startup and creation.
 	viewport           viewport.Model
+	positions          map[string]int // Session-only offsets, never private text.
+	viewportDate       string         // The date actually rendered, not an index.
+	viewportReady      bool           // False for transient private/error projections.
 	width              int
 	height             int
 	quitting           bool
@@ -72,15 +75,16 @@ func newNotebookAt(pages []string, today string) *Notebook {
 	owned := append([]string(nil), pages...)
 	sort.Sort(sort.Reverse(sort.StringSlice(owned)))
 	n := &Notebook{
-		pages:    owned,
-		contents: make(map[string]string),
-		drafts:   make(map[string]editDoneMsg),
-		current:  notebookStartIndex(owned, today),
-		today:    today,
-		width:    80,
-		height:   24,
-		icons:    DefaultIconSet(),
-		theme:    newThemeWatcher(ThemePrefAuto),
+		pages:     owned,
+		contents:  make(map[string]string),
+		drafts:    make(map[string]editDoneMsg),
+		positions: make(map[string]int),
+		current:   notebookStartIndex(owned, today),
+		today:     today,
+		width:     80,
+		height:    24,
+		icons:     DefaultIconSet(),
+		theme:     newThemeWatcher(ThemePrefAuto),
 	}
 	return n
 }
@@ -238,6 +242,9 @@ func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		n.popping = true
 		return n, nil
 	case "enter", "e", "i":
+		if msg.Type != tea.KeyEnter && (msg.Type != tea.KeyRunes || len(msg.Runes) != 1 || msg.Alt) {
+			return n, nil // Literal key-name text is not an edit/create action.
+		}
 		date := n.editDate()
 		if cmd := n.startEdit(date); cmd != nil {
 			return n, cmd
@@ -251,15 +258,11 @@ func (n *Notebook) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return n, nil
 	case "left", "h":
 		if n.current > 0 {
-			n.current--
-			n.updateViewportContent()
-			n.viewport.GotoTop()
+			n.SetCurrentDate(n.pages[n.current-1])
 		}
 	case "right", "l":
 		if n.current < len(n.pages)-1 {
-			n.current++
-			n.updateViewportContent()
-			n.viewport.GotoTop()
+			n.SetCurrentDate(n.pages[n.current+1])
 		}
 	case "up", "k":
 		n.viewport.LineUp(1)
@@ -399,8 +402,9 @@ func (n *Notebook) renderFooter() string {
 
 // updateViewportContent renders the current page's markdown content into the viewport
 func (n *Notebook) updateViewportContent() {
+	n.captureReadingPosition()
 	if len(n.pages) == 0 {
-		n.viewport.SetContent("")
+		n.setReadingContent("")
 		return
 	}
 	content := n.contents[n.pages[n.current]]
@@ -418,7 +422,7 @@ func (n *Notebook) updateViewportContent() {
 		glamour.WithWordWrap(max(n.width-4, 20)),
 	)
 	if err != nil {
-		n.viewport.SetContent(ansi.Wrap(displayText(content), max(n.width, 20), ""))
+		n.setReadingContent(ansi.Wrap(displayText(content), max(n.width, 20), ""))
 		return
 	}
 	rendered, err := renderer.Render(content)
@@ -427,7 +431,7 @@ func (n *Notebook) updateViewportContent() {
 	}
 	// Long code lines and renderer fallbacks must remain readable by scrolling,
 	// rather than losing their right-hand text at the final frame boundary.
-	n.viewport.SetContent(ansi.Wrap(displayText(rendered), max(n.width, 20), ""))
+	n.setReadingContent(ansi.Wrap(displayText(rendered), max(n.width, 20), ""))
 }
 
 // SetContents sets the contents for all pages
@@ -472,7 +476,6 @@ func (n *Notebook) SetCurrentDate(date string) {
 		if p == date {
 			n.current = i
 			n.updateViewportContent()
-			n.viewport.GotoTop()
 			return
 		}
 	}
