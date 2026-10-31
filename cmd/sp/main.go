@@ -44,9 +44,11 @@ var rootCmd = newRootCommand(scratchpad.NewManager)
 
 func newRootCommand(factory managerFactory) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "sp",
-		Version: VersionInfo(),
-		Short:   "A daily scratchpad for notes and todos",
+		Use:           "sp",
+		SilenceErrors: true, // Execute owns the single diagnostic and exit code.
+		SilenceUsage:  true, // Help is explicit; failures should not dump the command tree.
+		Version:       VersionInfo(),
+		Short:         "A daily scratchpad for notes and todos",
 		Example: `  sp      # Edit today
   sp -n   # Notebook (Enter/e: edit)
   sp -c   # Calendar (Enter: notebook; e: edit directly)`,
