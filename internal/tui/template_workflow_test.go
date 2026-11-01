@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -371,34 +372,64 @@ func TestTemplateWorkflowPrivateLoadFailureNeverFallsBackToPlaintext(t *testing.
 }
 
 func TestTemplateWorkflowCancelledAttemptCanRetryAndEdit(t *testing.T) {
-	calls := 0
-	app := templateWorkflowApp(t, ModeNotebook, func(ctx context.Context, _ string, _ []TemplateSelection) (TemplateApplyResult, error) {
-		calls++
-		if calls == 1 {
-			if !errors.Is(ctx.Err(), context.Canceled) {
-				t.Fatal("first attempt was not cancelled")
+	for _, startFirst := range []bool{false, true} {
+		t.Run(fmt.Sprintf("start-before-cancel=%t", startFirst), func(t *testing.T) {
+			calls := 0
+			allowStart := make(chan struct{})
+			started := make(chan error, 1)
+			app := templateWorkflowApp(t, ModeNotebook, func(ctx context.Context, _ string, _ []TemplateSelection) (TemplateApplyResult, error) {
+				calls++
+				if calls == 1 {
+					// Force both legal orderings. Accepted work can enter before
+					// Escape; it must await cancellation, not assume it on entry.
+					select {
+					case <-allowStart:
+					case <-ctx.Done(): // Also let cleanup join a failed test.
+					}
+					started <- ctx.Err()
+					<-ctx.Done()
+					return TemplateApplyResult{}, ctx.Err()
+				}
+				if ctx.Err() != nil {
+					t.Error("retry reused the cancelled context")
+					return TemplateApplyResult{}, ctx.Err()
+				}
+				return TemplateApplyResult{Applied: []string{"one"}}, nil
+			})
+			app.SetPrivacy(PrivacyHooks{Load: func(string) (PrivatePage, error) {
+				return PrivatePage{Private: "synthetic persisted template", Applied: []string{"one"}}, nil
+			}})
+			app.Update(privacyKey(" "))
+			first := templateWorkflowStart(t, app)
+			awaitStart := func(wantCanceled bool) {
+				select {
+				case err := <-started:
+					if errors.Is(err, context.Canceled) != wantCanceled {
+						t.Fatalf("entry context = %v, want canceled=%t", err, wantCanceled)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("first applier did not start")
+				}
 			}
-			return TemplateApplyResult{}, ctx.Err()
-		}
-		if ctx.Err() != nil {
-			t.Fatal("retry reused the cancelled context")
-		}
-		return TemplateApplyResult{Applied: []string{"one"}}, nil
-	})
-	app.SetPrivacy(PrivacyHooks{Load: func(string) (PrivatePage, error) {
-		return PrivatePage{Private: "synthetic persisted template", Applied: []string{"one"}}, nil
-	}})
-	app.Update(privacyKey(" "))
-	first := templateWorkflowStart(t, app)
-	app.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	app.Update(first())
-	second := templateWorkflowStart(t, app)
-	if app.templateChooser.cancelRequested {
-		t.Fatal("retry retained the previous cancellation request")
-	}
-	app.Update(second())
-	if calls != 2 || app.templateChooser != nil || app.privacy.editor == nil {
-		t.Fatal("successful explicit retry was incorrectly prevented from editing")
+			if startFirst {
+				close(allowStart)
+				awaitStart(false)
+			}
+			app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+			if !startFirst {
+				close(allowStart)
+				awaitStart(true)
+			}
+			app.Update(first())
+			second := templateWorkflowStart(t, app)
+			if app.templateChooser.cancelRequested {
+				t.Fatal("retry retained the previous cancellation request")
+			}
+			app.Update(second())
+			if calls != 2 || app.templateChooser != nil || app.privacy.editor == nil {
+				t.Fatal("successful explicit retry was incorrectly prevented from editing")
+			}
+		})
 	}
 }
 
