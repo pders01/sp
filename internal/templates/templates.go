@@ -49,6 +49,7 @@ func Builtins() []Definition {
 
 const (
 	commandTimeout   = 10 * time.Second
+	commandWaitDelay = 250 * time.Millisecond
 	maxCommandOutput = 1 << 20 // 1 MiB
 )
 
@@ -101,10 +102,11 @@ func Render(def Definition, date string) (Section, error) {
 }
 
 // RenderContext resolves a definition and cancels command templates when ctx
-// is canceled.
+// is canceled. Commands are trusted opt-in programs, not sandboxed: cancellation
+// bounds output draining but cannot guarantee termination of escaped descendants.
 func RenderContext(ctx context.Context, def Definition, date string) (Section, error) {
 	if err := ctx.Err(); err != nil {
-		return Section{}, err
+		return Section{}, contextError(ctx)
 	}
 	body := def.Body
 	switch {
@@ -170,18 +172,23 @@ func runCommand(parent context.Context, def Definition, date string, timeout tim
 	defer cancel()
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...) // #nosec G204 -- explicit, opt-in user configuration.
 	cmd.Env = commandEnvironment(date)
+	// A descendant may retain stdout/stderr even after the immediate child
+	// exits. Never wait indefinitely for those pipe-copy goroutines.
+	cmd.WaitDelay = commandWaitDelay
 	stdout := &limitedBuffer{limit: maxOutput}
 	stderr := &limitedBuffer{limit: maxOutput}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	runErr := cmd.Run()
+	runErr := runTemplateProcess(ctx, cmd)
 	switch {
+	case parent.Err() != nil:
+		// Keep both the standard context sentinel and a caller-provided cause.
+		// In particular, a caller's earlier deadline is not our ten-second limit.
+		return "", fmt.Errorf("run template %q: %w", def.Name, contextError(parent))
+	case ctx.Err() != nil:
+		return "", fmt.Errorf("run template %q: timed out after %s: %w", def.Name, timeout, ctx.Err())
 	case stdout.overflow || stderr.overflow:
 		return "", fmt.Errorf("run template %q: %w", def.Name, errCommandOutputTooBig)
-	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return "", fmt.Errorf("run template %q: timed out after %s", def.Name, timeout)
-	case errors.Is(ctx.Err(), context.Canceled):
-		return "", fmt.Errorf("run template %q: %w", def.Name, context.Canceled)
 	case runErr != nil:
 		detail := strings.TrimSpace(stderr.String())
 		if detail != "" {
@@ -190,6 +197,14 @@ func runCommand(parent context.Context, def Definition, date string, timeout tim
 		return "", fmt.Errorf("run template %q: %w", def.Name, runErr)
 	}
 	return stdout.String(), nil
+}
+
+func contextError(ctx context.Context) error {
+	err := ctx.Err()
+	if cause := context.Cause(ctx); cause != err {
+		return errors.Join(err, cause)
+	}
+	return err
 }
 
 func commandEnvironment(date string) []string {
