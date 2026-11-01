@@ -43,7 +43,7 @@ func TestTemplateProcessHelper(t *testing.T) {
 	if err := child.Start(); err != nil {
 		os.Exit(2)
 	}
-	if mode == "exited" {
+	if mode == "exited" || mode == "leader-exited" {
 		os.Exit(0)
 	}
 	// The fixture parent is also bounded, including if its holder misbehaves.
