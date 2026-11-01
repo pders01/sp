@@ -57,7 +57,8 @@ type PrivacyStatus struct {
 // verifying, decrypting, and complete, as applicable to the operation. Counts
 // are stage-local and include unchanged files; Total is zero when unknown or
 // when no date-file pass is needed. Complete is emitted only on success.
-// Migration verifies new ciphertext inline; progress adds no verification pass.
+// Migration verifies new ciphertext inline. Final completion also inspects all
+// current records under the store lock, without decrypting the archive.
 //
 // Callbacks run synchronously on the caller's goroutine, possibly with storage
 // locks held. They must return promptly and must not reenter or mutate the
@@ -347,8 +348,8 @@ func (m *Manager) enablePrivacyWithProgress(passphrase []byte, syncDir func(stri
 		reportPrivacyProgress(progress, "migrating", i+1, len(dates))
 	}
 	// A retry can skip every publication, including the last note whose rename
-	// previously returned ErrDurabilityUnconfirmed. Confirm both the intended
-	// active policy and directory durability before reporting completion. Take
+	// previously returned ErrDurabilityUnconfirmed. Confirm the intended active
+	// policy, current records, and directory durability before completion. Take
 	// only the store lock here: per-note migration locks have been released.
 	storeLock, err := lockNote(m.storageDir, "privacy")
 	if err != nil {
@@ -364,6 +365,29 @@ func (m *Manager) enablePrivacyWithProgress(passphrase []byte, syncDir func(stri
 	}
 	if metadata == nil || metadata.State != "" || current != fingerprint {
 		return ErrPrivacyPolicyChanged
+	}
+	// Matching metadata does not prove uninterrupted policy: disable/re-enable
+	// retains the key and can restore the exact fingerprint while leaving an
+	// already-visited note plaintext or adding new legacy dates. Rescan under
+	// the store lock so cooperating writers cannot change this verified state
+	// before durability/completion. This is read-only, not consent to migrate
+	// records left by an intervening reversal; require an explicit retry.
+	currentDates, err := m.privacyDates()
+	if err != nil {
+		return err
+	}
+	for _, date := range currentDates {
+		data, err := readBounded(filepath.Join(m.storageDir, date+".json"), maxDocumentSize)
+		if err != nil {
+			return fmt.Errorf("verify migration %s: %w", date, err)
+		}
+		r, err := decodeRecord(data, date)
+		if err != nil {
+			return fmt.Errorf("verify migration %s: %w", date, err)
+		}
+		if r.legacy != nil {
+			return errors.New("privacy migration is incomplete; legacy scratchpads remain; run sp privacy enable to resume")
+		}
 	}
 	if err := syncDir(m.storageDir); err != nil {
 		return fmt.Errorf("%w: sync storage directory: %w", ErrDurabilityUnconfirmed, err)
