@@ -770,6 +770,24 @@ func (e *privateEditor) recovery() (string, error) {
 
 func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	e.published = false
+	if _, interrupted := msg.(privateEditorInterruptedMsg); interrupted {
+		// Signals own shutdown even while help/find/review owns ordinary keys.
+		// Failed recovery must leave the live editor available for a retry.
+		e.keyHelp, e.review = nil, nil
+		e.input.findActive, e.confirm = false, false
+		if e.needsRecovery() {
+			path, err := e.recovery()
+			if err != nil {
+				e.status = fmt.Sprintf("Shutdown recovery failed: %v. Text remains in this editor; keep it open and retry.", privateRecoveryError(path, err))
+				return e, nil
+			}
+			e.err = fmt.Errorf("%w; encrypted recovery: %s", ErrPrivateEditorInterrupted, path)
+		} else {
+			e.err = ErrPrivateEditorInterrupted
+		}
+		e.done, e.outcome = true, editCancelled
+		return e, tea.Quit
+	}
 	if size, ok := msg.(tea.WindowSizeMsg); ok {
 		e.resize(size.Width, size.Height)
 	}
@@ -946,15 +964,38 @@ func EditRecoveredPrivate(date, current, recovered string, save Saver, sealRecov
 	return EditRecoveredPrivateWithPolicy(date, current, recovered, save, sealRecovery, loader, "Saving follows the store's current policy")
 }
 
-func runPrivateEditor(model *privateEditor) error {
-	result, err := tea.NewProgram(model, tea.WithAltScreen()).Run()
-	if err != nil {
-		err = model.recoverStopped(err)
-	} else {
-		err = result.(*privateEditor).err
+// ErrPrivateEditorInterrupted distinguishes an unexpected program/signal exit
+// from a completed save or deliberately confirmed cancellation.
+var ErrPrivateEditorInterrupted = errors.New("private editor interrupted before completion")
+
+type privateEditorInterruptedMsg struct{}
+
+func privateEditorSignalFilter(model tea.Model, msg tea.Msg) tea.Msg {
+	if _, quit := msg.(tea.QuitMsg); quit {
+		if editor, ok := model.(*privateEditor); ok && !editor.done {
+			return privateEditorInterruptedMsg{}
+		}
 	}
+	return msg
+}
+
+func runPrivateEditor(model *privateEditor) error {
+	_, err := tea.NewProgram(model, tea.WithAltScreen(), tea.WithFilter(privateEditorSignalFilter)).Run()
+	err = model.finishRun(err)
 	WriteRecoveryReport(os.Stderr, model.recoveries)
 	return err
+}
+
+func (e *privateEditor) finishRun(runErr error) error {
+	if runErr != nil {
+		return e.recoverStopped(runErr)
+	}
+	if !e.done {
+		// Defense in depth for other nil-error exits: only the editor can
+		// authorize completion. Never silently discard an unfinished draft.
+		return e.recoverStopped(ErrPrivateEditorInterrupted)
+	}
+	return e.err
 }
 
 func (e *privateEditor) recoverStopped(err error) error {
