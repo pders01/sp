@@ -437,11 +437,11 @@ unless independently removed.
 
 ## Verification model and current evidence
 
-The cohesive TUI redesign is implemented. Full normal tests and vet previously
-passed; final redesign race/PTY checks and matching validation hashes/evidence
-are still being collected. Earlier evidence below remains historical, not a
-final-candidate pass or native GUI/Windows, accessibility, audit, or release
-sign-off.
+The cohesive TUI redesign and review remediations are implemented. The
+[release preflight](release-preflight.md) records current pinned-lint,
+race/coverage, synthetic PTY and packaging evidence, including platform/manual
+limitations. Earlier candidate evidence remains historical, not native
+GUI/Windows, accessibility, independent-audit or release sign-off.
 
 [Privacy testing](privacy-testing.md) specifies deterministic checks and a
 synthetic-only, black-box adversarial exercise. Required checks cover ciphertext
@@ -450,7 +450,7 @@ protected-payload preservation, locking/conflicts, failure recovery, explicit
 resumable reversal/re-enable, and the UI unlock/editor path. Unit tests are necessary but cannot establish absence of
 side channels, memory disclosure, cryptographic flaws, or same-user compromise.
 
-The [latest validation report](privacy-validation.md) records the real terminal
+The [earlier validation report](privacy-validation.md) records the real terminal
 walkthrough, bounded fuzz campaigns, regression fixes, patched Go minimum, and
 reachable-advisory scan, including remaining dependency advisories without
 detected call paths. The [initial review](privacy-review.md) records the completed

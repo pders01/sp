@@ -16,27 +16,70 @@ This document explains how to release a new version of the `sp` application and 
 
 ### 1. Prepare for Release
 
-Ensure your working directory is clean and you're on the main branch:
+Ensure your working directory is clean and you're on `main`, then run the local
+CI counterparts using the toolchain selected by `go.mod`:
 
 ```bash
-git status
-git checkout main
-git pull origin main
+git status --short
+git branch --show-current
+make ci                   # tidy, CI-pinned v2 lint, race + coverage, vuln, build
+goreleaser check
+make privacy-terminal     # macOS/Linux; fresh synthetic stores only
+make ux-terminal
+make design-terminal
 ```
+
+Local success is not proof that GitHub's native Linux/macOS/Windows matrix,
+Codecov, publication permissions, or tap updates will pass. Use the
+[preflight record](docs/release-preflight.md) and review the
+[draft release notes](docs/release-notes.md). The sandbox blocked the Linux
+container check; run it outside pi as described in the preflight record.
+
+**History rewrite warning:** `TODO.md` was removed with `git-filter-repo`, which
+changed branch and existing local tag IDs. Do not `git pull` old history back in,
+use `git push --tags`, or force-update published tags as part of this release.
+Coordinate the branch/history cleanup separately, inspect the remote's current
+OID without fetching old objects, and use an explicit expected-OID lease for an
+approved branch rewrite. Existing tag cleanup requires a separate decision.
+No push or tag has been performed by this preflight.
+
+**Release gates:** Windows interactive flows currently fail closed pending a
+safe console adapter. The blocked live model-driven security exercise and
+independent/native-platform validation are not completed by CI. Prefer an
+explicitly labelled release candidate; do not describe this as a fully validated
+stable cross-platform/privacy release.
 
 ### 2. Create a Release
 
-Use the release script to create and push a new version tag:
+First push only the approved branch update and wait for **all** hosted CI jobs
+to pass on that exact commit. Confirm the version and platform/security limits
+before creating any tag. A tag push starts publication immediately; the release
+workflow does not wait for a separate CI run.
+
+For an approved stable version, the release script creates **and pushes** a tag:
 
 ```bash
 ./scripts/release.sh 0.1.0
 ```
 
 This script will:
-- Validate the version format
+- Validate the stable version format
 - Check that you're on the main branch
 - Ensure the working directory is clean
 - Create and push a git tag
+
+The script intentionally accepts stable `X.Y.Z` versions only. After approval,
+a release candidate can be tagged and pushed explicitly (example only; not run
+by preflight):
+
+```bash
+git tag -a v0.22.0-rc.1 -m 'Release v0.22.0-rc.1'
+git push origin refs/tags/v0.22.0-rc.1
+```
+
+GoReleaser detects prerelease tags automatically. Prereleases do not update the
+stable Homebrew formula (`brews.skip_upload: auto`). Snapshot builds publish
+nothing; they are packaging smoke tests, not validated/tagged releases.
 
 ### 3. Automated Release Process
 
@@ -110,10 +153,10 @@ If you need to manually update the Homebrew formula:
 1. Download the release assets from GitHub
 2. Calculate SHA256 hashes:
    ```bash
-   shasum -a 256 sp_0.1.0_darwin_amd64.tar.gz
-   shasum -a 256 sp_0.1.0_darwin_arm64.tar.gz
-   shasum -a 256 sp_0.1.0_linux_amd64.tar.gz
-   shasum -a 256 sp_0.1.0_linux_arm64.tar.gz
+   shasum -a 256 sp_Darwin_x86_64.tar.gz
+   shasum -a 256 sp_Darwin_arm64.tar.gz
+   shasum -a 256 sp_Linux_x86_64.tar.gz
+   shasum -a 256 sp_Linux_arm64.tar.gz
    ```
 3. Update `../homebrew-sp/Formula/sp.rb` with the correct hashes
 4. Commit and push the changes
@@ -169,8 +212,10 @@ go build -o sp ./cmd/sp
 GOOS=darwin GOARCH=amd64 go build -o sp-darwin-amd64 ./cmd/sp
 ```
 
-`make ci` runs the full local pipeline (`deps → lint → test → build`)
-and is the same set of checks the GitHub Actions CI workflow runs.
+`make ci` runs the local counterparts (`deps → pinned lint → race/coverage →
+vulnerability scan → build`). Native matrix execution, POSIX PTYs, Linux fuzz
+checks, and external coverage upload are separate jobs/steps in GitHub Actions;
+local preflight does not replace those results.
 
 ## Notes
 

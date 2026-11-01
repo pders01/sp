@@ -6,6 +6,10 @@ changes below. The reviews used fresh scoped workers on the same provider/model,
 not independent security auditors. All stores, notes, secrets and editor
 configuration used for verification were synthetic.
 
+The subsequent [release preflight](release-preflight.md) records configured v2
+lint, CI race/coverage checks and packaging results beyond the historical
+remediation candidate below. Platform and security-release gates remain separate.
+
 ## Findings and fixes
 
 | Finding | Remediation |

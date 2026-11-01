@@ -419,7 +419,7 @@ sp/
 ```sh
 make build       # ./sp
 make test        # all packages
-make test-race   # race detector
+make test-race   # race detector + coverage (matches the CI test command)
 make privacy-terminal # POSIX PTY enable/edit/recover checks; synthetic stores only
 make ux-terminal      # integrated reader/editor/template/privacy UX; synthetic stores only
 make design-terminal  # 4 synthetic PTY cases: dark/light × 100x30/56x16
@@ -427,9 +427,9 @@ make design-capture   # 402 actual frames / 53 scenes + historical concepts; nee
 make privacy-fuzz     # bounded parser/append fuzz campaigns
 make vuln             # reachable dependency advisories
 make coverage    # writes coverage.html
-make lint        # golangci-lint (fall back to go vet)
+make lint        # CI-pinned golangci-lint v2.5.0; no vet-only fallback
 make modernize   # gopls source.fixAll
-make ci          # deps + lint + test + build
+make ci          # deps + pinned lint + race/coverage + vuln + build
 ```
 
 CI runs runtime tests and builds on Linux, macOS, and Windows, with synthetic
@@ -445,8 +445,9 @@ scenes alongside labelled historical concepts from the
 [visual design study](docs/design/2026-10-31/README.md); concept images are not
 runtime evidence.
 
-Full normal tests and vet previously passed. Final redesign race/PTY validation
-and matching hashes/evidence are in progress and will be recorded separately.
+Local CI-equivalent checks and matching synthetic PTYs pass; see the
+[release preflight record](docs/release-preflight.md) for exact tool versions,
+candidate hashes, packaging evidence and remaining manual/hosted checks.
 No native GUI/Windows, accessibility, audit, or release sign-off is implied.
 
 ## License
