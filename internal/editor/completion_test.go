@@ -208,26 +208,26 @@ func TestGUIProcessFinishedContract(t *testing.T) {
 				}
 				useSyntheticTempDir(t, bufferDir)
 				supplied := []string{"--new-window", "--profile", "synthetic profile", "", "$HOME", "$(touch marker)", "--", "literal ; * 笔记"}
-				ed, err := parseEditorCommand(editorTestCommand(append([]string{launcher}, supplied...)...))
-				if err != nil || !ed.IsGUI() {
-					t.Fatalf("parse GUI fixture: %v", err)
+				ed, operationErr := parseEditorCommand(editorTestCommand(append([]string{launcher}, supplied...)...))
+				if operationErr != nil || !ed.IsGUI() {
+					t.Fatalf("parse GUI fixture: %v", operationErr)
 				}
-				cmd, path, cleanup, err := ed.Prepare("original synthetic note")
-				if err != nil {
-					t.Fatal(err)
+				cmd, path, cleanup, operationErr := ed.Prepare("original synthetic note")
+				if operationErr != nil {
+					t.Fatal(operationErr)
 				}
 				t.Cleanup(cleanup)
 				argvPath := filepath.Join(bufferDir, "argv.json")
 				cmd.Env = append(os.Environ(), "SP_COMPLETION_HELPER=1", "SP_COMPLETION_MODE="+mode, "SP_COMPLETION_ARGV="+argvPath)
-				inR, inW, err := os.Pipe()
-				if err != nil {
-					t.Fatal(err)
+				inR, inW, operationErr := os.Pipe()
+				if operationErr != nil {
+					t.Fatal(operationErr)
 				}
 				defer inR.Close()
 				defer inW.Close()
-				outR, outW, err := os.Pipe()
-				if err != nil {
-					t.Fatal(err)
+				outR, outW, operationErr := os.Pipe()
+				if operationErr != nil {
+					t.Fatal(operationErr)
 				}
 				defer outR.Close()
 				defer outW.Close()
@@ -315,13 +315,13 @@ func TestGUIProcessFinishedContract(t *testing.T) {
 				} else if r.err != nil || r.content != want {
 					t.Fatalf("completed edit = %+v; want %q", r, want)
 				}
-				got, err := ReadEdited(path)
-				if err != nil || got != want {
-					t.Fatalf("buffer not retained: %q, %v", got, err)
+				got, operationErr := ReadEdited(path)
+				if operationErr != nil || got != want {
+					t.Fatalf("buffer not retained: %q, %v", got, operationErr)
 				}
-				data, err := os.ReadFile(argvPath)
-				if err != nil {
-					t.Fatal(err)
+				data, operationErr := os.ReadFile(argvPath)
+				if operationErr != nil {
+					t.Fatal(operationErr)
 				}
 				var argv []string
 				if err := json.Unmarshal(data, &argv); err != nil {

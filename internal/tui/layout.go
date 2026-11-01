@@ -110,11 +110,12 @@ func wrappedHelp(entries []helpEntry, width int) string {
 			lines = append(lines, line)
 			line = ""
 		}
-		if ansi.StringWidth(part) > width {
+		switch {
+		case ansi.StringWidth(part) > width:
 			lines = append(lines, strings.Split(ansi.Wrap(part, width, ""), "\n")...)
-		} else if line == "" {
+		case line == "":
 			line = part
-		} else {
+		default:
 			line += " • " + part
 		}
 	}

@@ -54,9 +54,8 @@ type templateChooser struct {
 // A non-zero-sized identity distinguishes both newer choosers and retries. Only
 // the UI goroutine reads/writes cancellation state; commands carry the identity.
 type templateApplyAttempt struct {
-	identity byte
-	done     chan struct{}
-	result   templateAppliedMsg // Written before done closes; never read earlier.
+	done   chan struct{}
+	result templateAppliedMsg // Written before done closes; never read earlier.
 }
 
 type templateAppliedMsg struct {
@@ -278,7 +277,8 @@ func (a *App) finishTemplateApply(msg templateAppliedMsg) (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 	if a.privacy != nil {
-		return a, a.startPrivateEdit(msg.date)
+		editorCmd := a.startPrivateEdit(msg.date)
+		return a, editorCmd
 	}
 	var editorCmd tea.Cmd
 	if a.mode == ModeCalendar {

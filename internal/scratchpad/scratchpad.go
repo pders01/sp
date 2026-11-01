@@ -304,17 +304,17 @@ func (m *Manager) Delete(date string) error {
 	if err := validateDate(date); err != nil {
 		return err
 	}
-	storeLock, err := lockNote(m.storageDir, "privacy")
-	if err != nil {
-		return err
+	storeLock, lockErr := lockNote(m.storageDir, "privacy")
+	if lockErr != nil {
+		return lockErr
 	}
 	defer storeLock.Close()
 	if _, err := m.PrivacyEnabled(); err != nil {
 		return err
 	}
-	lock, err := lockNote(m.storageDir, date)
-	if err != nil {
-		return err
+	lock, lockErr := lockNote(m.storageDir, date)
+	if lockErr != nil {
+		return lockErr
 	}
 	defer lock.Close()
 	filename := filepath.Join(m.storageDir, date+".json")

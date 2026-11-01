@@ -98,11 +98,12 @@ func (s *unlockScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if p.prompt == nil && p.job == nil {
 		s.done = true
-		if completed && p.hooks.IsUnlocked != nil && p.hooks.IsUnlocked() {
+		switch {
+		case completed && p.hooks.IsUnlocked != nil && p.hooks.IsUnlocked():
 			s.accepted = true
-		} else if completed {
+		case completed:
 			s.err = errors.New("unlocked session is no longer available; retry the operation")
-		} else {
+		default:
 			s.err = ErrUnlockCancelled
 		}
 		return s, tea.Quit

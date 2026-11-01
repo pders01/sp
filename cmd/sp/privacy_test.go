@@ -96,9 +96,9 @@ func TestPrivacyStatusNoninteractive(t *testing.T) {
 		t.Fatal(err)
 	}
 	factory := func() (*scratchpad.Manager, error) { return mgr, nil }
-	output, _, err := testCLI(factory, "privacy", "status")
-	if err != nil {
-		t.Fatal(err)
+	output, _, operationErr := testCLI(factory, "privacy", "status")
+	if operationErr != nil {
+		t.Fatal(operationErr)
 	}
 	for _, want := range []string{"Privacy: disabled", "Plaintext dates (normal; privacy disabled): 1", "Wrapped key: none"} {
 		if !strings.Contains(output, want) {
@@ -112,9 +112,9 @@ func TestPrivacyStatusNoninteractive(t *testing.T) {
 		t.Fatal(enableErr)
 	}
 	mgr.Lock()
-	output, _, err = testCLI(factory, "privacy", "status")
-	if err != nil {
-		t.Fatal(err)
+	output, _, operationErr = testCLI(factory, "privacy", "status")
+	if operationErr != nil {
+		t.Fatal(operationErr)
 	}
 	for _, want := range []string{"Privacy: enabled", "Encrypted dates: 1", "Remaining plaintext dates: 0", "Wrapped key: retained"} {
 		if !strings.Contains(output, want) {
@@ -127,9 +127,9 @@ func TestPrivacyStatusNoninteractive(t *testing.T) {
 	if err := mgr.Append("2025-01-03", "Updates", "synthetic-agent", []string{"public status item"}); err != nil {
 		t.Fatal(err)
 	}
-	output, _, err = testCLI(factory, "privacy", "status", "--dates")
-	if err != nil {
-		t.Fatal(err)
+	output, _, operationErr = testCLI(factory, "privacy", "status", "--dates")
+	if operationErr != nil {
+		t.Fatal(operationErr)
 	}
 	for _, want := range []string{"Encrypted listing:\n  2025-01-02", "Shared-only listing:\n  2025-01-03"} {
 		if !strings.Contains(output, want) {
@@ -385,9 +385,9 @@ func TestPrivatePreviewsAndHooks(t *testing.T) {
 
 func TestPartialPrivacyNeverPreviewsLegacyPrivateContent(t *testing.T) {
 	dir := t.TempDir()
-	mgr, err := scratchpad.NewManagerAt(dir)
-	if err != nil {
-		t.Fatal(err)
+	mgr, managerErr := scratchpad.NewManagerAt(dir)
+	if managerErr != nil {
+		t.Fatal(managerErr)
 	}
 	defer mgr.Lock()
 	const date = "2025-01-02"
@@ -396,9 +396,9 @@ func TestPartialPrivacyNeverPreviewsLegacyPrivateContent(t *testing.T) {
 		t.Fatal(saveErr)
 	}
 	path := filepath.Join(dir, date+".json")
-	legacy, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
+	legacy, managerErr := os.ReadFile(path)
+	if managerErr != nil {
+		t.Fatal(managerErr)
 	}
 	if enableErr := mgr.EnablePrivacy([]byte(passphrase)); enableErr != nil {
 		t.Fatal(enableErr)
@@ -423,9 +423,9 @@ func TestPartialPrivacyNeverPreviewsLegacyPrivateContent(t *testing.T) {
 		t.Fatalf("opt-in partial migration listing = %q", status.String())
 	}
 	hooks := makePrivacyHooks(mgr)
-	page, err := hooks.Load(date)
-	if err != nil || !page.Locked || !page.HasPrivate || page.Private != "" || strings.Contains(page.Shared, "legacy private sentinel") {
-		t.Fatalf("locked legacy page = %+v, %v", page, err)
+	page, managerErr := hooks.Load(date)
+	if managerErr != nil || !page.Locked || !page.HasPrivate || page.Private != "" || strings.Contains(page.Shared, "legacy private sentinel") {
+		t.Fatalf("locked legacy page = %+v, %v", page, managerErr)
 	}
 	for _, unlocked := range []bool{false, true} {
 		if unlocked {
@@ -442,9 +442,9 @@ func TestPartialPrivacyNeverPreviewsLegacyPrivateContent(t *testing.T) {
 			t.Fatalf("legacy preview unlocked=%v: %q, %v", unlocked, contents[date], loadErr)
 		}
 	}
-	page, err = hooks.Load(date)
-	if err != nil || page.Locked || page.Private != "legacy private sentinel" {
-		t.Fatalf("unlocked legacy page = %+v, %v", page, err)
+	page, managerErr = hooks.Load(date)
+	if managerErr != nil || page.Locked || page.Private != "legacy private sentinel" {
+		t.Fatalf("unlocked legacy page = %+v, %v", page, managerErr)
 	}
 }
 

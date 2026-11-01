@@ -52,7 +52,7 @@ func (p *dateJumpPrompt) insert(text string) {
 
 // Only a physical Enter submits. Rejected input must be edited/cleared rather
 // than silently submitting an older valid candidate after a rejected paste.
-func (p *dateJumpPrompt) update(msg tea.Msg) (date string, close bool) {
+func (p *dateJumpPrompt) update(msg tea.Msg) (date string, dismissed bool) {
 	if p.keyHelp != nil {
 		if key, ok := msg.(tea.KeyMsg); ok && p.keyHelp.update(key) {
 			p.keyHelp = nil
@@ -134,8 +134,8 @@ func (p *dateJumpPrompt) view(palette Palette) string {
 }
 
 func (a *App) updateDateJump(msg tea.Msg) (tea.Model, tea.Cmd) {
-	date, close := a.dateJump.update(msg)
-	if !close {
+	date, dismissed := a.dateJump.update(msg)
+	if !dismissed {
 		return a, nil
 	}
 	a.dateJump = nil

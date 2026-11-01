@@ -13,9 +13,9 @@ import (
 )
 
 func TestRecoverySavePolicyTracksEnabledAndDisabledStore(t *testing.T) {
-	mgr, err := scratchpad.NewManagerAt(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
+	mgr, managerErr := scratchpad.NewManagerAt(t.TempDir())
+	if managerErr != nil {
+		t.Fatal(managerErr)
 	}
 	defer mgr.Lock()
 	if got, err := recoverySavePolicy(mgr); err != nil || got != "Saving as plaintext" {
@@ -43,8 +43,8 @@ func TestRecoverySavePolicyTracksEnabledAndDisabledStore(t *testing.T) {
 	if _, err := privateTemplates(context.Background(), "2026-01-01", []tui.TemplateSelection{{ID: "one"}}); !errors.Is(err, scratchpad.ErrPrivacyPolicyChanged) {
 		t.Fatalf("private template action ran under changed policy: %v", err)
 	}
-	note, err := mgr.GetByDate("2026-01-01")
-	if err != nil || note.Content != "" {
+	note, managerErr := mgr.GetByDate("2026-01-01")
+	if managerErr != nil || note.Content != "" {
 		t.Fatal("private draft was published as plaintext")
 	}
 }

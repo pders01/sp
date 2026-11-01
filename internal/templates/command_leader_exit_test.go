@@ -13,15 +13,15 @@ import (
 )
 
 func TestCommandCancellationOwnsGroupAfterLeaderExit(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	listener, listenErr := net.Listen("tcp", "127.0.0.1:0")
+	if listenErr != nil {
+		t.Fatal(listenErr)
 	}
 	defer listener.Close()
 	_ = listener.(*net.TCPListener).SetDeadline(time.Now().Add(5 * time.Second))
-	executable, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
+	executable, listenErr := os.Executable()
+	if listenErr != nil {
+		t.Fatal(listenErr)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -45,9 +45,9 @@ func TestCommandCancellationOwnsGroupAfterLeaderExit(t *testing.T) {
 			return err
 		})
 	}()
-	conn, err := listener.Accept()
-	if err != nil {
-		t.Fatal(err)
+	conn, listenErr := listener.Accept()
+	if listenErr != nil {
+		t.Fatal(listenErr)
 	}
 	defer conn.Close()
 	defer func() {

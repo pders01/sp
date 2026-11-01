@@ -13,7 +13,7 @@ type appStartup struct {
 	notices  []string
 }
 
-func loadConfiguration(path string) (*config.Config, []string) {
+func loadConfiguration(path string) (configuration *config.Config, diagnostics []string) {
 	cfg, warnings, err := config.LoadWithDiagnostics(path)
 	if err != nil {
 		return config.Default(), []string{fmt.Sprintf("Configuration ignored: %v; using safe defaults.", err)}
@@ -25,7 +25,7 @@ func loadConfiguration(path string) (*config.Config, []string) {
 	return cfg, notices
 }
 
-func loadUIConfiguration() (*config.Config, []string) {
+func loadUIConfiguration() (configuration *config.Config, diagnostics []string) {
 	path, err := config.DefaultPath()
 	if err != nil {
 		return config.Default(), []string{fmt.Sprintf("Configuration path unavailable: %v; using safe defaults.", err)}

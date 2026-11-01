@@ -45,9 +45,9 @@ func TestFirstPrivateSaveOnSharedOnlyInitializesCreated(t *testing.T) {
 			if !bytes.Equal(before, readTestFile(t, path)) {
 				t.Fatal("read/open/cancel/no-op template created a private payload")
 			}
-			note, err := m.GetByDate(date)
-			if err != nil {
-				t.Fatal(err)
+			note, loadErr := m.GetByDate(date)
+			if loadErr != nil {
+				t.Fatal(loadErr)
 			}
 			agent := note.Agent
 			// A failed encoding must not make creation appear published.
@@ -62,7 +62,7 @@ func TestFirstPrivateSaveOnSharedOnlyInitializesCreated(t *testing.T) {
 			started := time.Now()
 			injected := errors.New("synthetic directory sync failure")
 			calls := 0
-			err = m.save(note, func(dir string) error {
+			loadErr = m.save(note, func(_ string) error {
 				calls++
 				if note.Created.IsZero() || !note.Created.Equal(note.Modified) {
 					t.Fatalf("publication did not advance creation timestamp: %+v", note)
@@ -73,8 +73,8 @@ func TestFirstPrivateSaveOnSharedOnlyInitializesCreated(t *testing.T) {
 				}
 				return injected
 			})
-			if !errors.Is(err, ErrDurabilityUnconfirmed) || !errors.Is(err, injected) || calls != 1 {
-				t.Fatalf("unconfirmed first save = %v, sync calls = %d", err, calls)
+			if !errors.Is(loadErr, ErrDurabilityUnconfirmed) || !errors.Is(loadErr, injected) || calls != 1 {
+				t.Fatalf("unconfirmed first save = %v, sync calls = %d", loadErr, calls)
 			}
 			if note.Created.Before(started) || note.Created.After(time.Now()) {
 				t.Fatalf("creation time %v is outside first-save window", note.Created)
@@ -84,9 +84,9 @@ func TestFirstPrivateSaveOnSharedOnlyInitializesCreated(t *testing.T) {
 			if err := m.Save(note); err != nil {
 				t.Fatal(err)
 			}
-			fresh, err := NewManagerAt(m.storageDir)
-			if err != nil {
-				t.Fatal(err)
+			fresh, loadErr := NewManagerAt(m.storageDir)
+			if loadErr != nil {
+				t.Fatal(loadErr)
 			}
 			defer fresh.Lock()
 			if encrypted {
@@ -97,9 +97,9 @@ func TestFirstPrivateSaveOnSharedOnlyInitializesCreated(t *testing.T) {
 					t.Fatal("private content was saved as plaintext")
 				}
 			}
-			saved, err := fresh.GetByDate(date)
-			if err != nil {
-				t.Fatal(err)
+			saved, loadErr := fresh.GetByDate(date)
+			if loadErr != nil {
+				t.Fatal(loadErr)
 			}
 			if !saved.Created.Equal(created) || !saved.Modified.Equal(note.Modified) || saved.Content != note.Content {
 				t.Fatalf("private save/reload changed content or timestamps: %+v", saved)
@@ -133,9 +133,9 @@ func TestPrivateCreationPreservesExistingTimestamps(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				note, err := m.GetByDate(date)
-				if err != nil {
-					t.Fatal(err)
+				note, loadErr2 := m.GetByDate(date)
+				if loadErr2 != nil {
+					t.Fatal(loadErr2)
 				}
 				if !note.Created.Equal(created) || !note.Modified.Equal(modified) {
 					t.Fatalf("open/migration changed existing timestamps: %+v", note)
@@ -144,9 +144,9 @@ func TestPrivateCreationPreservesExistingTimestamps(t *testing.T) {
 				if err := m.Save(note); err != nil {
 					t.Fatal(err)
 				}
-				saved, err := m.GetByDate(date)
-				if err != nil || !note.Created.Equal(created) || !saved.Created.Equal(created) {
-					t.Fatalf("save changed existing creation timestamp: %+v, %v", saved, err)
+				saved, loadErr2 := m.GetByDate(date)
+				if loadErr2 != nil || !note.Created.Equal(created) || !saved.Created.Equal(created) {
+					t.Fatalf("save changed existing creation timestamp: %+v, %v", saved, loadErr2)
 				}
 			}
 		})

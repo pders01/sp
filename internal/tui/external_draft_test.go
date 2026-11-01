@@ -64,7 +64,7 @@ func TestRetainedExternalDraftFollowsDateAcrossViewsAndIsNotOverwritten(t *testi
 		t.Fatal("retry opened saved text instead of retained draft")
 	}
 	var baseline string
-	app.nb.save = func(_ string, original, content string) error { baseline = original; return nil }
+	app.nb.save = func(_ string, original, _ string) error { baseline = original; return nil }
 	app.nb.finishEdit(editDoneMsg{date: date, original: current, path: newPath, cleanup: func() { _ = os.Remove(newPath) }})
 	if baseline != current || app.cal.contents[date] != draft || len(app.recoveries) != 1 {
 		t.Fatal("reviewed save did not use current baseline or sync views")

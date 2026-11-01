@@ -13,9 +13,9 @@ import (
 
 func TestPrivacyDisableConfirmation(t *testing.T) {
 	dir := t.TempDir()
-	mgr, err := scratchpad.NewManagerAt(dir)
-	if err != nil {
-		t.Fatal(err)
+	mgr, managerErr := scratchpad.NewManagerAt(dir)
+	if managerErr != nil {
+		t.Fatal(managerErr)
 	}
 	defer mgr.Lock()
 	const passphrase = "synthetic disable passphrase"
@@ -27,9 +27,9 @@ func TestPrivacyDisableConfirmation(t *testing.T) {
 		t.Fatal(err)
 	}
 	mgr.Lock()
-	before, err := os.ReadFile(filepath.Join(dir, date+".json"))
-	if err != nil {
-		t.Fatal(err)
+	before, managerErr := os.ReadFile(filepath.Join(dir, date+".json"))
+	if managerErr != nil {
+		t.Fatal(managerErr)
 	}
 	for _, tc := range []struct {
 		name, line string
@@ -83,9 +83,9 @@ func TestPrivacyDisableConfirmation(t *testing.T) {
 	}
 	// Re-enabling is explicit and uses the existing passphrase/key.
 	path := filepath.Join(dir, "privacy.json")
-	retainedData, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
+	retainedData, managerErr := os.ReadFile(path)
+	if managerErr != nil {
+		t.Fatal(managerErr)
 	}
 	var retained map[string]any
 	if err := json.Unmarshal(retainedData, &retained); err != nil {
@@ -99,9 +99,9 @@ func TestPrivacyDisableConfirmation(t *testing.T) {
 		t.Fatalf("re-enable should authenticate the existing identity once: %+v", reenable)
 	}
 	// Simulate the durable transition marker left by an interrupted reversal.
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
+	data, managerErr := os.ReadFile(path)
+	if managerErr != nil {
+		t.Fatal(managerErr)
 	}
 	var metadata map[string]any
 	if err := json.Unmarshal(data, &metadata); err != nil {
@@ -111,9 +111,9 @@ func TestPrivacyDisableConfirmation(t *testing.T) {
 		t.Fatal("re-enable rotated or rewrapped the retained identity")
 	}
 	metadata["version"], metadata["state"] = 2, "decrypting"
-	data, err = json.Marshal(metadata)
-	if err != nil {
-		t.Fatal(err)
+	data, managerErr = json.Marshal(metadata)
+	if managerErr != nil {
+		t.Fatal(managerErr)
 	}
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)

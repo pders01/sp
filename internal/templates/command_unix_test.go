@@ -18,7 +18,7 @@ import (
 // Re-exec only synthetic fixtures. The holder keeps BOTH output pipes and a
 // readiness/lifetime connection open until exit. Even an escaped holder exits
 // itself after two seconds; tests wait for its connection to close before ending.
-func TestTemplateProcessHelper(t *testing.T) {
+func TestTemplateProcessHelper(_ *testing.T) {
 	args := os.Args
 	if len(args) < 4 || args[len(args)-3] != "template-process-helper" {
 		return
@@ -60,17 +60,17 @@ func TestCommandInheritedPipes(t *testing.T) {
 		}
 		for _, trigger := range triggers {
 			t.Run(mode+"/"+trigger, func(t *testing.T) {
-				listener, err := net.Listen("tcp", "127.0.0.1:0")
-				if err != nil {
-					t.Fatal(err)
+				listener, listenErr := net.Listen("tcp", "127.0.0.1:0")
+				if listenErr != nil {
+					t.Fatal(listenErr)
 				}
 				defer listener.Close()
 				if err := listener.(*net.TCPListener).SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
 					t.Fatal(err)
 				}
-				executable, err := os.Executable()
-				if err != nil {
-					t.Fatal(err)
+				executable, listenErr := os.Executable()
+				if listenErr != nil {
+					t.Fatal(listenErr)
 				}
 				def := Definition{Name: "Synthetic descendant", Command: []string{
 					executable, "-test.run=^TestTemplateProcessHelper$", "--", "template-process-helper", mode, listener.Addr().String(),
@@ -78,7 +78,7 @@ func TestCommandInheritedPipes(t *testing.T) {
 				cause := errors.New("synthetic caller cause")
 				ctx, cancel := context.WithCancelCause(context.Background())
 				defer cancel(nil)
-				var parent context.Context = ctx
+				parent := ctx
 				if trigger == "caller-deadline" {
 					var stop context.CancelFunc
 					parent, stop = context.WithTimeoutCause(ctx, 500*time.Millisecond, cause)
@@ -97,9 +97,9 @@ func TestCommandInheritedPipes(t *testing.T) {
 					output, err := runCommand(parent, def, "2026-01-15", timeout, 1024)
 					done <- outcome{output, err}
 				}()
-				conn, err := listener.Accept()
-				if err != nil {
-					t.Fatal(err)
+				conn, listenErr := listener.Accept()
+				if listenErr != nil {
+					t.Fatal(listenErr)
 				}
 				defer conn.Close()
 				// On failure as well as success, wait for the bounded holder to

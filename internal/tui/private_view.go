@@ -50,7 +50,7 @@ func (a *App) unlockView() string {
 
 // A form is supported only when its field, current error and actions are all
 // visible. Submission uses this same geometry; never accept an invisible field.
-func (a *App) unlockLayout() (string, string, int) {
+func (a *App) unlockLayout() (bodyText, footerText string, minimumHeight int) {
 	p := a.privacy
 	width := a.nb.width
 	palette := a.nb.theme.Palette()

@@ -21,7 +21,7 @@ func TestRecoveryReportSurvivesStatusChangesAndQuit(t *testing.T) {
 		t.Fatal(err)
 	}
 	recorded := 0
-	app.SetRecoveryRecorder(func(d, p string) error { recorded++; return errors.New("synthetic index failure") }, nil)
+	app.SetRecoveryRecorder(func(_, _ string) error { recorded++; return errors.New("synthetic index failure") }, nil)
 	app.nb.save = func(string, string, string) error { return scratchpad.ErrConflict }
 	app.Update(editDoneMsg{date: date, original: "original", path: path})
 	app.nb.theme.SetStatus("unrelated transient message", 0)

@@ -57,7 +57,7 @@ func TestSharedTerminalUnlockPreservesUTF8(t *testing.T) {
 	for _, standalone := range []bool{false, true} {
 		var got string
 		a := NewApp(NewCalendar(nil), NewNotebook(nil), ModeNotebook)
-		defer a.Close()
+		t.Cleanup(a.Close)
 		a.SetPrivacy(PrivacyHooks{Unlock: func(secret []byte) error { got = string(secret); return errors.New("synthetic mismatch") }})
 		a.startUnlock()
 		var target tea.Model = a

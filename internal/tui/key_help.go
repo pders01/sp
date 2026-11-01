@@ -197,14 +197,3 @@ func unlockBindings() []helpEntry {
 		{keys: "F1", label: "toggle key help; ? remains part of the passphrase", visible: true},
 	}
 }
-
-func templateBindings(applying bool) []helpEntry {
-	return []helpEntry{
-		{keys: "↑/k ↓/j", label: "move selection", visible: !applying},
-		{keys: "Space", label: "toggle section; applied sections can be appended again", visible: !applying},
-		{keys: "Enter", label: "save selected sections, then open editor", visible: !applying},
-		{keys: "Esc", label: "cancel chooser", visible: !applying},
-		{keys: "?/F1", label: "toggle key help", visible: true},
-		{keys: "q/Ctrl+C", label: "quit application; request cancellation of pending work", visible: true},
-	}
-}

@@ -134,13 +134,13 @@ func (p *terminalPrompt) Password(prompt string) ([]byte, error) {
 }
 
 func enablePrivacy(mgr *scratchpad.Manager, prompt privacyPrompter, output io.Writer) error {
-	enabled, err := mgr.PrivacyEnabled()
-	if err != nil {
-		return err
+	enabled, policyErr := mgr.PrivacyEnabled()
+	if policyErr != nil {
+		return policyErr
 	}
-	hasIdentity, err := mgr.HasPrivacyIdentity()
-	if err != nil {
-		return err
+	hasIdentity, policyErr := mgr.HasPrivacyIdentity()
+	if policyErr != nil {
+		return policyErr
 	}
 	if !enabled {
 		if _, writeErr := fmt.Fprint(output, privacyWarning); writeErr != nil {
@@ -163,10 +163,10 @@ func enablePrivacy(mgr *scratchpad.Manager, prompt privacyPrompter, output io.Wr
 		}
 		passwordPrompt = "Existing passphrase: "
 	}
-	passphrase, err := prompt.Password(passwordPrompt)
+	passphrase, policyErr := prompt.Password(passwordPrompt)
 	defer clear(passphrase)
-	if err != nil {
-		return fmt.Errorf("read passphrase: %w", err)
+	if policyErr != nil {
+		return fmt.Errorf("read passphrase: %w", policyErr)
 	}
 	if len(passphrase) == 0 {
 		return errors.New("passphrase must not be empty")
@@ -189,9 +189,9 @@ func enablePrivacy(mgr *scratchpad.Manager, prompt privacyPrompter, output io.Wr
 }
 
 func disablePrivacy(mgr *scratchpad.Manager, prompt privacyPrompter, output io.Writer) error {
-	status, err := mgr.PrivacyStatus()
-	if err != nil {
-		return err
+	status, statusErr := mgr.PrivacyStatus()
+	if statusErr != nil {
+		return statusErr
 	}
 	if !status.Enabled {
 		if err := mgr.DisablePrivacy(nil); err != nil {
@@ -203,17 +203,17 @@ func disablePrivacy(mgr *scratchpad.Manager, prompt privacyPrompter, output io.W
 	if _, err := fmt.Fprint(output, privacyDisableWarning); err != nil {
 		return err
 	}
-	confirmation, err := prompt.Line("Type DECRYPT ALL NOTES to continue: ")
-	if err != nil {
-		return fmt.Errorf("read confirmation: %w", err)
+	confirmation, statusErr := prompt.Line("Type DECRYPT ALL NOTES to continue: ")
+	if statusErr != nil {
+		return fmt.Errorf("read confirmation: %w", statusErr)
 	}
 	if confirmation != "DECRYPT ALL NOTES" {
 		return errors.New("privacy disable cancelled: confirmation did not match")
 	}
-	passphrase, err := prompt.Password("Existing passphrase: ")
+	passphrase, statusErr := prompt.Password("Existing passphrase: ")
 	defer clear(passphrase)
-	if err != nil {
-		return fmt.Errorf("read passphrase: %w", err)
+	if statusErr != nil {
+		return fmt.Errorf("read passphrase: %w", statusErr)
 	}
 	if err := mgr.DisablePrivacyWithProgress(passphrase, privacyProgressReporter(output)); err != nil {
 		return fmt.Errorf("disable privacy: %w; run sp privacy status and retry sp privacy disable", err)
@@ -229,13 +229,13 @@ func writePrivacyStatus(mgr *scratchpad.Manager, output io.Writer) error {
 }
 
 func writePrivacyStatusDates(mgr *scratchpad.Manager, output io.Writer, dates bool) error {
-	status, err := mgr.PrivacyStatus()
-	if err != nil {
-		return fmt.Errorf("inspect privacy status: %w", err)
+	status, statusErr2 := mgr.PrivacyStatus()
+	if statusErr2 != nil {
+		return fmt.Errorf("inspect privacy status: %w", statusErr2)
 	}
-	hasIdentity, err := mgr.HasPrivacyIdentity()
-	if err != nil {
-		return fmt.Errorf("inspect privacy identity: %w", err)
+	hasIdentity, statusErr2 := mgr.HasPrivacyIdentity()
+	if statusErr2 != nil {
+		return fmt.Errorf("inspect privacy identity: %w", statusErr2)
 	}
 	state := "disabled"
 	if status.Enabled {
@@ -283,12 +283,12 @@ func writePrivacyStatusDates(mgr *scratchpad.Manager, output io.Writer, dates bo
 		return err
 	}
 	if status.Decrypting {
-		_, err = fmt.Fprintln(output, "WARNING: Decryption is incomplete; some private notes may already be plaintext. Normal access is blocked. Run sp privacy disable to resume; stop all sp instances first.")
-		return err
+		_, statusErr2 = fmt.Fprintln(output, "WARNING: Decryption is incomplete; some private notes may already be plaintext. Normal access is blocked. Run sp privacy disable to resume; stop all sp instances first.")
+		return statusErr2
 	}
 	if status.Enabled && len(status.PlaintextDates) > 0 {
-		_, err = fmt.Fprintln(output, "WARNING: Migration is incomplete. Run sp privacy enable to resume; stop old sp instances first.")
-		return err
+		_, statusErr2 = fmt.Fprintln(output, "WARNING: Migration is incomplete. Run sp privacy enable to resume; stop old sp instances first.")
+		return statusErr2
 	}
 	return nil
 }

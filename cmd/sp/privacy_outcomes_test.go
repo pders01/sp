@@ -62,9 +62,9 @@ func TestPrivacyStatusBoundedAndOptInDates(t *testing.T) {
 
 func TestPrivacyEnableRetainedIdentityWrongPassphraseAndDecrypting(t *testing.T) {
 	dir := t.TempDir()
-	mgr, err := scratchpad.NewManagerAt(dir)
-	if err != nil {
-		t.Fatal(err)
+	mgr, managerErr := scratchpad.NewManagerAt(dir)
+	if managerErr != nil {
+		t.Fatal(managerErr)
 	}
 	defer mgr.Lock()
 	pass := []byte("synthetic retained identity passphrase")
@@ -76,17 +76,17 @@ func TestPrivacyEnableRetainedIdentityWrongPassphraseAndDecrypting(t *testing.T)
 	}
 	mgr.Lock()
 	path := filepath.Join(dir, "privacy.json")
-	before, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
+	before, managerErr := os.ReadFile(path)
+	if managerErr != nil {
+		t.Fatal(managerErr)
 	}
 	prompt := &scriptedPrivacyPrompt{line: "ENABLE PRIVACY", passwords: []string{"synthetic wrong passphrase"}}
 	var output bytes.Buffer
 	if err := enablePrivacy(mgr, prompt, &output); err == nil {
 		t.Fatal("wrong existing passphrase accepted")
 	}
-	after, err := os.ReadFile(path)
-	if err != nil || !bytes.Equal(before, after) {
+	after, managerErr := os.ReadFile(path)
+	if managerErr != nil || !bytes.Equal(before, after) {
 		t.Fatal("wrong passphrase changed retained identity")
 	}
 	if prompt.passwordCalls != 1 || prompt.passwordPrompts[0] != "Existing passphrase: " || strings.Contains(output.String(), "Privacy enabled.") {
@@ -99,9 +99,9 @@ func TestPrivacyEnableRetainedIdentityWrongPassphraseAndDecrypting(t *testing.T)
 		t.Fatal(err)
 	}
 	metadata["version"], metadata["state"] = 2, "decrypting"
-	data, err := json.Marshal(metadata)
-	if err != nil {
-		t.Fatal(err)
+	data, managerErr := json.Marshal(metadata)
+	if managerErr != nil {
+		t.Fatal(managerErr)
 	}
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
@@ -126,9 +126,9 @@ func TestSharedJSONOutcomesAndRawDefaults(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		output, diagnostic, err := testCLI(factory, "shared", date, "--json")
-		if err != nil || diagnostic != "" {
-			t.Fatalf("JSON read = %q, %v", diagnostic, err)
+		output, diagnostic, operationErr := testCLI(factory, "shared", date, "--json")
+		if operationErr != nil || diagnostic != "" {
+			t.Fatalf("JSON read = %q, %v", diagnostic, operationErr)
 		}
 		var result struct{ Date, Status, Content string }
 		if err := json.Unmarshal([]byte(output), &result); err != nil {
@@ -141,9 +141,9 @@ func TestSharedJSONOutcomesAndRawDefaults(t *testing.T) {
 		if result.Date != date || result.Status != want || result.Content != "" || strings.Contains(output, "sentinel") {
 			t.Fatalf("shared result = %q", output)
 		}
-		raw, diagnostic, err := testCLI(factory, "shared", date)
-		if err != nil || raw != "" || diagnostic != "" {
-			t.Fatalf("raw read = %q, %q, %v", raw, diagnostic, err)
+		raw, diagnostic, operationErr := testCLI(factory, "shared", date)
+		if operationErr != nil || raw != "" || diagnostic != "" {
+			t.Fatalf("raw read = %q, %q, %v", raw, diagnostic, operationErr)
 		}
 	}
 	if err := mgr.EnablePrivacy([]byte("synthetic JSON outcomes passphrase")); err != nil {

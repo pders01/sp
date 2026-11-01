@@ -20,7 +20,7 @@ import (
 
 // All subprocesses here are synthetic and self-terminating, even if template
 // cancellation regresses. The holder's connection stays open until process exit.
-func TestTemplateShutdownProcessHelper(t *testing.T) {
+func TestTemplateShutdownProcessHelper(_ *testing.T) {
 	args := os.Args
 	if len(args) < 4 || args[len(args)-3] != "template-shutdown-helper" {
 		return
@@ -50,15 +50,15 @@ func TestTemplateShutdownProcessHelper(t *testing.T) {
 func TestTemplateWorkflowInheritedPipesCancelAndShutdown(t *testing.T) {
 	for _, action := range []string{"escape", "quit", "close-without-completion"} {
 		t.Run(action, func(t *testing.T) {
-			listener, err := net.Listen("tcp", "127.0.0.1:0")
-			if err != nil {
-				t.Fatal(err)
+			listener, listenErr := net.Listen("tcp", "127.0.0.1:0")
+			if listenErr != nil {
+				t.Fatal(listenErr)
 			}
 			defer listener.Close()
 			_ = listener.(*net.TCPListener).SetDeadline(time.Now().Add(5 * time.Second))
-			executable, err := os.Executable()
-			if err != nil {
-				t.Fatal(err)
+			executable, listenErr := os.Executable()
+			if listenErr != nil {
+				t.Fatal(listenErr)
 			}
 			def := templates.Definition{Name: "Synthetic shutdown", Command: []string{
 				executable, "-test.run=^TestTemplateShutdownProcessHelper$", "--", "template-shutdown-helper", "parent", listener.Addr().String(),
@@ -83,9 +83,9 @@ func TestTemplateWorkflowInheritedPipesCancelAndShutdown(t *testing.T) {
 			completion := templateWorkflowStart(t, app)
 			attempt := app.templateChooser.attempt
 			date := app.templateChooser.date
-			conn, err := listener.Accept()
-			if err != nil {
-				t.Fatal(err)
+			conn, listenErr := listener.Accept()
+			if listenErr != nil {
+				t.Fatal(listenErr)
 			}
 			defer conn.Close()
 			defer func() {

@@ -22,7 +22,7 @@ func TestFormsDesignDatePolicyAndLiteralInput(t *testing.T) {
 				t.Fatalf("date form missing %q:\n%s", want, view)
 			}
 		}
-		if date, close := p.update(tea.KeyMsg{Type: tea.KeyEnter}); date != "" || close {
+		if date, dismissed := p.update(tea.KeyMsg{Type: tea.KeyEnter}); date != "" || dismissed {
 			t.Fatal("rejected paste authorized an older candidate")
 		}
 		p.update(tea.KeyMsg{Type: tea.KeyF1})
@@ -39,12 +39,12 @@ func TestFormsDesignDatePolicyAndLiteralInput(t *testing.T) {
 		}
 		p.update(tea.KeyMsg{Type: tea.KeyCtrlU})
 		p.update(privatePasteMsg("2024-02-29"))
-		if date, close := p.update(privacyKey("enter")); date != "" || close {
+		if date, dismissed := p.update(privacyKey("enter")); date != "" || dismissed {
 			t.Fatal("literal Enter text submitted the date")
 		}
 		p.update(tea.KeyMsg{Type: tea.KeyCtrlU})
 		p.update(privatePasteMsg("2024-02-29"))
-		if date, close := p.update(tea.KeyMsg{Type: tea.KeyEnter}); date != "2024-02-29" || !close {
+		if date, dismissed := p.update(tea.KeyMsg{Type: tea.KeyEnter}); date != "2024-02-29" || !dismissed {
 			t.Fatal("physical Enter did not select the exact date")
 		}
 	}

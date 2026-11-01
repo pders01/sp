@@ -508,8 +508,8 @@ func (a *App) updatePrivacy(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 	if p == nil {
 		return false, nil
 	}
-	if handled, cmd := a.updatePrivacySession(msg); handled {
-		return true, cmd
+	if sessionHandled, sessionCmd := a.updatePrivacySession(msg); sessionHandled {
+		return true, sessionCmd
 	}
 	if p.editor != nil {
 		e := p.editor
@@ -802,7 +802,8 @@ func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			path, err := e.recovery()
 			if err != nil {
 				e.status = fmt.Sprintf("Shutdown recovery failed: %v. Text remains in this editor; keep it open and retry.", privateRecoveryError(path, err))
-				return e, e.waitSignal()
+				wait := e.waitSignal()
+				return e, wait
 			}
 			e.err = fmt.Errorf("%w; encrypted recovery: %s", ErrPrivateEditorInterrupted, path)
 		} else {

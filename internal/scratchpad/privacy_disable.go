@@ -31,14 +31,14 @@ func (m *Manager) disablePrivacy(passphrase []byte, syncDir func(string) error) 
 
 func (m *Manager) disablePrivacyWithProgress(passphrase []byte, syncDir func(string) error, progress func(PrivacyProgress)) error {
 	reportPrivacyProgress(progress, "inspecting", 0, 0)
-	storeLock, err := lockNote(m.storageDir, "privacy")
-	if err != nil {
-		return err
+	storeLock, lockErr := lockNote(m.storageDir, "privacy")
+	if lockErr != nil {
+		return lockErr
 	}
 	defer storeLock.Close()
-	metadata, _, err := m.readMetadata()
-	if err != nil {
-		return err
+	metadata, _, lockErr := m.readMetadata()
+	if lockErr != nil {
+		return lockErr
 	}
 	if metadata == nil || metadata.State == "disabled" {
 		if _, err := m.PrivacyEnabled(); err != nil {
@@ -55,9 +55,9 @@ func (m *Manager) disablePrivacyWithProgress(passphrase []byte, syncDir func(str
 	if err := m.Unlock(passphrase); err != nil {
 		return err
 	}
-	dates, err := m.privacyDates()
-	if err != nil {
-		return err
+	dates, lockErr := m.privacyDates()
+	if lockErr != nil {
+		return lockErr
 	}
 	// Authenticate and verify every conversion before exposing any plaintext.
 	// A second pass bounds plaintext memory usage to one daily document.

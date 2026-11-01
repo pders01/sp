@@ -263,7 +263,7 @@ func TestSaveWorkflowPrivateCalendarSavePublishesOnlyPublicState(t *testing.T) {
 
 func TestSaveWorkflowPrivateNoOpOutcomes(t *testing.T) {
 	for _, key := range []tea.KeyType{tea.KeyEsc, tea.KeyCtrlC, tea.KeyCtrlS} {
-		t.Run(fmt.Sprint(key), func(t *testing.T) {
+		t.Run(key.String(), func(t *testing.T) {
 			app := workflowApp(t, ModeCalendar, nil)
 			store := &workflowPrivateStore{private: map[string]string{}, shared: map[string]string{}}
 			app.SetPrivacy(store.hooks())

@@ -422,9 +422,10 @@ func designCaptureApp(t *testing.T, scene designCaptureScene, theme string, size
 			done := make(chan struct{})
 			close(done)
 			c.applying, c.attempt = true, &templateApplyAttempt{done: done}
-			if scene.id == "templates-retry" {
+			switch scene.id {
+			case "templates-retry":
 				app.finishTemplateApply(templateAppliedMsg{date: designCaptureDate, attempt: c.attempt, err: errors.New("synthetic storage unavailable")})
-			} else if scene.id == "templates-cancelling" {
+			case "templates-cancelling":
 				key(tea.KeyEsc)
 			}
 		case "templates-help":
@@ -432,12 +433,13 @@ func designCaptureApp(t *testing.T, scene designCaptureScene, theme string, size
 		}
 	case "date-jump":
 		runes("d")
-		if scene.id == "date-invalid" {
+		switch scene.id {
+		case "date-invalid":
 			runes("2026-02-30")
 			key(tea.KeyEnter)
-		} else if scene.id == "date-help" {
+		case "date-help":
 			key(tea.KeyF1)
-		} else {
+		default:
 			runes(designCaptureDate)
 		}
 	case "help":

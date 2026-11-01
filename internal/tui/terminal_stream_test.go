@@ -96,7 +96,7 @@ func TestTerminalStreamSingleEscapeAndLateOwnership(t *testing.T) {
 			m := &terminalStreamModel{escaped: escaped}
 			payload := "literal\r\x13\x03\x00\x1b[A\ufffd日"
 			result := runTerminalPipe(t, m, func(ctx context.Context, out *os.File) {
-				io.WriteString(out, "before"+prefix)
+				out.WriteString("before" + prefix)
 				if prefix == "\x1b" {
 					select {
 					case <-escaped:
@@ -159,13 +159,13 @@ func TestTerminalStreamResolvedEscapeNotRepeatedOnNextKey(t *testing.T) {
 	escaped := make(chan struct{})
 	m := &terminalStreamModel{escaped: escaped}
 	runTerminalPipe(t, m, func(ctx context.Context, out *os.File) {
-		io.WriteString(out, "\x1b")
+		out.WriteString("\x1b")
 		select {
 		case <-escaped:
 		case <-ctx.Done():
 			return
 		}
-		io.WriteString(out, "x\r\x07")
+		out.WriteString("x\r\x07")
 	})
 	var keys []tea.KeyType
 	for _, msg := range m.msgs {
@@ -181,13 +181,14 @@ func TestTerminalStreamResolvedEscapeNotRepeatedOnNextKey(t *testing.T) {
 func TestTerminalStreamEscapeThenPhysicalControlIsOrdered(t *testing.T) {
 	m := &terminalStreamModel{}
 	runTerminalPipe(t, m, func(_ context.Context, out *os.File) {
-		io.WriteString(out, "\x1b\x0c\x07")
+		out.WriteString("\x1b\x0c\x07")
 	})
 	var keys []tea.KeyType
 	for _, msg := range m.msgs {
-		if key, ok := msg.(tea.KeyMsg); ok {
-			keys = append(keys, key.Type)
-		} else if _, rejected := msg.(terminalRejectedMsg); rejected {
+		switch event := msg.(type) {
+		case tea.KeyMsg:
+			keys = append(keys, event.Type)
+		case terminalRejectedMsg:
 			t.Fatal("physical control after Escape was discarded as Alt input")
 		}
 	}
@@ -212,7 +213,7 @@ func TestTerminalStreamEscapeClosesHelpBeforeImmediateRelock(t *testing.T) {
 	a.startPrivateEdit(date)
 	a.privacy.editor.keyHelp = newKeyHelp("Write", nil, "", 80, 24)
 	runTerminalPipe(t, a, func(_ context.Context, out *os.File) {
-		io.WriteString(out, "\x1b\x0cq")
+		out.WriteString("\x1b\x0cq")
 	})
 	if !locked || a.privacy.editor != nil {
 		t.Fatal("Escape followed immediately by Ctrl+L did not close help and relock")
@@ -223,14 +224,14 @@ func TestTerminalStreamProductionEditorAndUnlock(t *testing.T) {
 	var saved string
 	e := newPrivateEditor("2026-01-01", "", func(_, _, text string) error { saved = text; return nil }, nil)
 	payload := "a\r\n\t\ufffd日\x13"
-	result := runTerminalPipe(t, e, func(_ context.Context, out *os.File) { io.WriteString(out, bracket(payload)+"\x13") })
+	result := runTerminalPipe(t, e, func(_ context.Context, out *os.File) { out.WriteString(bracket(payload) + "\x13") })
 	if result != e || !e.done || saved != payload {
 		t.Fatalf("production editor: saved=%q done=%v", saved, e.done)
 	}
 	// Standalone unlock must cancel on ONE physical Escape, not a test hook.
 	s := newUnlockScreen(UnlockOptions{IsUnlocked: func() bool { return false }, Unlock: func([]byte) error { t.Error("Escape authenticated"); return nil }, Lock: func() {}})
 	defer s.app.Close()
-	result = runTerminalPipe(t, s, func(_ context.Context, out *os.File) { io.WriteString(out, "\x1b") })
+	result = runTerminalPipe(t, s, func(_ context.Context, out *os.File) { out.WriteString("\x1b") })
 	if result != s || !s.done || s.accepted || !errors.Is(s.err, ErrUnlockCancelled) {
 		t.Fatal("single Escape did not cancel production unlock")
 	}
@@ -289,7 +290,7 @@ func TestTerminalStreamQueueBoundedAndEOF(t *testing.T) {
 	}
 	for _, raw := range []string{"\xc3", "\xf0\x9f", pasteStart + "prefix", pasteStart + "prefix\x1b[201"} {
 		m := &terminalStreamModel{stopOnReject: true}
-		runTerminalPipe(t, m, func(_ context.Context, out *os.File) { io.WriteString(out, raw) })
+		runTerminalPipe(t, m, func(_ context.Context, out *os.File) { out.WriteString(raw) })
 		if len(m.msgs) == 0 {
 			t.Fatal("EOF rejection missing")
 		}
@@ -315,8 +316,8 @@ func TestTerminalStreamCancellationRetainsCallerFile(t *testing.T) {
 	defer output.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &terminalStreamModel{}
-	if _, err := io.WriteString(output, pasteStart+"synthetic pending"); err != nil {
-		t.Fatal(err)
+	if _, writeErr := output.WriteString(pasteStart + "synthetic pending"); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 	// Cancel with an incomplete literal paste while the real fd-backed reader
 	// is blocked, not after EOF. No pending payload may become physical keys.
@@ -380,7 +381,7 @@ func (m *terminalExecModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	_, cmd := m.terminalStreamModel.Update(msg)
 	return m, cmd
 }
-func TestTerminalExecSyntheticChild(t *testing.T) {
+func TestTerminalExecSyntheticChild(_ *testing.T) {
 	if os.Getenv("SP_TERMINAL_SYNTHETIC_CHILD") == "1" {
 		os.Exit(0)
 	}
@@ -401,7 +402,7 @@ func TestTerminalStreamExecProcessResumesWithoutStdinCopy(t *testing.T) {
 		defer output.Close()
 		select {
 		case <-m.resumed:
-			io.WriteString(output, "x\x07")
+			output.WriteString("x\x07")
 		case <-ctx.Done():
 		}
 	}()

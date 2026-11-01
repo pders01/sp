@@ -37,15 +37,15 @@ func TestEnablePrivacyConfirmsUnconfirmedPublications(t *testing.T) {
 			injected := errors.New("synthetic directory sync failure")
 			calls := 0
 			var events []PrivacyProgress
-			err := m.enablePrivacyWithProgress(fixturePassphrase, func(dir string) error {
+			operationErr := m.enablePrivacyWithProgress(fixturePassphrase, func(dir string) error {
 				calls++
 				if calls == failAt {
 					return injected
 				}
 				return syncDirectory(dir)
 			}, privacyProgressCollector(&events))
-			if !errors.Is(err, ErrDurabilityUnconfirmed) || !errors.Is(err, injected) || calls != failAt {
-				t.Fatalf("publication error = %v, sync calls = %d, want %d", err, calls, failAt)
+			if !errors.Is(operationErr, ErrDurabilityUnconfirmed) || !errors.Is(operationErr, injected) || calls != failAt {
+				t.Fatalf("publication error = %v, sync calls = %d, want %d", operationErr, calls, failAt)
 			}
 			want := []PrivacyProgress{{"inspecting", 0, 0}}
 			if scenario == "last-note" {
@@ -59,14 +59,14 @@ func TestEnablePrivacyConfirmsUnconfirmedPublications(t *testing.T) {
 			// Retry as after process exit. Already-published files must not be
 			// rewritten, but both metadata and final directory durability must
 			// be confirmed, even with no private notes left to migrate.
-			fresh, err := NewManagerAt(m.storageDir)
-			if err != nil {
-				t.Fatal(err)
+			fresh, operationErr := NewManagerAt(m.storageDir)
+			if operationErr != nil {
+				t.Fatal(operationErr)
 			}
 			defer fresh.Lock()
-			dates, err := fresh.privacyDates()
-			if err != nil {
-				t.Fatal(err)
+			dates, operationErr := fresh.privacyDates()
+			if operationErr != nil {
+				t.Fatal(operationErr)
 			}
 			before := map[string][]byte{}
 			for _, name := range append([]string{"privacy"}, dates...) {
@@ -119,18 +119,18 @@ func TestEnablePrivacyRetryConfirmsMetadataBeforeMigration(t *testing.T) {
 	writeJSON(t, path, legacyDocument{Date: date, Content: "synthetic pending migration"})
 	before := readTestFile(t, path)
 	var events []PrivacyProgress
-	err := m.enablePrivacyWithProgress(fixturePassphrase, func(string) error {
+	operationErr2 := m.enablePrivacyWithProgress(fixturePassphrase, func(string) error {
 		return errors.New("synthetic metadata durability failure")
 	}, privacyProgressCollector(&events))
-	if !errors.Is(err, ErrDurabilityUnconfirmed) {
-		t.Fatalf("retry error = %v", err)
+	if !errors.Is(operationErr2, ErrDurabilityUnconfirmed) {
+		t.Fatalf("retry error = %v", operationErr2)
 	}
 	assertPrivacyProgress(t, events, []PrivacyProgress{{"inspecting", 0, 0}})
 	if !bytes.Equal(before, readTestFile(t, path)) {
 		t.Fatal("retry migrated a note before confirming metadata durability")
 	}
 	calls := 0
-	err = m.enablePrivacyWithProgress(fixturePassphrase, func(dir string) error {
+	operationErr2 = m.enablePrivacyWithProgress(fixturePassphrase, func(dir string) error {
 		calls++
 		r, err := decodeRecord(readTestFile(t, path), date)
 		if err != nil {
@@ -141,8 +141,8 @@ func TestEnablePrivacyRetryConfirmsMetadataBeforeMigration(t *testing.T) {
 		}
 		return syncDirectory(dir)
 	}, nil)
-	if err != nil || calls != 3 {
-		t.Fatalf("retry = %v, sync calls = %d, want 3", err, calls)
+	if operationErr2 != nil || calls != 3 {
+		t.Fatalf("retry = %v, sync calls = %d, want 3", operationErr2, calls)
 	}
 }
 
@@ -154,9 +154,9 @@ func TestEnablePrivacyCompletionChecksIntendedPolicy(t *testing.T) {
 			if err := m.Append("2024-01-01", "Updates", "synthetic-helper", []string{"public update"}); err != nil {
 				t.Fatal(err)
 			}
-			other, err := NewManagerAt(m.storageDir)
-			if err != nil {
-				t.Fatal(err)
+			other, managerErr := NewManagerAt(m.storageDir)
+			if managerErr != nil {
+				t.Fatal(managerErr)
 			}
 			defer other.Lock()
 			var replacement []byte
@@ -197,7 +197,7 @@ func TestEnablePrivacyCompletionChecksIntendedPolicy(t *testing.T) {
 			}()
 			var events []PrivacyProgress
 			calls := 0
-			err = m.enablePrivacyWithProgress(fixturePassphrase, func(dir string) error {
+			managerErr = m.enablePrivacyWithProgress(fixturePassphrase, func(dir string) error {
 				calls++
 				return syncDirectory(dir)
 			}, func(p PrivacyProgress) {
@@ -215,8 +215,8 @@ func TestEnablePrivacyCompletionChecksIntendedPolicy(t *testing.T) {
 			if transition == "decrypting" {
 				wantErr = ErrPrivacyDecrypting
 			}
-			if !errors.Is(err, wantErr) || calls != 1 {
-				t.Fatalf("changed policy = %v, sync calls = %d; want %v, 1", err, calls, wantErr)
+			if !errors.Is(managerErr, wantErr) || calls != 1 {
+				t.Fatalf("changed policy = %v, sync calls = %d; want %v, 1", managerErr, calls, wantErr)
 			}
 			assertPrivacyProgress(t, events, []PrivacyProgress{{"inspecting", 0, 0}, {"migrating", 0, 1}, {"migrating", 1, 1}})
 		})

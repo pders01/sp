@@ -22,30 +22,30 @@ func TestAppendDetailedOutcomesAndProtectedPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(m.storageDir, date+".json")
-	before, err := decodeRecord(readTestFile(t, path), date)
-	if err != nil {
-		t.Fatal(err)
+	before, operationErr := decodeRecord(readTestFile(t, path), date)
+	if operationErr != nil {
+		t.Fatal(operationErr)
 	}
 	envelope := *before.Private
 	// Even an unlocked shared operation must not authenticate/decrypt the body.
-	payload, err := base64.StdEncoding.DecodeString(envelope.Payload)
-	if err != nil {
-		t.Fatal(err)
+	payload, operationErr := base64.StdEncoding.DecodeString(envelope.Payload)
+	if operationErr != nil {
+		t.Fatal(operationErr)
 	}
 	payload[len(payload)-1] ^= 1
 	before.Private.Payload = base64.StdEncoding.EncodeToString(payload)
 	writeJSON(t, path, before)
 	envelope = *before.Private
-	result, err := m.AppendDetailed(date, "Updates", "synthetic-agent", []string{"- one", "two", "one"})
-	if err != nil {
-		t.Fatal(err)
+	result, operationErr := m.AppendDetailed(date, "Updates", "synthetic-agent", []string{"- one", "two", "one"})
+	if operationErr != nil {
+		t.Fatal(operationErr)
 	}
 	if !reflect.DeepEqual(result.Added, []string{"one", "two"}) || !reflect.DeepEqual(result.Duplicates, []string{"one"}) {
 		t.Fatalf("result = %+v", result)
 	}
-	after, err := decodeRecord(readTestFile(t, path), date)
-	if err != nil {
-		t.Fatal(err)
+	after, operationErr := decodeRecord(readTestFile(t, path), date)
+	if operationErr != nil {
+		t.Fatal(operationErr)
 	}
 	if *after.Private != envelope || len(after.Agent.Contributions) != 1 || !reflect.DeepEqual(after.Agent.Contributions[0].Bullets, result.Added) {
 		t.Fatal("detailed append changed protected payload or provenance")
@@ -53,15 +53,15 @@ func TestAppendDetailedOutcomesAndProtectedPayload(t *testing.T) {
 	if _, err := m.GetByDate(date); err == nil {
 		t.Fatal("fixture did not corrupt authentication")
 	}
-	page, err := m.ReadShared(date)
-	if err != nil || !page.Exists || !strings.Contains(page.Content, "one") {
-		t.Fatalf("unlocked shared read = %+v, %v", page, err)
+	page, operationErr := m.ReadShared(date)
+	if operationErr != nil || !page.Exists || !strings.Contains(page.Content, "one") {
+		t.Fatalf("unlocked shared read = %+v, %v", page, operationErr)
 	}
 	m.Lock()
 	data := readTestFile(t, path)
-	result, err = m.AppendDetailed(date, "Updates", "another-source", []string{"two", "- one", "two"})
-	if err != nil || result == nil || len(result.Added) != 0 || !reflect.DeepEqual(result.Duplicates, []string{"two", "one", "two"}) {
-		t.Fatalf("duplicate result = %+v, %v", result, err)
+	result, operationErr = m.AppendDetailed(date, "Updates", "another-source", []string{"two", "- one", "two"})
+	if operationErr != nil || result == nil || len(result.Added) != 0 || !reflect.DeepEqual(result.Duplicates, []string{"two", "one", "two"}) {
+		t.Fatalf("duplicate result = %+v, %v", result, operationErr)
 	}
 	if !bytes.Equal(data, readTestFile(t, path)) {
 		t.Fatal("duplicate-only detailed append rewrote bytes/provenance")
@@ -69,13 +69,13 @@ func TestAppendDetailedOutcomesAndProtectedPayload(t *testing.T) {
 	if m.IsUnlocked() {
 		t.Fatal("detailed append unlocked private data")
 	}
-	result, err = m.AppendDetailed(date, "Other", "agent", []string{"one"})
-	if err != nil || len(result.Added) != 1 || len(result.Duplicates) != 0 {
-		t.Fatalf("section-scoped result = %+v, %v", result, err)
+	result, operationErr = m.AppendDetailed(date, "Other", "agent", []string{"one"})
+	if operationErr != nil || len(result.Added) != 1 || len(result.Duplicates) != 0 {
+		t.Fatalf("section-scoped result = %+v, %v", result, operationErr)
 	}
-	result, err = m.AppendDetailed(date, "Updates", "agent", []string{"one\ninjection"})
-	if err == nil || result != nil {
-		t.Fatalf("invalid input result = %+v, %v", result, err)
+	result, operationErr = m.AppendDetailed(date, "Updates", "agent", []string{"one\ninjection"})
+	if operationErr == nil || result != nil {
+		t.Fatalf("invalid input result = %+v, %v", result, operationErr)
 	}
 }
 
@@ -87,9 +87,9 @@ func TestAppendDetailedPreservesPrivateConflictAndConcurrentDedup(t *testing.T) 
 		t.Fatal(err)
 	}
 	path := filepath.Join(m.storageDir, note.Date+".json")
-	before, err := decodeRecord(readTestFile(t, path), note.Date)
-	if err != nil {
-		t.Fatal(err)
+	before, operationErr2 := decodeRecord(readTestFile(t, path), note.Date)
+	if operationErr2 != nil {
+		t.Fatal(operationErr2)
 	}
 	const count = 12
 	var wg sync.WaitGroup
@@ -126,9 +126,9 @@ func TestAppendDetailedPreservesPrivateConflictAndConcurrentDedup(t *testing.T) 
 	if added != count+1 || duplicates != 2*count-1 {
 		t.Fatalf("concurrent added=%d duplicates=%d", added, duplicates)
 	}
-	after, err := decodeRecord(readTestFile(t, path), note.Date)
-	if err != nil {
-		t.Fatal(err)
+	after, operationErr2 := decodeRecord(readTestFile(t, path), note.Date)
+	if operationErr2 != nil {
+		t.Fatal(operationErr2)
 	}
 	if *after.Private != *before.Private || len(after.Agent.Contributions) != count || strings.Count(after.Agent.Content, "- common\n") != 1 {
 		t.Fatal("concurrent outcomes lost updates or changed payload")

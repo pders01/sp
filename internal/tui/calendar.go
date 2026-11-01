@@ -193,29 +193,8 @@ func (c *Calendar) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (c *Calendar) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
-	result := completeExternalEdit(msg, c.save)
-	if result.published {
-		if c.onChange != nil {
-			c.onChange(msg.date, result.content)
-		} else {
-			c.MarkDate(msg.date, result.content)
-		}
-	}
-	if result.err != nil {
-		rememberExternalFailure(c.drafts, msg, result)
-		result.status += "; e: review/retry retained draft"
-		if msg.path != "" && c.onRecovery != nil {
-			c.onRecovery(scratchpad.RecoveryReference{Date: msg.date, Path: msg.path})
-		}
-		c.theme.SetStatus(result.status, 0)
-		return c, nil
-	}
-	delete(c.drafts, msg.date)
-	if c.onConsumed != nil {
-		c.onConsumed(msg.date, msg.path)
-	}
-	c.theme.SetStatus(result.status, 1500*time.Millisecond)
-	return c, c.theme.expireStatusCmd(1500 * time.Millisecond)
+	cmd := finishExternalDraft(msg, c.save, c.drafts, c.theme, c.onChange, c.MarkDate, c.onRecovery, c.onConsumed)
+	return c, cmd
 }
 
 func (c *Calendar) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

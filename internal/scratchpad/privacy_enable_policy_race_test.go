@@ -65,21 +65,21 @@ func TestEnablePrivacyCompletionRejectsRetainedKeyABA(t *testing.T) {
 			defer m.Lock()
 			// The fixture uses compact JSON; use production serialization so a
 			// retained-key disable/re-enable restores the exact same fingerprint.
-			lock, err := lockNote(m.storageDir, "privacy")
-			if err != nil {
-				t.Fatal(err)
+			lock, lockErr := lockNote(m.storageDir, "privacy")
+			if lockErr != nil {
+				t.Fatal(lockErr)
 			}
-			metadata, _, err := m.readMetadata()
-			if err == nil {
-				err = m.setPrivacyState(metadata, "", syncDirectory)
+			metadata, _, lockErr := m.readMetadata()
+			if lockErr == nil {
+				lockErr = m.setPrivacyState(metadata, "", syncDirectory)
 			}
 			_ = lock.Close()
-			if err != nil {
-				t.Fatal(err)
+			if lockErr != nil {
+				t.Fatal(lockErr)
 			}
-			_, fingerprint, err := m.readMetadata()
-			if err != nil {
-				t.Fatal(err)
+			_, fingerprint, lockErr := m.readMetadata()
+			if lockErr != nil {
+				t.Fatal(lockErr)
 			}
 			const visited = "2026-02-14"
 			const added = "2026-02-15"
@@ -89,21 +89,21 @@ func TestEnablePrivacyCompletionRejectsRetainedKeyABA(t *testing.T) {
 			switch scenario {
 			case "visited-legacy":
 				date = visited
-				err = m.Save(&Scratchpad{Date: visited, Content: content})
+				lockErr = m.Save(&Scratchpad{Date: visited, Content: content})
 			case "new-legacy":
-				err = m.Append(visited, "Updates", "synthetic-helper", []string{"shared update"})
+				lockErr = m.Append(visited, "Updates", "synthetic-helper", []string{"shared update"})
 			case "new-legacy-empty-store":
 				count = 0
 			}
-			if err != nil {
-				t.Fatal(err)
+			if lockErr != nil {
+				t.Fatal(lockErr)
 			}
-			other, err := NewManagerAt(m.storageDir)
-			if err != nil {
-				t.Fatal(err)
+			other, lockErr := NewManagerAt(m.storageDir)
+			if lockErr != nil {
+				t.Fatal(lockErr)
 			}
 			defer other.Lock()
-			events, calls, err := enableWithConcurrentRecordChange(t, m, func() error {
+			events, calls, lockErr := enableWithConcurrentRecordChange(t, m, func() error {
 				if err := other.DisablePrivacy(fixturePassphrase); err != nil {
 					return err
 				}
@@ -119,34 +119,34 @@ func TestEnablePrivacyCompletionRejectsRetainedKeyABA(t *testing.T) {
 				}
 				return nil
 			})
-			if err == nil || !strings.Contains(err.Error(), "legacy") || calls != 1 {
-				t.Fatalf("completion = %v, sync calls = %d; want incomplete migration before final sync", err, calls)
+			if lockErr == nil || !strings.Contains(lockErr.Error(), "legacy") || calls != 1 {
+				t.Fatalf("completion = %v, sync calls = %d; want incomplete migration before final sync", lockErr, calls)
 			}
 			want := []PrivacyProgress{{"inspecting", 0, 0}, {"migrating", 0, count}}
 			if count != 0 {
 				want = append(want, PrivacyProgress{"migrating", 1, 1})
 			}
 			assertPrivacyProgress(t, events, want)
-			_, current, err := m.readMetadata()
-			if err != nil || current != fingerprint {
-				t.Fatalf("test requires identical final active metadata: %v", err)
+			_, current, lockErr := m.readMetadata()
+			if lockErr != nil || current != fingerprint {
+				t.Fatalf("test requires identical final active metadata: %v", lockErr)
 			}
-			status, err := m.PrivacyStatus()
-			if err != nil || !status.Enabled || len(status.PlaintextDates) != 1 || status.PlaintextDates[0] != date {
-				t.Fatalf("unexpected incomplete state: %+v, %v", status, err)
+			status, lockErr := m.PrivacyStatus()
+			if lockErr != nil || !status.Enabled || len(status.PlaintextDates) != 1 || status.PlaintextDates[0] != date {
+				t.Fatalf("unexpected incomplete state: %+v, %v", status, lockErr)
 			}
 			// Only an explicit retry may migrate the plaintext left by the
 			// intervening policy reversal; preserve its content exactly.
 			if err := m.EnablePrivacy(fixturePassphrase); err != nil {
 				t.Fatal(err)
 			}
-			note, err := m.GetByDate(date)
-			if err != nil || note.Content != content {
-				t.Fatalf("retry lost synthetic content: %v", err)
+			note, lockErr := m.GetByDate(date)
+			if lockErr != nil || note.Content != content {
+				t.Fatalf("retry lost synthetic content: %v", lockErr)
 			}
-			status, err = m.PrivacyStatus()
-			if err != nil || len(status.PlaintextDates) != 0 {
-				t.Fatalf("retry left legacy records: %+v, %v", status, err)
+			status, lockErr = m.PrivacyStatus()
+			if lockErr != nil || len(status.PlaintextDates) != 0 {
+				t.Fatalf("retry left legacy records: %+v, %v", status, lockErr)
 			}
 		})
 	}

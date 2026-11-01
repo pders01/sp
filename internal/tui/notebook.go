@@ -225,29 +225,8 @@ func (n *Notebook) startEdit(date string) tea.Cmd {
 // the rendered viewport. Failures retain the buffer and show its path
 // without a timeout; cleanup happens only after success or an unchanged edit.
 func (n *Notebook) finishEdit(msg editDoneMsg) (tea.Model, tea.Cmd) {
-	result := completeExternalEdit(msg, n.save)
-	if result.published {
-		if n.onChange != nil {
-			n.onChange(msg.date, result.content)
-		} else {
-			n.SetPageContent(msg.date, result.content)
-		}
-	}
-	if result.err != nil {
-		rememberExternalFailure(n.drafts, msg, result)
-		result.status += "; e: review/retry retained draft"
-		if msg.path != "" && n.onRecovery != nil {
-			n.onRecovery(scratchpad.RecoveryReference{Date: msg.date, Path: msg.path})
-		}
-		n.theme.SetStatus(result.status, 0)
-		return n, nil
-	}
-	delete(n.drafts, msg.date)
-	if n.onConsumed != nil {
-		n.onConsumed(msg.date, msg.path)
-	}
-	n.theme.SetStatus(result.status, 1500*time.Millisecond)
-	return n, n.theme.expireStatusCmd(1500 * time.Millisecond)
+	cmd := finishExternalDraft(msg, n.save, n.drafts, n.theme, n.onChange, n.SetPageContent, n.onRecovery, n.onConsumed)
+	return n, cmd
 }
 
 func (n *Notebook) flashError(text string) {

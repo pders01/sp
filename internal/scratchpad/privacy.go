@@ -316,13 +316,13 @@ func (m *Manager) enablePrivacyWithProgress(passphrase []byte, syncDir func(stri
 	if err := validatePassphrase(passphrase); err != nil {
 		return err
 	}
-	fingerprint, err := m.initializePrivacy(passphrase, syncDir)
-	if err != nil {
-		return err
+	fingerprint, operationErr := m.initializePrivacy(passphrase, syncDir)
+	if operationErr != nil {
+		return operationErr
 	}
-	dates, err := m.privacyDates()
-	if err != nil {
-		return err
+	dates, operationErr := m.privacyDates()
+	if operationErr != nil {
+		return operationErr
 	}
 	reportPrivacyProgress(progress, "migrating", 0, len(dates))
 	for i, date := range dates {
@@ -351,14 +351,14 @@ func (m *Manager) enablePrivacyWithProgress(passphrase []byte, syncDir func(stri
 	// previously returned ErrDurabilityUnconfirmed. Confirm the intended active
 	// policy, current records, and directory durability before completion. Take
 	// only the store lock here: per-note migration locks have been released.
-	storeLock, err := lockNote(m.storageDir, "privacy")
-	if err != nil {
-		return err
+	storeLock, operationErr := lockNote(m.storageDir, "privacy")
+	if operationErr != nil {
+		return operationErr
 	}
 	defer storeLock.Close()
-	metadata, current, err := m.readMetadata()
-	if err != nil {
-		return err
+	metadata, current, operationErr := m.readMetadata()
+	if operationErr != nil {
+		return operationErr
 	}
 	if metadata != nil && metadata.State == "decrypting" {
 		return ErrPrivacyDecrypting
@@ -372,9 +372,9 @@ func (m *Manager) enablePrivacyWithProgress(passphrase []byte, syncDir func(stri
 	// the store lock so cooperating writers cannot change this verified state
 	// before durability/completion. This is read-only, not consent to migrate
 	// records left by an intervening reversal; require an explicit retry.
-	currentDates, err := m.privacyDates()
-	if err != nil {
-		return err
+	currentDates, operationErr := m.privacyDates()
+	if operationErr != nil {
+		return operationErr
 	}
 	for _, date := range currentDates {
 		data, err := readBounded(filepath.Join(m.storageDir, date+".json"), maxDocumentSize)
@@ -398,14 +398,14 @@ func (m *Manager) enablePrivacyWithProgress(passphrase []byte, syncDir func(stri
 
 func (m *Manager) initializePrivacy(passphrase []byte, syncDir func(string) error) ([sha256.Size]byte, error) {
 	var zero [sha256.Size]byte
-	lock, err := lockNote(m.storageDir, "privacy")
-	if err != nil {
-		return zero, err
+	lock, lockErr := lockNote(m.storageDir, "privacy")
+	if lockErr != nil {
+		return zero, lockErr
 	}
 	defer lock.Close()
-	metadata, fingerprint, err := m.readMetadata()
-	if err != nil {
-		return zero, err
+	metadata, fingerprint, lockErr := m.readMetadata()
+	if lockErr != nil {
+		return zero, lockErr
 	}
 	if metadata != nil {
 		if metadata.State == "decrypting" {
@@ -423,8 +423,8 @@ func (m *Manager) initializePrivacy(passphrase []byte, syncDir func(string) erro
 			if err := m.setPrivacyState(metadata, "", syncDir); err != nil {
 				return zero, err
 			}
-			_, fingerprint, err = m.readMetadata()
-			return fingerprint, err
+			_, fingerprint, lockErr = m.readMetadata()
+			return fingerprint, lockErr
 		}
 		// Existing metadata may be the visible but unconfirmed publication
 		// from an interrupted activation. Make it durable before migrating.
@@ -437,26 +437,26 @@ func (m *Manager) initializePrivacy(passphrase []byte, syncDir func(string) erro
 	if _, privacyErr := m.PrivacyEnabled(); privacyErr != nil {
 		return zero, privacyErr
 	}
-	identity, err := age.GenerateX25519Identity()
-	if err != nil {
-		return zero, err
+	identity, lockErr := age.GenerateX25519Identity()
+	if lockErr != nil {
+		return zero, lockErr
 	}
-	recipient, err := age.NewScryptRecipient(string(passphrase))
-	if err != nil {
-		return zero, err
+	recipient, lockErr := age.NewScryptRecipient(string(passphrase))
+	if lockErr != nil {
+		return zero, lockErr
 	}
 	recipient.SetWorkFactor(scryptWorkFactor)
-	wrapped, err := encryptAge([]byte(identity.String()), recipient)
-	if err != nil {
-		return zero, err
+	wrapped, lockErr := encryptAge([]byte(identity.String()), recipient)
+	if lockErr != nil {
+		return zero, lockErr
 	}
 	metadata = &privacyMetadata{Version: 1, Recipient: identity.Recipient().String(), WrappedIdentity: base64.StdEncoding.EncodeToString(wrapped)}
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return zero, err
+	data, lockErr := json.MarshalIndent(metadata, "", "  ")
+	if lockErr != nil {
+		return zero, lockErr
 	}
 	fingerprint = sha256.Sum256(data)
-	published, err := publish(filepath.Join(m.storageDir, "privacy.json"), data, true, syncDir)
+	published, lockErr := publish(filepath.Join(m.storageDir, "privacy.json"), data, true, syncDir)
 	if published {
 		m.keyMu.Lock()
 		m.identity, m.keyMetadata = identity, sha256.Sum256(data)
@@ -464,7 +464,7 @@ func (m *Manager) initializePrivacy(passphrase []byte, syncDir func(string) erro
 		m.observedPrivacy = m.keyMetadata
 		m.keyMu.Unlock()
 	}
-	return fingerprint, err
+	return fingerprint, lockErr
 }
 
 func (m *Manager) PrivacyStatus() (PrivacyStatus, error) {

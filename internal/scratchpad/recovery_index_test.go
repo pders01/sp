@@ -11,23 +11,23 @@ import (
 
 func TestBufferRecoveryIndexPersistsMetadataWithoutOpeningExternalPath(t *testing.T) {
 	dir := t.TempDir()
-	m, err := NewManagerAt(dir)
-	if err != nil {
-		t.Fatal(err)
+	m, managerErr := NewManagerAt(dir)
+	if managerErr != nil {
+		t.Fatal(managerErr)
 	}
 	const date = "2026-01-01"
 	path := filepath.Join(t.TempDir(), "sp-missing buffer.md")
 	if err := m.RecordBufferRecovery(date, path); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := NewManagerAt(dir)
-	if err != nil {
-		t.Fatal(err)
+	reopened, managerErr := NewManagerAt(dir)
+	if managerErr != nil {
+		t.Fatal(managerErr)
 	}
-	got, err := reopened.ListRecoveries()
+	got, managerErr := reopened.ListRecoveries()
 	want := []RecoveryReference{{Date: date, Path: path}}
-	if err != nil || !reflect.DeepEqual(got, want) {
-		t.Fatalf("references = %+v, %v", got, err)
+	if managerErr != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("references = %+v, %v", got, managerErr)
 	}
 	if dates, err := reopened.ListDates(); err != nil || len(dates) != 0 {
 		t.Fatal("recovery metadata became a daily note")
@@ -41,17 +41,17 @@ func TestBufferRecoveryIndexPersistsMetadataWithoutOpeningExternalPath(t *testin
 	if err := reopened.ForgetBufferRecovery(date, path); err != nil {
 		t.Fatal(err)
 	}
-	got, err = reopened.ListRecoveries()
-	if err != nil || len(got) != 0 {
-		t.Fatalf("forgotten references = %+v, %v", got, err)
+	got, managerErr = reopened.ListRecoveries()
+	if managerErr != nil || len(got) != 0 {
+		t.Fatalf("forgotten references = %+v, %v", got, managerErr)
 	}
 }
 
 func TestRecoveryDiscoveryIsLockedMetadataOnlyAndReportsPartialErrors(t *testing.T) {
 	dir := t.TempDir()
-	m, err := NewManagerAt(dir)
-	if err != nil {
-		t.Fatal(err)
+	m, managerErr2 := NewManagerAt(dir)
+	if managerErr2 != nil {
+		t.Fatal(managerErr2)
 	}
 	candidate := ".sp-recovery-2026-01-01-" + strings.Repeat("a", 32) + ".age"
 	if err := os.WriteFile(filepath.Join(dir, candidate), []byte("not authenticated ciphertext"), 0o600); err != nil {
@@ -68,9 +68,9 @@ func TestRecoveryDiscoveryIsLockedMetadataOnlyAndReportsPartialErrors(t *testing
 			t.Fatal(err)
 		}
 	}
-	got, err := m.ListRecoveries()
-	if err == nil || len(got) != 1 || !got[0].Encrypted || got[0].Date != "2026-01-01" {
-		t.Fatalf("discovery = %+v, %v", got, err)
+	got, managerErr2 := m.ListRecoveries()
+	if managerErr2 == nil || len(got) != 1 || !got[0].Encrypted || got[0].Date != "2026-01-01" {
+		t.Fatalf("discovery = %+v, %v", got, managerErr2)
 	}
 	if m.IsUnlocked() {
 		t.Fatal("listing unlocked the store")
@@ -91,9 +91,9 @@ func TestRecoveryIndexRejectsMetadataTooLargeToDiscover(t *testing.T) {
 }
 
 func TestRecoveryIndexRejectsInvalidInputAndNeverDeletesBuffer(t *testing.T) {
-	m, err := NewManagerAt(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
+	m, managerErr3 := NewManagerAt(t.TempDir())
+	if managerErr3 != nil {
+		t.Fatal(managerErr3)
 	}
 	for _, ref := range []RecoveryReference{{Date: "../bad", Path: filepath.Join(t.TempDir(), "sp.md")}, {Date: "2026-01-01", Path: "relative.md"}} {
 		if err := m.RecordBufferRecovery(ref.Date, ref.Path); err == nil {
@@ -110,8 +110,8 @@ func TestRecoveryIndexRejectsInvalidInputAndNeverDeletesBuffer(t *testing.T) {
 	if err := m.ForgetBufferRecovery("2026-01-01", path); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(path)
-	if err != nil || string(data) != "synthetic retained draft" {
+	data, managerErr3 := os.ReadFile(path)
+	if managerErr3 != nil || string(data) != "synthetic retained draft" {
 		t.Fatal("forgetting metadata touched buffer contents")
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -41,7 +42,7 @@ func TestCLIExplicitHelpStillPrintsUsageWithoutAnError(t *testing.T) {
 	}
 }
 
-func runCLIErrorProcess(t *testing.T, mode string) (string, string, int) {
+func runCLIErrorProcess(t *testing.T, mode string) (standardOutput, standardError string, exitCode int) {
 	t.Helper()
 	home := t.TempDir()
 	cmd := exec.Command(os.Args[0], "-test.run=^TestCLIErrorHelperProcess$")
@@ -56,7 +57,7 @@ func runCLIErrorProcess(t *testing.T, mode string) (string, string, int) {
 		}
 		code = exit.ExitCode()
 	}
-	if _, err := os.Stat(home + string(os.PathSeparator) + ".sp"); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(home, ".sp")); !os.IsNotExist(err) {
 		t.Fatal("argument/help/synthetic-error execution initialized a note store")
 	}
 	return stdout.String(), stderr.String(), code

@@ -73,9 +73,10 @@ func (r *draftReview) choice(key tea.KeyMsg) byte {
 // comparison. Selection alone never authorizes a reload or replacement.
 func (r *draftReview) updateTitle() {
 	action := "choose d/r"
-	if r.selected == 'd' {
+	switch r.selected {
+	case 'd':
 		action = "Enter: use draft"
-	} else if r.selected == 'r' {
+	case 'r':
 		action = "Enter: reload saved"
 	}
 	// Put the action first so narrow terminals trim context, not authorization.

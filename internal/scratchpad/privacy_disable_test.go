@@ -37,17 +37,17 @@ func TestDisablePrivacyRoundTrip(t *testing.T) {
 	legacyBefore := readTestFile(t, legacyPath)
 	sharedPath := filepath.Join(m.storageDir, "2024-01-03.json")
 	sharedBefore := readTestFile(t, sharedPath)
-	want, err := m.GetByDate(note.Date)
-	if err != nil {
-		t.Fatal(err)
+	want, loadErr := m.GetByDate(note.Date)
+	if loadErr != nil {
+		t.Fatal(loadErr)
 	}
-	metadata, _, err := m.readMetadata()
-	if err != nil {
-		t.Fatal(err)
+	metadata, _, loadErr := m.readMetadata()
+	if loadErr != nil {
+		t.Fatal(loadErr)
 	}
-	recoveryPath, err := m.SealRecovery(note.Date, "unsaved recovery")
-	if err != nil {
-		t.Fatal(err)
+	recoveryPath, loadErr := m.SealRecovery(note.Date, "unsaved recovery")
+	if loadErr != nil {
+		t.Fatal(loadErr)
 	}
 	recoveryBefore := readTestFile(t, recoveryPath)
 	m.Lock()
@@ -55,34 +55,34 @@ func TestDisablePrivacyRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.Lock()
-	fresh, err := NewManagerAt(m.storageDir)
-	if err != nil {
-		t.Fatal(err)
+	fresh, loadErr := NewManagerAt(m.storageDir)
+	if loadErr != nil {
+		t.Fatal(loadErr)
 	}
 	defer fresh.Lock()
 	if enabled, err := fresh.PrivacyEnabled(); err != nil || enabled {
 		t.Fatalf("disabled policy = %v, %v", enabled, err)
 	}
-	got, err := fresh.GetByDate(note.Date)
-	if err != nil {
-		t.Fatal(err)
+	got, loadErr := fresh.GetByDate(note.Date)
+	if loadErr != nil {
+		t.Fatal(loadErr)
 	}
 	if got.Content != want.Content || !got.Created.Equal(want.Created) || !got.Modified.Equal(want.Modified) ||
 		!reflect.DeepEqual(got.AppliedTemplates, want.AppliedTemplates) || !reflect.DeepEqual(got.Agent, want.Agent) {
 		t.Fatalf("decryption changed note data: got %+v, want %+v", got, want)
 	}
-	empty, err := fresh.GetByDate("2024-01-02")
-	if err != nil || empty.Content != "" || !empty.Created.Equal(created) || empty.Agent.Contributions == nil {
-		t.Fatalf("empty private note = %+v, %v", empty, err)
+	empty, loadErr := fresh.GetByDate("2024-01-02")
+	if loadErr != nil || empty.Content != "" || !empty.Created.Equal(created) || empty.Agent.Contributions == nil {
+		t.Fatalf("empty private note = %+v, %v", empty, loadErr)
 	}
 	for path, before := range map[string][]byte{legacyPath: legacyBefore, sharedPath: sharedBefore, recoveryPath: recoveryBefore} {
 		if !bytes.Equal(before, readTestFile(t, path)) {
 			t.Fatalf("disable changed untouched file %s", filepath.Base(path))
 		}
 	}
-	status, err := fresh.PrivacyStatus()
-	if err != nil || status.Enabled || status.Decrypting || len(status.EncryptedDates) != 0 || len(status.PlaintextDates) != 3 {
-		t.Fatalf("disabled status = %+v, %v", status, err)
+	status, loadErr := fresh.PrivacyStatus()
+	if loadErr != nil || status.Enabled || status.Decrypting || len(status.EncryptedDates) != 0 || len(status.PlaintextDates) != 3 {
+		t.Fatalf("disabled status = %+v, %v", status, loadErr)
 	}
 	if err := fresh.DisablePrivacy(nil); err != nil {
 		t.Fatalf("idempotent disable: %v", err)
@@ -102,17 +102,17 @@ func TestDisablePrivacyRoundTrip(t *testing.T) {
 	if err := fresh.Unlock(fixturePassphrase); err != nil {
 		t.Fatal(err)
 	}
-	recovery, err := fresh.ReadRecovery(recoveryPath)
-	if err != nil || recovery.Content != "unsaved recovery" {
-		t.Fatalf("retained recovery = %+v, %v", recovery, err)
+	recovery, loadErr := fresh.ReadRecovery(recoveryPath)
+	if loadErr != nil || recovery.Content != "unsaved recovery" {
+		t.Fatalf("retained recovery = %+v, %v", recovery, loadErr)
 	}
-	retained, _, err := fresh.readMetadata()
-	if err != nil || retained.Recipient != metadata.Recipient || retained.WrappedIdentity != metadata.WrappedIdentity {
-		t.Fatalf("disable replaced key: %+v, %v", retained, err)
+	retained, _, loadErr := fresh.readMetadata()
+	if loadErr != nil || retained.Recipient != metadata.Recipient || retained.WrappedIdentity != metadata.WrappedIdentity {
+		t.Fatalf("disable replaced key: %+v, %v", retained, loadErr)
 	}
-	info, err := os.Stat(filepath.Join(m.storageDir, note.Date+".json"))
-	if err != nil {
-		t.Fatal(err)
+	info, loadErr := os.Stat(filepath.Join(m.storageDir, note.Date+".json"))
+	if loadErr != nil {
+		t.Fatal(loadErr)
 	}
 	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 		t.Fatalf("plaintext permissions = %o", info.Mode().Perm())
@@ -126,9 +126,9 @@ func TestDisablePrivacyRoundTrip(t *testing.T) {
 	if err := fresh.EnablePrivacy(fixturePassphrase); err != nil {
 		t.Fatal(err)
 	}
-	status, err = fresh.PrivacyStatus()
-	if err != nil || !status.Enabled || len(status.EncryptedDates) != 4 || len(status.PlaintextDates) != 0 {
-		t.Fatalf("re-enabled status = %+v, %v", status, err)
+	status, loadErr = fresh.PrivacyStatus()
+	if loadErr != nil || !status.Enabled || len(status.EncryptedDates) != 4 || len(status.PlaintextDates) != 0 {
+		t.Fatalf("re-enabled status = %+v, %v", status, loadErr)
 	}
 	if _, err := fresh.ReadRecovery(recoveryPath); err != nil {
 		t.Fatalf("re-enable lost old recovery key: %v", err)
@@ -194,25 +194,25 @@ func TestDisablePrivacyResumesEveryDurabilityBoundary(t *testing.T) {
 				}
 			}
 			calls := 0
-			err := m.disablePrivacy(fixturePassphrase, func(dir string) error {
+			operationErr := m.disablePrivacy(fixturePassphrase, func(dir string) error {
 				calls++
 				if calls == failAt {
 					return errors.New("injected sync failure")
 				}
 				return syncDirectory(dir)
 			})
-			if !errors.Is(err, ErrDurabilityUnconfirmed) {
-				t.Fatalf("disable = %v", err)
+			if !errors.Is(operationErr, ErrDurabilityUnconfirmed) {
+				t.Fatalf("disable = %v", operationErr)
 			}
 			m.Lock()
-			fresh, err := NewManagerAt(m.storageDir)
-			if err != nil {
-				t.Fatal(err)
+			fresh, operationErr := NewManagerAt(m.storageDir)
+			if operationErr != nil {
+				t.Fatal(operationErr)
 			}
 			defer fresh.Lock()
-			status, err := fresh.PrivacyStatus()
-			if err != nil || status.Decrypting != (failAt < 4) || len(status.EncryptedDates) != max(3-failAt, 0) {
-				t.Fatalf("partial status = %+v, %v", status, err)
+			status, operationErr := fresh.PrivacyStatus()
+			if operationErr != nil || status.Decrypting != (failAt < 4) || len(status.EncryptedDates) != max(3-failAt, 0) {
+				t.Fatalf("partial status = %+v, %v", status, operationErr)
 			}
 			if failAt < 4 {
 				for name, operation := range map[string]func() error{
@@ -233,9 +233,9 @@ func TestDisablePrivacyResumesEveryDurabilityBoundary(t *testing.T) {
 			if err := fresh.DisablePrivacy(fixturePassphrase); err != nil {
 				t.Fatalf("resume = %v", err)
 			}
-			status, err = fresh.PrivacyStatus()
-			if err != nil || status.Enabled || status.Decrypting || len(status.EncryptedDates) != 0 || len(status.PlaintextDates) != 2 {
-				t.Fatalf("resumed status = %+v, %v", status, err)
+			status, operationErr = fresh.PrivacyStatus()
+			if operationErr != nil || status.Enabled || status.Decrypting || len(status.EncryptedDates) != 0 || len(status.PlaintextDates) != 2 {
+				t.Fatalf("resumed status = %+v, %v", status, operationErr)
 			}
 			for _, date := range []string{"2024-01-01", "2024-01-02"} {
 				note, err := fresh.GetByDate(date)

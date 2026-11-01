@@ -33,7 +33,7 @@ func safeMarkdownDisplay(text string) string {
 // encoded so they cannot become Markdown syntax (e.g. &lt; or &ast;) before
 // parsing. All other ampersands are deferred, including ones that HTML removal
 // could otherwise join to a new entity.
-var displayEntity = regexp.MustCompile(`&(?:#[xX][0-9a-fA-F]+;?|#[0-9]+;?|[A-Za-z][A-Za-z0-9]*;?)?`)
+var displayEntity = regexp.MustCompile(`&(?:#[xX][0-9a-fA-F]+;?|#\d+;?|[A-Za-z][A-Za-z0-9]*;?)?`)
 var displayPercentEncoding = regexp.MustCompile(`(?:%[0-9A-Fa-f]{2})+`)
 
 // markdownDisplaySource neutralizes entity-generated controls *including SGR*
@@ -130,7 +130,7 @@ func stylingSequenceLen(text string) int {
 func safeTerminalOutput(text string) string {
 	text = displayText(text)
 	var out strings.Builder
-	for len(text) > 0 {
+	for text != "" {
 		if n := stylingSequenceLen(text); n > 0 {
 			out.WriteString(text[:n])
 			text = text[n:]

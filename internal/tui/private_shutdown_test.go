@@ -134,7 +134,7 @@ func TestPrivateEditorRearmsSignalWaitAfterFailedRecovery(t *testing.T) {
 
 func TestPrivateEditorUnfinishedNilExitIsNotSuccessful(t *testing.T) {
 	calls := 0
-	e := newPrivateEditor("2026-02-14", "saved", nil, func(_, text string) (string, error) { calls++; return "retained.age", nil })
+	e := newPrivateEditor("2026-02-14", "saved", nil, func(_, _ string) (string, error) { calls++; return "retained.age", nil })
 	e.input.SetValue("new draft")
 	if err := e.finishRun(nil); !errors.Is(err, ErrPrivateEditorInterrupted) || !strings.Contains(err.Error(), "retained.age") || calls != 1 {
 		t.Fatalf("unfinished exit: calls=%d err=%v", calls, err)
