@@ -27,6 +27,7 @@ const terminalEscapeDelay = 75 * time.Millisecond
 type terminalEscape struct{ active, resolved bool }
 type terminalEscapeStartMsg struct{ escape *terminalEscape }
 type terminalEscapeTimeoutMsg struct{ escape *terminalEscape }
+type terminalEscapeControlMsg struct{ key tea.KeyMsg }
 
 // terminalInput owns bytes BEFORE Tea's lossy UTF-8/key/paste decoder. Tea sees
 // only one NUL per queued event, including user-supplied NUL (a rejection).
@@ -101,6 +102,26 @@ func (m *terminalModel) Init() tea.Cmd { return m.model.Init() }
 func (m *terminalModel) View() string  { return m.model.View() }
 func (m *terminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch event := msg.(type) {
+	case terminalEscapeControlMsg:
+		// A C0 key cannot continue CSI/SS3 or a paste marker. Preserve both
+		// physical keys in order, even when they arrive before Escape's timer.
+		next, first := m.model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		m.model = next
+		finished := false
+		switch current := next.(type) {
+		case *privateEditor:
+			finished = current.done
+		case *unlockScreen:
+			finished = current.done
+		case *App:
+			finished = current.IsQuitting()
+		}
+		if finished {
+			return m, first
+		}
+		next, second := m.model.Update(event.key)
+		m.model = next
+		return m, tea.Batch(first, second)
 	case terminalEscapeStartMsg:
 		return m, tea.Tick(terminalEscapeDelay, func(time.Time) tea.Msg {
 			return terminalEscapeTimeoutMsg(event)
@@ -254,6 +275,13 @@ func (r *terminalInput) byte(b byte) {
 		clear(r.pending)
 		r.pending = nil
 		r.byte(b)
+		return
+	}
+	if len(r.pending) == 1 && b > 0 && (b < 32 || b == 127) && b != 0x1b {
+		r.escape.active = false
+		r.emit(terminalEscapeControlMsg{tea.KeyMsg{Type: tea.KeyType(b)}})
+		clear(r.pending)
+		r.pending = nil
 		return
 	}
 	r.pending = append(r.pending, b)

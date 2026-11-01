@@ -178,6 +178,47 @@ func TestTerminalStreamResolvedEscapeNotRepeatedOnNextKey(t *testing.T) {
 	}
 }
 
+func TestTerminalStreamEscapeThenPhysicalControlIsOrdered(t *testing.T) {
+	m := &terminalStreamModel{}
+	runTerminalPipe(t, m, func(_ context.Context, out *os.File) {
+		io.WriteString(out, "\x1b\x0c\x07")
+	})
+	var keys []tea.KeyType
+	for _, msg := range m.msgs {
+		if key, ok := msg.(tea.KeyMsg); ok {
+			keys = append(keys, key.Type)
+		} else if _, rejected := msg.(terminalRejectedMsg); rejected {
+			t.Fatal("physical control after Escape was discarded as Alt input")
+		}
+	}
+	if len(keys) != 3 || keys[0] != tea.KeyEsc || keys[1] != tea.KeyCtrlL || keys[2] != tea.KeyCtrlG {
+		t.Fatalf("physical keys reordered: %v", keys)
+	}
+}
+
+func TestTerminalStreamEscapeClosesHelpBeforeImmediateRelock(t *testing.T) {
+	const date = "2026-01-01"
+	a := NewApp(NewCalendar([]string{date}), NewNotebook([]string{date}), ModeNotebook)
+	defer a.Close()
+	locked := false
+	a.SetPrivacy(PrivacyHooks{
+		IsUnlocked: func() bool { return !locked },
+		Load: func(string) (PrivatePage, error) {
+			return PrivatePage{Private: "synthetic", HasPrivate: true, Locked: locked}, nil
+		},
+		Lock:    func() { locked = true },
+		Recover: func(_, _ string) (string, error) { return "synthetic.age", nil },
+	})
+	a.startPrivateEdit(date)
+	a.privacy.editor.keyHelp = newKeyHelp("Write", nil, "", 80, 24)
+	runTerminalPipe(t, a, func(_ context.Context, out *os.File) {
+		io.WriteString(out, "\x1b\x0cq")
+	})
+	if !locked || a.privacy.editor != nil {
+		t.Fatal("Escape followed immediately by Ctrl+L did not close help and relock")
+	}
+}
+
 func TestTerminalStreamProductionEditorAndUnlock(t *testing.T) {
 	var saved string
 	e := newPrivateEditor("2026-01-01", "", func(_, _, text string) error { saved = text; return nil }, nil)
