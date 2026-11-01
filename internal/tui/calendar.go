@@ -339,7 +339,10 @@ func (c *Calendar) shiftPeriod(years, months int) {
 }
 
 // View renders the calendar full-screen.
-func (c *Calendar) View() string {
+func (c *Calendar) View() (view string) {
+	// Defense in depth for the composed calendar, including help/review paths.
+	// Project before the final fit so visible control notation is cell-bounded.
+	defer func() { view = fitView(safeTerminalOutput(view), c.width, c.height) }()
 	if c.review != nil {
 		return c.review.viewer.view(c.theme.Palette())
 	}
@@ -608,7 +611,9 @@ func (c *Calendar) cellAnnotation(day time.Time, dateStr string, w int) string {
 		return c.theme.Palette().MutedText.Render(truncate("unavailable", w))
 	}
 	if preview := c.previews[dateStr]; preview != "" {
-		return c.theme.Palette().MutedText.Render(truncate(preview, w))
+		// Preview text is raw shared/note content, not trusted ANSI. Escape it
+		// before ANSI-aware truncation and application-owned styling.
+		return c.theme.Palette().MutedText.Render(truncate(oneLine(safeMarkdownDisplay(preview)), w))
 	}
 	if c.hasData[dateStr] {
 		label := "• entry"

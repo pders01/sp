@@ -50,12 +50,16 @@ func documentStyle(style string) glamouransi.StyleConfig {
 // renderDocument returns one independently rendered, terminal-safe document.
 // Never concatenate private and shared source before calling it.
 func renderDocument(text, style string, width int) string {
-	text = safeMarkdownDisplay(text)
+	text, restoreEntities := markdownDisplaySource(text)
 	renderer, err := glamour.NewTermRenderer(glamour.WithStyles(documentStyle(style)), glamour.WithWordWrap(max(width-4, 1)))
 	if err == nil {
 		if rendered, renderErr := renderer.Render(text); renderErr == nil {
 			text = rendered
 		}
 	}
-	return strings.TrimRight(ansi.Wrap(displayText(text), max(width, 1), ""), "\n")
+	// Gate after every entity/HTML transformation, before width accounting.
+	// The source projection also excludes note-generated SGR; only Glamour's
+	// styling may survive this gate. Wrapping must not reintroduce controls.
+	text = safeTerminalOutput(restoreEntities(text))
+	return safeTerminalOutput(strings.TrimRight(ansi.Wrap(text, max(width, 1), ""), "\n"))
 }

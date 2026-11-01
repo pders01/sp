@@ -1,24 +1,6 @@
 package tui
 
-import (
-	"fmt"
-	"strings"
-	"unicode"
-)
-
-// Note-controlled terminal controls cannot erase/spoof UI provenance labels.
-// This is a display projection only; stored text/editor bytes remain untouched.
-func safeMarkdownDisplay(text string) string {
-	var out strings.Builder
-	for _, r := range text {
-		if (unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t') || r == '\u061c' || r == '\u200e' || r == '\u200f' || r >= '\u202a' && r <= '\u202e' || r >= '\u2066' && r <= '\u2069' {
-			fmt.Fprintf(&out, "\\u{%X}", r)
-		} else {
-			out.WriteRune(r)
-		}
-	}
-	return out.String()
-}
+import "strings"
 
 func (n *Notebook) renderMarkdown(text string) string {
 	// renderDocument owns the two-cell margin; give it the full viewport.
