@@ -6,7 +6,9 @@ Check your build's command help before use. Read the
 [latest validation results and remaining gaps](privacy-validation.md) alongside the
 [verification procedure](privacy-testing.md). The live model-driven trial was
 blocked by the provider; it is not a completed adversarial pass. No independent
-cryptographic audit is claimed.
+cryptographic audit is claimed. The [combined review and remediation](security-remediation.md)
+records the newer input, recovery, display and durability fixes and the current
+Windows interactive restriction.
 
 ## Why two areas?
 
@@ -68,6 +70,10 @@ individual legacy dates. Resolve the reported error without deleting key metadat
 ciphertext, then run `sp privacy enable` again and unlock to resume migration.
 Already migrated days do not need to become plaintext again. Repeat status until
 no legacy dates remain; a status error is not evidence that all notes are safe.
+Enable retries confirm metadata and final directory durability, even if no files
+need rewriting. Before completion, the store lock protects a fresh record scan:
+a same-key disable/re-enable cannot make an already-visited plaintext day look
+successfully migrated merely by restoring identical metadata.
 Keep other writers stopped during migration.
 
 Rewriting live files does not securely erase the old plaintext. Backups,
@@ -163,9 +169,14 @@ with `-`. `--source` is a self-reported label, not an authenticated identity.
   Escape cancels the viewer's unlock prompt. The calling operation continues
   unlocked only after successful completion; cancellation/signals wait and lock
   before returning.
-  No secret is passed to a shell. The standalone form preserves valid UTF-8 and
-  bracketed-paste bytes, rejecting invalid/control input instead of authenticating
-  a normalized prefix.
+  No secret is passed to a shell. The viewer, standalone unlock and writer share
+  a raw byte owner before Tea's decoder. Marked paste remains literal (including
+  CRLF, tabs and valid U+FFFD); malformed/oversize paste is rejected atomically.
+  Secret input additionally rejects controls rather than authenticating a
+  normalized prefix. A lone Escape resolves after a short bounded delay;
+  incomplete protocol prefixes remain quarantined so their controls cannot
+  become shortcuts. These interactive flows currently fail closed on Windows
+  pending a safe console adapter; no unsafe decoder fallback is used.
   Follow your build's displayed key help if bindings differ.
 - Privacy mode uses a lossless built-in in-memory editor, with horizontal
   scrolling rather than soft wrapping. Editing opens at the start, with visible
@@ -203,6 +214,10 @@ with `-`. `--source` is a self-reported label, not an authenticated identity.
   shared provenance. Branded Glamour headings and compact default actions share
   a common appearance; grouped F1 help retains the full controls and details.
   Display escaping of terminal/bidi controls does not alter stored/editor bytes.
+  Entity-generated controls are neutralized before styling and a post-render
+  boundary admits only trusted SGR styling; calendar annotations use the same
+  plain-text projection. Pathological entity-marker exhaustion displays literal
+  Markdown rather than using an ambiguous or expanding placeholder.
 - The notebook date strip is ascending: Left/h selects an earlier saved date,
   Right/l a later one. Today-first startup and session-only per-date reading
   offsets remain intact. Other key, storage, save/recovery, and cryptographic
@@ -331,6 +346,12 @@ resistance or hide when or how much you write.
   authentication or proof of the author's identity.
 
 ## Edit failures, recovery, and backups
+
+Graceful SIGINT/SIGTERM also attempts draft recovery before standalone writer
+shutdown and reports interruption, not successful saving. If recovery fails, the
+writer remains usable and continues handling later graceful signals so recovery
+or explicit save can be retried. This cannot recover from SIGKILL, a lost process,
+or a fatal terminal/runtime failure; keep backups.
 
 If a private edit cannot be saved, the privacy editor attempts an **encrypted
 recovery file** using the public recipient; encrypting recovery does not require

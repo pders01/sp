@@ -92,7 +92,14 @@ a provider restriction. Terminal results are redacted and transcripts are not
 saved. Preserve explicit distinctions between zero reachable advisories and
 advisories elsewhere in imported/required dependencies.
 
-### Standalone unlock follow-up
+### Combined review remediation
+
+See [the current remediation report](security-remediation.md) for the shared
+raw-input boundary, real-reader tests, repeated-signal recovery, post-render
+control filtering and the Windows interactive fail-closed restriction. Historical
+candidate results below do not establish those newer guarantees.
+
+### Standalone unlock follow-up (historical candidate)
 
 Bare editing and encrypted recovery now reuse the masked form instead of an
 inline CLI password prompt. Full unit/race suites and vet pass; 11 privacy PTY
@@ -103,8 +110,9 @@ Synthetic fixtures: `terminal-7412a712c9ccce94` and
 The added standalone checks cover retry/help/cancel, exact typed/pasted U+FFFD
 and surrounding spaces, rejected control/malformed-UTF-8 pastes, signal
 cancellation, and unchanged ciphertext after an untouched edit. No user store/config was accessed.
-The byte/paste adapter is scoped to this standalone form; other legacy decoder
-contexts are a separate follow-up, not covered by these new claims.
+That candidate's byte/paste adapter was scoped to the standalone form; its
+results did not cover the other legacy decoder contexts. The current shared
+boundary and coverage are recorded separately above.
 
 ### Cohesive redesign: completed local validation
 

@@ -24,8 +24,9 @@ theme = "auto"
 [templates]
 # SECURITY: Commands execute with your user account's filesystem and network
 # permissions. Enable only for scripts you trust completely. The process gets
-# a minimal environment and is limited to 10 seconds and 1 MiB of output, but
-# it is not sandboxed and can still read or modify ~/.sp.
+# a minimal environment, a 10-second deadline and 1 MiB per output stream.
+# Pipe draining has a further 250 ms bound; escaped descendants are not contained.
+# It is not sandboxed and can still read or modify ~/.sp.
 allow_commands = false
 
 # A Markdown file provides the section body. Relative paths resolve from the

@@ -286,11 +286,21 @@ template remains opt-in like every configured template.
 > **Security:** Command templates are disabled unless
 > `templates.allow_commands = true`. Enabling them runs explicitly configured
 > programs with your user account's filesystem and network permissions. They
-> receive a minimal environment and are limited to 10 seconds and 1 MiB of
-> output, but they are not sandboxed and can still read or modify `~/.sp`. Only
-> configure commands you fully trust.
+> receive a minimal environment, a 10-second deadline, and 1 MiB per output
+> stream. Pipe draining has an additional 250 ms bound. Darwin/Linux cancel the
+> owned process group; escaped descendants are not contained, and other platforms
+> cancel only the immediate child. Commands are not sandboxed and can still read
+> or modify `~/.sp`. Only configure commands you fully trust.
 
 ## Editor support
+
+**Interactive input compatibility:** notebook/calendar, masked unlock and the
+built-in writer now use a shared byte-preserving input boundary. They require
+terminal input/output, not redirected secret input or captured private screens.
+Windows interactive flows currently **fail closed** because the console reader
+can bypass that boundary. Shared append/read/status and bare legacy external
+editing remain available; Windows interactive support needs a safe console
+adapter and native validation. See the [security remediation report](docs/security-remediation.md).
 
 **Legacy plaintext mode only:** privacy mode uses the built-in in-memory editor,
 not an external editor. The notebook's personal note and separate read-only
