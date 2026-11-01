@@ -95,8 +95,15 @@ func (w *themeWatcher) signal() {
 // themeChangedMsg. Callers re-arm the cmd after each event so the
 // watcher behaves like a long-lived subscription.
 func (w *themeWatcher) wait() tea.Cmd {
+	// Bind the subscription on the UI goroutine. Tea may execute this command
+	// after Run returns; stop must not race a late read of w.events or strand
+	// it on the nil channel installed during shutdown.
+	events := w.events
+	if events == nil {
+		return nil
+	}
 	return func() tea.Msg {
-		_, ok := <-w.events
+		_, ok := <-events
 		if !ok {
 			return nil
 		}
