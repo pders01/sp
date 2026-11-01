@@ -6,6 +6,7 @@ BINARY_PATH=./$(BINARY_NAME)
 MAIN_PATH=./cmd/sp
 COVERAGE_FILE=coverage.out
 COVERAGE_HTML=coverage.html
+GOLANGCI_LINT_VERSION=v2.5.0
 
 all: build
 
@@ -35,7 +36,7 @@ test:
 ## test-race: Run tests with race condition detection
 test-race:
 	@echo "Running tests with race detection..."
-	@go test -race -v ./...
+	@go test -race -v -coverprofile=$(COVERAGE_FILE) ./...
 
 ## coverage: Generate test coverage report
 coverage:
@@ -47,15 +48,8 @@ coverage:
 
 ## lint: Run Go linters
 lint:
-	@echo "Running linters..."
-	@if command -v golangci-lint > /dev/null; then \
-		golangci-lint run ./...; \
-	else \
-		echo "golangci-lint not installed. Running go vet instead..."; \
-		go vet ./...; \
-	fi
-	@echo "Running gofmt..."
-	@gofmt -l -s .
+	@echo "Running CI-pinned golangci-lint $(GOLANGCI_LINT_VERSION)..."
+	@GOTOOLCHAIN=$$(go env GOVERSION) go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --timeout=5m ./...
 
 ## modernize: Apply Go-idiom upgrades (any, min/max, range-over-int, etc.) via gopls.
 ##            Requires gopls on PATH; install with: go install golang.org/x/tools/gopls@latest
@@ -149,7 +143,7 @@ check: lint test build
 	@echo "All checks passed!"
 
 ## ci: Run CI pipeline
-ci: deps lint test build
+ci: deps lint test-race vuln build
 	@echo "CI pipeline complete"
 
 ## release: Create a new release using GoReleaser

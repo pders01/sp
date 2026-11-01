@@ -6,10 +6,16 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write # Codecov OIDC; no long-lived upload secret.
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -40,9 +46,11 @@ jobs:
         done
     - name: Upload coverage to Codecov
       if: runner.os == 'Linux'
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v5
       with:
-        file: ./coverage.out
+        files: ./coverage.out
+        disable_search: true
+        use_oidc: true
         flags: unittests
         name: codecov-umbrella
 
