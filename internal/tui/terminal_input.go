@@ -157,8 +157,24 @@ func (r *terminalInput) Read(out []byte) (int, error) {
 	n, err := r.source.Read(buf)
 	r.mu.Lock()
 	before := len(r.queue)
-	for _, b := range buf[:n] {
-		r.byte(b)
+	for offset := 0; offset < n; {
+		if r.pasting && len(r.end) == 0 {
+			// Most paste bytes cannot start the closing marker. Retain/drop
+			// them in bounded chunks instead of per-byte state-machine work;
+			// this also keeps race/coverage instrumentation proportional to
+			// reads rather than millions of ordinary pasted characters.
+			plain := bytes.IndexByte(buf[offset:n], 0x1b)
+			if plain < 0 {
+				plain = n - offset
+			}
+			if plain > 0 {
+				r.appendPaste(buf[offset : offset+plain])
+				offset += plain
+				continue
+			}
+		}
+		r.byte(buf[offset])
+		offset++
 	}
 	clear(buf)
 	// Tea discards bytes returned WITH an error. Defer EOF until after our
@@ -196,14 +212,19 @@ func (r *terminalInput) reject(reason string) { r.emit(terminalRejectedMsg{reaso
 const pasteStart = "\x1b[200~"
 const pasteEnd = "\x1b[201~"
 
+func (r *terminalInput) appendPaste(data []byte) {
+	remaining := privateInputLimit - len(r.paste)
+	if len(data) > remaining {
+		r.oversized = true
+		data = data[:remaining]
+	}
+	r.paste = append(r.paste, data...)
+}
+
 func (r *terminalInput) pasteByte(b byte) {
 	r.end = append(r.end, b)
 	for len(r.end) > 0 && !bytes.HasPrefix([]byte(pasteEnd), r.end) {
-		if len(r.paste) < privateInputLimit {
-			r.paste = append(r.paste, r.end[0])
-		} else {
-			r.oversized = true
-		}
+		r.appendPaste(r.end[:1])
 		copy(r.end, r.end[1:])
 		r.end = r.end[:len(r.end)-1]
 	}

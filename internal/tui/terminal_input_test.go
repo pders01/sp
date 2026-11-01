@@ -149,6 +149,42 @@ func TestTerminalReaderRejectionsAreAtomic(t *testing.T) {
 		}
 	}
 }
+func TestTerminalReaderPasteLimitBoundaries(t *testing.T) {
+	for _, length := range []int{privateInputLimit - 1, privateInputLimit, privateInputLimit + 1} {
+		payload := strings.Repeat("x", length)
+		r := newTerminalInput(strings.NewReader(bracket(payload)))
+		buffer := make([]byte, 256)
+		pastes, rejected := 0, 0
+		for {
+			n, err := r.Read(buffer)
+			if len(r.paste) > privateInputLimit {
+				t.Fatal("paste buffer exceeded its bound")
+			}
+			for range n {
+				switch msg := r.filter(nil, tea.KeyMsg{Type: tea.KeyCtrlAt}).(type) {
+				case privatePasteMsg:
+					pastes++
+					if string(msg) != payload {
+						t.Fatal("bounded chunk collection changed accepted bytes")
+					}
+				case terminalRejectedMsg:
+					rejected++
+				}
+			}
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		r.clear()
+		if length > privateInputLimit && (pastes != 0 || rejected != 1) || length <= privateInputLimit && (pastes != 1 || rejected != 0) {
+			t.Fatalf("limit boundary %d: paste=%d rejected=%d", length, pastes, rejected)
+		}
+	}
+}
+
 func TestTerminalReaderUserNULCannotSpoofEvents(t *testing.T) {
 	e := newPrivateEditor("2026-01-01", "", nil, nil)
 	m := runTerminalBytes(t, e, "a\x00b"+bracket("c\x00d"), 1)
