@@ -56,6 +56,8 @@ changelog:
 
 brews:
   - name: sp
+    # Release candidates must not replace the stable tap formula.
+    skip_upload: auto
     homepage: "https://github.com/pders01/sp"
     description: "A daily scratchpad for quick notes and todos"
     repository:
@@ -76,5 +78,5 @@ release:
     owner: pders01
     name: sp
   draft: false
-  prerelease: false
+  prerelease: auto
   name_template: '{{ .Tag }}' 
