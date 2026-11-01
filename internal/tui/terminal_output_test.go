@@ -137,6 +137,36 @@ func TestTerminalOutputMarkdownControlsAndTrustedTheme(t *testing.T) {
 	}
 }
 
+func TestTerminalOutputEntityMarkerDoesNotCollideWithURLs(t *testing.T) {
+	for _, target := range []string{"/%ee%80%80", "../%ee%80%80", "/%EE%80%80", "/%ee%80%80%ee%80%81"} {
+		got := ansi.Strip(renderDocument("[L]("+target+") &amp;", styles.NoTTYStyle, 200))
+		// Glamour resolves ../ against its document root; compare the
+		// encoded path component rather than changing that existing behavior.
+		want := strings.TrimPrefix(target, "../")
+		if !strings.Contains(strings.ToUpper(got), strings.ToUpper(want)) {
+			t.Fatalf("URL was mistaken for an entity marker: target=%q got=%q", target, got)
+		}
+	}
+}
+
+func TestTerminalOutputExhaustedMarkerAlphabetUsesSafeLiteralSource(t *testing.T) {
+	var source strings.Builder
+	for r := rune(0xe000); r <= 0xf8ff; r++ {
+		source.WriteRune(r)
+	}
+	source.WriteString(" &amp; &#27;[8m tail")
+	text := source.String()
+	projected, restore, markdown := markdownDisplaySource(text)
+	if markdown || projected != text || restore(projected) != text {
+		t.Fatal("exhausted marker alphabet did not select the unchanged literal projection")
+	}
+	got := renderDocument(text, styles.NoTTYStyle, 100)
+	assertRenderedTerminalOutput(t, got)
+	if strings.ContainsRune(got, '\x1b') || !strings.Contains(got, "&#27;[8m") {
+		t.Fatal("literal fallback decoded a control or changed source notation")
+	}
+}
+
 func TestTerminalOutputNotebookAndSharedViews(t *testing.T) {
 	const date = "2026-02-14"
 	for i, payload := range terminalAttackSamples {

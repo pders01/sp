@@ -34,14 +34,16 @@ func safeMarkdownDisplay(text string) string {
 // parsing. All other ampersands are deferred, including ones that HTML removal
 // could otherwise join to a new entity.
 var displayEntity = regexp.MustCompile(`&(?:#[xX][0-9a-fA-F]+;?|#[0-9]+;?|[A-Za-z][A-Za-z0-9]*;?)?`)
+var displayPercentEncoding = regexp.MustCompile(`(?:%[0-9A-Fa-f]{2})+`)
 
 // markdownDisplaySource neutralizes entity-generated controls *including SGR*
 // before Glamour can mistake them for renderer styling. Untrusted ampersands are
 // deferred until after rendering, preventing nested references from becoming
 // active through successive HTML/Markdown transformations.
-func markdownDisplaySource(text string) (string, func(string) string) {
+func markdownDisplaySource(text string) (source string, restore func(string) string, renderMarkdown bool) {
+	identity := func(rendered string) string { return rendered }
 	if !strings.ContainsRune(text, '&') {
-		return safeMarkdownDisplay(text), func(rendered string) string { return rendered }
+		return safeMarkdownDisplay(text), identity, true
 	}
 	decoded := html.UnescapeString(text)
 	// A one-cell private-use marker keeps wrapping intact. Pick one absent from
@@ -50,20 +52,29 @@ func markdownDisplaySource(text string) (string, func(string) string) {
 	for _, r := range text + decoded {
 		used[r] = true
 	}
+	// URL resolution can decode and re-encode either casing of percent escapes.
+	// Collect those runes in one pass rather than allowing an encoded marker
+	// to be mistaken for an application placeholder after normalization.
+	for _, input := range []string{text, decoded} {
+		for _, encoded := range displayPercentEncoding.FindAllString(input, -1) {
+			value, _ := url.PathUnescape(encoded)
+			for _, r := range value {
+				used[r] = true
+			}
+		}
+	}
 	marker := ""
 	for r := rune(0xe000); r <= 0xf8ff; r++ {
-		if !used[r] && !strings.Contains(text, url.PathEscape(string(r))) && !strings.Contains(decoded, url.PathEscape(string(r))) {
+		if !used[r] {
 			marker = string(r)
 			break
 		}
 	}
 	if marker == "" {
-		// Even a document containing every BMP private-use rune has a finite
-		// length; this fallback remains collision-free without a random token.
-		marker = "\ue000"
-		for strings.Contains(text, marker) || strings.Contains(decoded, marker) || strings.Contains(text, url.PathEscape(marker)) || strings.Contains(decoded, url.PathEscape(marker)) {
-			marker += "\ue001"
-		}
+		// Pathological input can exhaust this one-cell alphabet. Display the
+		// literal source instead of an expanding/quadratic token search or an
+		// ambiguous placeholder. Never change stored/editor bytes.
+		return safeMarkdownDisplay(text), identity, false
 	}
 	text = displayEntity.ReplaceAllStringFunc(text, func(entity string) string {
 		value := html.UnescapeString(entity)
@@ -88,8 +99,8 @@ func markdownDisplaySource(text string) (string, func(string) string) {
 	})
 	// Relative link resolution can URL-encode the marker. Restore that form
 	// too, but only after all parsing/decoding (and before the output gate).
-	restore := strings.NewReplacer(marker, "&", url.PathEscape(marker), "&")
-	return safeMarkdownDisplay(text), restore.Replace
+	restorer := strings.NewReplacer(marker, "&", url.PathEscape(marker), "&")
+	return safeMarkdownDisplay(text), restorer.Replace, true
 }
 
 // stylingSequenceLen recognizes only ordinary 7-bit SGR. No private parameters,
