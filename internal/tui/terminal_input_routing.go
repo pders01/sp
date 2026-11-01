@@ -41,7 +41,7 @@ func (a *App) routeTerminalInput(msg tea.Msg) (bool, tea.Cmd) {
 	if p.prompt != nil && p.job == nil && p.keyHelp == nil {
 		if bad {
 			p.promptInvalid = true
-			p.promptErr = rejected.reason
+			p.promptErr = "Input rejected: " + rejected.reason
 		} else {
 			p.insertPassphrase(text)
 		}

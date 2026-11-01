@@ -262,7 +262,7 @@ func (p *privacyState) insertPassphrase(text string) {
 	p.prompt.EchoMode = textinput.EchoPassword
 	if len(text) > 4096 || !validPrivatePassphrase(text) || len(p.prompt.Value())+len(text) > 4096 {
 		p.promptInvalid = true
-		p.promptErr = "Passphrase must contain 1 to 4096 bytes of single-line UTF-8 without controls; press Enter to clear invalid input."
+		p.promptErr = "Input rejected: Passphrase must contain 1 to 4096 bytes of single-line UTF-8 without controls; press Enter to clear invalid input."
 		return
 	}
 	value := []rune(p.prompt.Value())

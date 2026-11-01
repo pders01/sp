@@ -43,6 +43,16 @@ func TestSharedTerminalUnlockRejectsWithoutAuthenticatingPrefix(t *testing.T) {
 		}
 	}
 }
+func TestSharedTerminalUnlockLabelsRejectedPastes(t *testing.T) {
+	for _, payload := range []string{"prefix\t\r\nsuffix", "prefix\xffsuffix"} {
+		f := newUnlockFixture(t)
+		runTerminalBytes(t, f.s, bracket(payload), 1)
+		if !f.s.app.privacy.promptInvalid || !strings.Contains(f.s.app.privacy.promptErr, "Input rejected") {
+			t.Fatal("rejected paste was not clearly labelled or did not poison submission")
+		}
+	}
+}
+
 func TestSharedTerminalUnlockPreservesUTF8(t *testing.T) {
 	for _, standalone := range []bool{false, true} {
 		var got string
