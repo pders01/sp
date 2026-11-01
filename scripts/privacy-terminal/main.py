@@ -127,10 +127,12 @@ class Suite:
         self.sentinel = root / "external-editor"
         self.sentinel.write_text("#!/bin/sh\nprintf invoked > '" + str(root / "EDITOR_WAS_INVOKED") + "'\n")
         self.sentinel.chmod(0o700)
-        self.secret = secrets.token_urlsafe(32)
+        self.secret = " " + secrets.token_urlsafe(32) + " \ufffd "
         self.private = "PRIVATE_ORIGINAL_" + secrets.token_hex(12)
         self.updated = "PRIVATE_UPDATED_" + secrets.token_hex(12)
         self.recovered = "PRIVATE_RECOVERY_" + secrets.token_hex(12)
+        self.interrupted = "PRIVATE_INTERRUPTED_" + secrets.token_hex(12)
+        self.pasted = "PRIVATE_PASTED_" + secrets.token_hex(12)
         self.metadata = "PRIVATE_TEMPLATE_" + secrets.token_hex(12)
         self.long_end = "PRIVATE_LONG_END_" + secrets.token_hex(12)
         self.long_note = "begin\r\n" + "".join("\tcode line " + str(n) + "\r\n" for n in range(140)) + self.long_end + "\r\n"
@@ -173,7 +175,7 @@ class Suite:
                 if not path.is_file():
                     continue
                 data = path.read_bytes()
-                for secret in [self.secret, self.private, self.updated, self.recovered, self.metadata, self.long_end]:
+                for secret in [self.secret, self.private, self.updated, self.recovered, self.interrupted, self.pasted, self.metadata, self.long_end]:
                     assert secret.encode() not in data, "synthetic secret persisted in plaintext"
                     assert base64.b64encode(secret.encode()) not in data, "synthetic secret persisted as bare base64"
         assert not (self.root / "EDITOR_WAS_INVOKED").exists(), "external editor invoked"
@@ -292,6 +294,53 @@ class Suite:
         self.assert_at_rest()
         self.results.append("interactive recovery imports reviewed private text and retains recovery artifact")
 
+        signal_before = (self.store / (self.today + ".json")).read_bytes()
+        earlier_recoveries = set(self.store.glob(".sp-recovery-*.age"))
+        def interrupted_edit(t):
+            self.open_editor(t)
+            self.replace_line(t, self.interrupted)
+            t.expect(self.interrupted)
+            os.kill(t.pid, signal.SIGTERM)  # Only this test-owned child.
+        self.terminal([], interrupted_edit, expected=1)
+        assert signal_before == (self.store / (self.today + ".json")).read_bytes(), "signal replaced the saved note"
+        signal_recoveries = set(self.store.glob(".sp-recovery-*.age")) - earlier_recoveries
+        assert len(signal_recoveries) == 1, "signal did not retain exactly one recovery"
+        self.assert_at_rest()
+        def recover_interruption(t):
+            t.expect("Unlock recovery")
+            t.expect("Passphrase:")
+            t.send(self.secret + "\r")
+            t.expect("Write · " + self.today)
+            t.expect(self.interrupted)
+            t.send(b"\x13")
+        self.terminal(["privacy", "recover", str(next(iter(signal_recoveries)))], recover_interruption)
+        self.terminal([], lambda t: verify(t, self.interrupted))
+        self.results.append("SIGTERM seals an unsaved standalone draft, reports interruption, and permits encrypted recovery")
+
+        if os.geteuid() != 0:  # Root bypasses ordinary directory write permissions.
+            retry_draft = self.interrupted + "_RETRY"
+            def retry_interruption(t):
+                self.open_editor(t)
+                self.replace_line(t, retry_draft)
+                t.expect(retry_draft)
+                try:
+                    self.store.chmod(0o500)
+                    os.kill(t.pid, signal.SIGTERM)
+                    t.expect("Recovery failed")
+                    os.kill(t.pid, signal.SIGTERM)
+                    t.send(b"\x05X")
+                    t.expect(retry_draft + "X")
+                finally:
+                    self.store.chmod(0o700)
+                t.send(b"\x13")
+            try:
+                self.terminal([], retry_interruption)
+            finally:
+                self.store.chmod(0o700)
+            self.terminal([], lambda t: verify(t, retry_draft + "X"))
+            self.assert_at_rest()
+            self.results.append("repeated SIGTERM after failed recovery retains a live draft and permits an explicit save retry")
+
         def concurrent(t):
             self.open_editor(t)
             self.cli("append", self.today, "--section", "Concurrent", "--source", "pty-test", "--", "- shared during edit")
@@ -301,6 +350,21 @@ class Suite:
         assert "shared during edit" in self.cli("shared", self.today), "private save lost concurrent shared contribution"
         self.terminal([], lambda t: verify(t, self.updated))
         self.results.append("concurrent shared append survives private editor save")
+
+        paste_before = (self.store / (self.today + ".json")).read_bytes()
+        paste_text = self.updated + "\r\n\t" + self.pasted + " \ufffd\ncontrols: \x13 \x1b[3~\nPASTE_END"
+        def literal_paste(t):
+            self.open_editor(t)
+            t.send(b"\x01\x0b")
+            t.send("\x1b[200~" + paste_text + "\x1b[201~")
+            t.expect(self.pasted)
+            t.expect("PASTE_END")
+            assert paste_before == (self.store / (self.today + ".json")).read_bytes(), "pasted controls published before physical save"
+            t.send(b"\x13")
+        self.terminal([], literal_paste)
+        self.terminal([], lambda t: verify(t, self.pasted))
+        self.assert_at_rest()
+        self.results.append("marked multiline paste keeps UTF-8/control bytes literal and publishes only after physical Ctrl+S")
 
         restored_home = self.root / "restored-home"
         restored_home.mkdir(mode=0o700)
