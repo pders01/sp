@@ -1,92 +1,101 @@
 package tui
 
 import (
-	"bytes"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func TestStandaloneUnlockBracketedPasteCannotSubmitOrEditControls(t *testing.T) {
-	for _, control := range []tea.KeyType{tea.KeyEnter, tea.KeyCtrlJ, tea.KeyTab, tea.KeyCtrlU} {
-		f := newUnlockFixture(t)
-		filter := &unlockInputFilter{}
-		filter.sequence([]byte("\x1b[200~"))
-		for _, msg := range []tea.KeyMsg{privacyKey("prefix"), {Type: control}, privacyKey("suffix")} {
-			if result := filter.filter(f.s, msg); result != nil {
-				t.Fatal("paste forwarded a key before its boundary")
+func TestSharedTerminalUnlockRejectsWithoutAuthenticatingPrefix(t *testing.T) {
+	for _, raw := range []string{
+		bracket("prefix\rsuffix") + "\r", bracket("prefix\nsuffix") + "\r",
+		bracket("prefix\tsuffix") + "\r", bracket("prefix\x15suffix") + "\r",
+		bracket("prefix\x03suffix") + "\r", bracket("prefix\xffsuffix") + "\r",
+		bracket(strings.Repeat("x", 4097)) + "\r", "prefix\xff\r", "prefix\x00\r",
+		"prefix\xc3\r", bracket(strings.Repeat("x", privateInputLimit+1)) + "\r",
+	} {
+		for _, standalone := range []bool{false, true} {
+			calls := 0
+			a := NewApp(NewCalendar(nil), NewNotebook(nil), ModeNotebook)
+			a.SetPrivacy(PrivacyHooks{Unlock: func([]byte) error { calls++; return nil }})
+			a.startUnlock()
+			var target tea.Model = a
+			var screen *unlockScreen
+			if standalone {
+				screen = &unlockScreen{app: a}
+				target = screen
 			}
-		}
-		f.s.Update(filter.sequence([]byte("\x1b[201~")))
-		f.s.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		if f.s.done || f.s.app.privacy.job != nil || !strings.Contains(f.s.app.privacy.promptErr, "invalid input cleared") {
-			t.Fatal("pasted control normalized/submitted a partial secret")
+			fragment := 1
+			if len(raw) > 8192 {
+				fragment = 256
+			}
+			runTerminalBytes(t, target, raw, fragment)
+			// Even an additional physical submission must not authenticate a prefix.
+			// After a rejected Enter has cleared everything, empty input remains invalid.
+			runTerminalBytes(t, target, "\r", 256)
+			if calls != 0 || (screen != nil && screen.accepted) {
+				t.Fatalf("standalone=%v authenticated malformed/oversize prefix (input len %d)", standalone, len(raw))
+			}
+			a.Close()
 		}
 	}
 }
-
-func TestStandaloneUnlockPreservesLiteralReplacementRune(t *testing.T) {
-	f := newUnlockFixture(t)
-	filter := &unlockInputFilter{}
-	f.s.Update(privacyKey("before "))
-	var msg tea.Msg
-	for _, b := range []byte("\ufffd") {
-		msg = filter.unknownByte(b)
-		if msg != nil {
-			f.s.Update(msg)
+func TestSharedTerminalUnlockPreservesUTF8(t *testing.T) {
+	for _, standalone := range []bool{false, true} {
+		var got string
+		a := NewApp(NewCalendar(nil), NewNotebook(nil), ModeNotebook)
+		defer a.Close()
+		a.SetPrivacy(PrivacyHooks{Unlock: func(secret []byte) error { got = string(secret); return errors.New("synthetic mismatch") }})
+		a.startUnlock()
+		var target tea.Model = a
+		if standalone {
+			target = &unlockScreen{app: a}
+		}
+		want := "before \ufffd 日 e\u0301 after"
+		runTerminalBytes(t, target, "before \ufffd "+bracket("日 e\u0301 after"), 1)
+		if a.privacy.prompt.Value() != want {
+			t.Fatalf("standalone=%v secret changed: %q", standalone, a.privacy.prompt.Value())
+		}
+		// For standalone a generic non-age error is fatal, but the synthetic callback
+		// must still receive precisely the complete secret, never a decoder prefix.
+		runTerminalBytes(t, target, "\r", 1)
+		if got != want {
+			t.Fatalf("standalone=%v submitted %q", standalone, got)
 		}
 	}
-	f.s.Update(privacyKey(" after"))
-	if f.s.app.privacy.prompt.Value() != "before \ufffd after" {
-		t.Fatal("valid replacement rune disappeared")
-	}
-	filter.sequence([]byte("\x1b[200~"))
-	filter.filter(f.s, privacyKey(" paste "))
-	for _, b := range []byte("\ufffd") {
-		filter.unknownByte(b)
-	}
-	f.s.Update(filter.sequence([]byte("\x1b[201~")))
-	if f.s.app.privacy.prompt.Value() != "before \ufffd after paste \ufffd" {
-		t.Fatal("replacement rune was lost from paste")
-	}
 }
-
-func TestStandaloneUnlockRejectsInvalidBytesAndOversizePaste(t *testing.T) {
-	f := newUnlockFixture(t)
-	filter := &unlockInputFilter{}
-	f.s.Update(filter.unknownByte(0xff))
-	f.s.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if f.s.done || f.s.app.privacy.job != nil {
-		t.Fatal("invalid byte became cancellation or authentication")
-	}
-	filter.sequence([]byte("\x1b[200~"))
-	filter.appendPaste(bytes.Repeat([]byte{'x'}, 4097))
-	f.s.Update(filter.sequence([]byte("\x1b[201~")))
-	if !f.s.app.privacy.promptInvalid || len(filter.paste) != 0 || filter.pasting {
-		t.Fatal("oversize paste was silently truncated or retained")
-	}
-	filter.unknownByte(0xef)
-	filter.sequence([]byte("\x1b[200~"))
-	filter.filter(f.s, privacyKey("valid"))
-	if _, ok := filter.sequence([]byte("\x1b[201~")).(unlockRejectedInputMsg); !ok {
-		t.Fatal("incomplete bytes disappeared at paste start")
+func TestSharedTerminalMalformedUTF8AllSplits(t *testing.T) {
+	for _, invalid := range []string{"\x80", "\xff", "\xc0\xaf", "\xed\xa0\x80", "\xf4\x90\x80\x80", "\xf0\x9f", "\xc3"} {
+		raw := "prefix" + invalid + "\r\r\x07"
+		for split := 1; split < len(raw); split++ {
+			calls := 0
+			a := NewApp(NewCalendar(nil), NewNotebook(nil), ModeNotebook)
+			a.SetPrivacy(PrivacyHooks{Unlock: func([]byte) error { calls++; return nil }})
+			a.startUnlock()
+			runTerminalReader(t, a, io.MultiReader(strings.NewReader(raw[:split]), strings.NewReader(raw[split:])), false)
+			if calls != 0 {
+				t.Fatalf("malformed %x split %d authenticated a prefix", invalid, split)
+			}
+			a.Close()
+		}
 	}
 }
 
 func TestStandaloneUnlockSignalsCancelHelpAndBusyWork(t *testing.T) {
 	f := newUnlockFixture(t)
-	filter := &unlockInputFilter{}
+	r := newTerminalInput(strings.NewReader(""))
 	f.s.Update(tea.KeyMsg{Type: tea.KeyF1})
-	f.s.Update(filter.filter(f.s, tea.Quit()))
+	f.s.Update(r.filter(f.s, tea.Quit()))
 	if !f.s.done || f.s.accepted || !errors.Is(f.s.err, ErrUnlockCancelled) {
 		t.Fatal("signal quit was reported as accepted or merely closed help")
 	}
 	f = newUnlockFixture(t)
 	job := f.submit("synthetic")
 	<-f.entered
-	f.s.Update(filter.filter(f.s, tea.Quit()))
+	f.s.Update(r.filter(f.s, tea.Quit()))
 	if f.s.done || !job.cancelRequested {
 		t.Fatal("signal did not wait for owned crypto")
 	}

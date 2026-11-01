@@ -345,6 +345,20 @@ type privatePasteMsg string
 // sanitizer can turn an invalid secret into a different one. No clipboard
 // command is ever invoked by this editor or by the unlock prompt.
 func privatePasteText(msg tea.Msg) (string, bool) {
+	// A decoded batch is literal text, never a sequence of shortcut keys.
+	// The raw adapter validates bytes before Tea can produce lossy runes;
+	// this also preserves ownership for synthetic/async decoded messages.
+	if key, ok := msg.(tea.KeyMsg); ok && key.Type == tea.KeyRunes && (key.Paste || len(key.Runes) > 1) {
+		for _, r := range key.Runes {
+			if !utf8.ValidRune(r) {
+				// Carry rejection through the literal validators, rather than
+				// letting string([]rune) silently normalize an invalid rune to
+				// U+FFFD (which is valid, distinct user input).
+				return "\xff", true
+			}
+		}
+		return string(key.Runes), true
+	}
 	if text, ok := msg.(privatePasteMsg); ok {
 		return string(text), true
 	}

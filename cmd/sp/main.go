@@ -14,6 +14,7 @@ import (
 	"github.com/pders01/sp/internal/templates"
 	"github.com/pders01/sp/internal/tui"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // Version information - set during build via -ldflags. commit and date
@@ -133,6 +134,9 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 }
 
 func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *config.Config, startup ...appStartup) error {
+	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
+		return errors.New("notebook and calendar require interactive terminal input and output")
+	}
 	var options appStartup
 	if len(startup) > 0 {
 		options = startup[0]
@@ -214,7 +218,7 @@ func runApp(mgr *scratchpad.Manager, ed *editor.Editor, icons tui.IconSet, cfg *
 		}
 	}
 
-	if _, rerr := tea.NewProgram(app, tea.WithAltScreen()).Run(); rerr != nil {
+	if _, rerr := tui.RunTerminalProgram(app, os.Stdin, tea.WithAltScreen()); rerr != nil {
 		if recoveryErr := app.RecoverPrivateEdit(); recoveryErr != nil {
 			return fmt.Errorf("failed to run TUI: %w; %v", rerr, recoveryErr)
 		}

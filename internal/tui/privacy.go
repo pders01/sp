@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -12,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/pders01/sp/internal/scratchpad"
+	"golang.org/x/term"
 )
 
 // PrivatePage separates display-only shared content from editable private text.
@@ -701,7 +704,9 @@ type privateEditor struct {
 	load          func(string) (string, error)
 	canRelock     bool
 	savePolicy    string
-	theme         *themeWatcher // Shared appearance only; the writer starts no watchers.
+	theme         *themeWatcher  // Shared appearance only; the writer starts no watchers.
+	signals       chan os.Signal // Standalone only; graceful shutdown may need a retry.
+	signalDone    chan struct{}
 	conflicted    bool
 	review        *draftReview
 }
@@ -717,7 +722,22 @@ func newPrivateEditor(date, original string, save Saver, sealRecovery func(strin
 	return e
 }
 
-func (e *privateEditor) Init() tea.Cmd { return nil }
+func (e *privateEditor) Init() tea.Cmd { return e.waitSignal() }
+
+func (e *privateEditor) waitSignal() tea.Cmd {
+	if e.signals == nil || e.signalDone == nil {
+		return nil
+	}
+	input, done := e.signals, e.signalDone
+	return func() tea.Msg {
+		select {
+		case <-input:
+			return privateEditorInterruptedMsg{}
+		case <-done:
+			return nil
+		}
+	}
+}
 
 func (e *privateEditor) needsRecovery() bool {
 	return e.unconfirmed || e.input.Value() != e.original
@@ -770,6 +790,9 @@ func (e *privateEditor) recovery() (string, error) {
 
 func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	e.published = false
+	if e.rejectTerminalInput(msg) {
+		return e, nil
+	}
 	if _, interrupted := msg.(privateEditorInterruptedMsg); interrupted {
 		// Signals own shutdown even while help/find/review owns ordinary keys.
 		// Failed recovery must leave the live editor available for a retry.
@@ -779,7 +802,7 @@ func (e *privateEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			path, err := e.recovery()
 			if err != nil {
 				e.status = fmt.Sprintf("Shutdown recovery failed: %v. Text remains in this editor; keep it open and retry.", privateRecoveryError(path, err))
-				return e, nil
+				return e, e.waitSignal()
 			}
 			e.err = fmt.Errorf("%w; encrypted recovery: %s", ErrPrivateEditorInterrupted, path)
 		} else {
@@ -980,7 +1003,21 @@ func privateEditorSignalFilter(model tea.Model, msg tea.Msg) tea.Msg {
 }
 
 func runPrivateEditor(model *privateEditor) error {
-	_, err := tea.NewProgram(model, tea.WithAltScreen(), tea.WithFilter(privateEditorSignalFilter)).Run()
+	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
+		return errors.New("private editor requires interactive terminal input and output")
+	}
+	// Tea's default signal handler stops after the first signal. A failed
+	// recovery deliberately keeps this editor running, so retain ownership
+	// until the editor actually exits instead of exposing the draft to the
+	// default action of a second SIGINT/SIGTERM.
+	model.signals = make(chan os.Signal, 2)
+	model.signalDone = make(chan struct{})
+	signal.Notify(model.signals, os.Interrupt, syscall.SIGTERM)
+	defer func() {
+		signal.Stop(model.signals)
+		close(model.signalDone)
+	}()
+	_, err := RunTerminalProgram(model, os.Stdin, tea.WithAltScreen(), tea.WithoutSignalHandler())
 	err = model.finishRun(err)
 	WriteRecoveryReport(os.Stderr, model.recoveries)
 	return err

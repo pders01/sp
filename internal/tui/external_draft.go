@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"os"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -53,7 +54,7 @@ func prepareExternalDraft(ed *editor.Editor, date, baseline, initial string, unc
 	if track != nil {
 		track(scratchpad.RecoveryReference{Date: date, Path: path})
 	}
-	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
+	return TerminalExecProcess(cmd, os.Stdin, func(execErr error) tea.Msg {
 		return editDoneMsg{date: date, original: baseline, path: path, cleanup: cleanup, err: execErr, unconfirmed: unconfirmed}
 	}), nil
 }

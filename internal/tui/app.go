@@ -142,6 +142,9 @@ func (a *App) Close() {
 // Update routes the message to the active view, then inspects the
 // view's state machine for drill / pop / quit signals and reacts.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if handled, cmd := a.routeTerminalInput(msg); handled {
+		return a, cmd
+	}
 	if _, changed := msg.(themeChangedMsg); changed {
 		return a.appearanceChanged()
 	}

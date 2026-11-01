@@ -4,13 +4,26 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/pders01/sp/internal/scratchpad"
+	"golang.org/x/term"
 )
+
+func TestPrivateEditorRejectsRedirectedDescriptors(t *testing.T) {
+	if term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) {
+		t.Skip("test process owns interactive descriptors")
+	}
+	e := newPrivateEditor("2026-02-14", "synthetic", nil, nil)
+	err := runPrivateEditor(e)
+	if err == nil || !strings.Contains(err.Error(), "interactive terminal input and output") || e.signals != nil {
+		t.Fatalf("redirected editor entered terminal/signal lifecycle: %v", err)
+	}
+}
 
 func TestPrivateEditorSignalQuitRecoversBeforeExit(t *testing.T) {
 	for _, changed := range []bool{false, true} {
@@ -88,6 +101,34 @@ func TestPrivateEditorFailedSignalRecoveryRetainsUsableDraft(t *testing.T) {
 				t.Fatal("signal recovery could not be retried")
 			}
 		})
+	}
+}
+
+func TestPrivateEditorRearmsSignalWaitAfterFailedRecovery(t *testing.T) {
+	calls := 0
+	e := newPrivateEditor("2026-02-14", "saved", nil, func(_, _ string) (string, error) {
+		calls++
+		if calls < 3 {
+			return "", errors.New("synthetic recovery failure")
+		}
+		return "retained.age", nil
+	})
+	e.input.SetValue("exact unsaved draft")
+	e.signals, e.signalDone = make(chan os.Signal, 1), make(chan struct{})
+	defer close(e.signalDone)
+	wait := e.Init()
+	for attempt := 0; attempt < 3; attempt++ {
+		if wait == nil {
+			t.Fatal("signal listener was not armed")
+		}
+		e.signals <- os.Interrupt
+		_, wait = e.Update(wait())
+		if attempt < 2 && (e.done || wait == nil || e.input.Value() != "exact unsaved draft") {
+			t.Fatal("repeated graceful interruption discarded or stopped owning the draft")
+		}
+	}
+	if !e.done || !errors.Is(e.err, ErrPrivateEditorInterrupted) || calls != 3 {
+		t.Fatal("third graceful interruption did not seal and finish")
 	}
 }
 

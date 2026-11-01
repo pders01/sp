@@ -24,18 +24,16 @@ type UnlockOptions struct {
 }
 
 type unlockScreen struct {
-	app       *App
-	accepted  bool // UI-owned handoff, only after the accepted job has completed.
-	done      bool
-	err       error
-	output    *os.File
-	bracketed bool
+	app      *App
+	accepted bool // UI-owned handoff, only after the accepted job has completed.
+	done     bool
+	err      error
 }
 
 func newUnlockScreen(options UnlockOptions) *unlockScreen {
 	cal, nb := NewCalendar(nil), NewNotebook(nil)
 	cal.SetThemePref(options.Theme)
-	screen := &unlockScreen{app: NewApp(cal, nb, ModeNotebook), output: options.Output}
+	screen := &unlockScreen{app: NewApp(cal, nb, ModeNotebook)}
 	screen.app.SetPrivacy(PrivacyHooks{
 		IsUnlocked: options.IsUnlocked, Unlock: options.Unlock, AsyncUnlock: true,
 		Lock: func() {
@@ -52,14 +50,6 @@ func newUnlockScreen(options UnlockOptions) *unlockScreen {
 }
 
 func (s *unlockScreen) Init() tea.Cmd {
-	if s.output != nil {
-		if _, err := fmt.Fprint(s.output, "\x1b[?2004h"); err != nil {
-			s.err = err
-			s.done = true
-			return tea.Quit
-		}
-		s.bracketed = true
-	}
 	cmd := s.app.startUnlock()
 	if s.app.privacy.prompt == nil {
 		s.done = true
@@ -77,12 +67,8 @@ func (s *unlockScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return s, nil
 	}
 	p := s.app.privacy
-	if _, rejected := msg.(unlockRejectedInputMsg); rejected {
-		if p.prompt != nil && p.job == nil && p.keyHelp == nil {
-			p.promptInvalid = true
-			p.promptErr = "Input rejected: use single-line UTF-8 without controls. Re-enter the passphrase."
-		}
-		return s, nil
+	if handled, cmd := s.app.routeTerminalInput(msg); handled {
+		return s, cmd
 	}
 	if _, interrupted := msg.(unlockInterruptedMsg); interrupted {
 		p.keyHelp = nil
@@ -145,14 +131,7 @@ func UnlockNotes(options UnlockOptions) error {
 	}
 	screen := newUnlockScreen(options)
 	defer screen.app.Close()
-	filter := &unlockInputFilter{}
-	defer filter.clear()
-	defer func() {
-		if screen.bracketed {
-			fmt.Fprint(options.Output, "\x1b[?2004l")
-		}
-	}()
-	result, err := tea.NewProgram(screen, tea.WithAltScreen(), tea.WithInput(options.Input), tea.WithOutput(options.Output), tea.WithFilter(filter.filter)).Run()
+	result, err := RunTerminalProgram(screen, options.Input, tea.WithAltScreen(), tea.WithOutput(options.Output))
 	if err != nil {
 		screen.accepted = false
 		return err
