@@ -128,9 +128,10 @@ func (m *Manager) GetByDate(date string) (*Scratchpad, error) {
 // Save writes a replacement file before renaming it over the note. On Unix the
 // rename is atomic and the directory is synced afterward. Other platforms use
 // os.Rename without a directory-sync or atomic-replacement guarantee.
-// Modified changes only once replacement succeeds, including when the result is
-// ErrDurabilityUnconfirmed. Cooperating SP writers check the loaded revision
-// under a short per-note lock; stale writes return ErrConflict.
+// Modified (and Created for the first private save on a shared-only day) changes
+// only once replacement succeeds, including ErrDurabilityUnconfirmed.
+// Cooperating SP writers check the loaded revision under a short per-note lock;
+// stale writes return ErrConflict.
 func (m *Manager) Save(scratchpad *Scratchpad) error {
 	return m.save(scratchpad, syncDirectory)
 }
@@ -192,6 +193,12 @@ func (m *Manager) saveInternal(scratchpad *Scratchpad, syncDir func(string) erro
 	pending := *scratchpad
 	if !migrating {
 		pending.Modified = time.Now()
+		// Shared-only records have no private timestamps. Initialize creation
+		// on first private publication, not on open or during migration; keep
+		// all existing private timestamps, including legacy zero values.
+		if pending.Created.IsZero() && pending.disk != nil && pending.disk.legacy == nil && pending.disk.Private == nil {
+			pending.Created = pending.Modified
+		}
 	}
 	data, record, err := m.encodeScratchpad(&pending, enabled)
 	if err != nil {
@@ -200,6 +207,7 @@ func (m *Manager) saveInternal(scratchpad *Scratchpad, syncDir func(string) erro
 	_, err = publish(filename, data, false, func(dir string) error {
 		// Publication advances the revision before the durability check, even
 		// when that check fails (callers may inspect the note in the callback).
+		scratchpad.Created = pending.Created
 		scratchpad.Modified = pending.Modified
 		scratchpad.revision = sha256.Sum256(data)
 		scratchpad.exists = true
