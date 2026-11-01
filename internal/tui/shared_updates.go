@@ -108,7 +108,7 @@ func (n *Notebook) resizeSharedHelp() {
 	offset := h.viewport.YOffset
 	h.width, h.height = n.width, n.height
 	h.viewport.Width = max(1, n.width-4)
-	h.viewport.Height = max(1, n.height-2-viewHeight(n.sharedHelpFooter()))
+	h.viewport.Height = max(1, n.height-viewHeaderRows-viewHeight(n.sharedHelpFooter()))
 	h.viewport.SetContent(ansi.Wrap(displayText(h.content), h.viewport.Width, ""))
 	h.viewport.SetYOffset(offset)
 }
@@ -179,14 +179,14 @@ func (n *Notebook) updateShared(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (n *Notebook) sharedView() string {
 	if h := n.shared.help; h != nil {
 		footer := n.sharedHelpFooter()
-		minimum := 2 + viewHeight(footer) + 2
+		minimum := viewHeaderRows + viewHeight(footer) + 2
 		if n.width < 24 || n.height < minimum {
 			return smallTerminal("Shared updates · Help", n.width, n.height, 24, minimum, "F1: close help · Esc/c: note · q: quit")
 		}
 		return screenView(h.title, n.sharedStatus(), insetNotebookBody(h.viewport.View()), footer, n.theme.Palette(), n.width, n.height)
 	}
 	footer := n.sharedFooter()
-	minHeight := 2 + viewHeight(footer) + 2
+	minHeight := viewHeaderRows + viewHeight(footer) + 2
 	// Keep both provenance sentences visible; never truncate the policy into
 	// an ambiguous status at narrow sizes.
 	if n.width < 48 || n.height < minHeight {

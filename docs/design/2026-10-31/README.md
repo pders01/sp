@@ -8,6 +8,25 @@ The product remains a quiet daily notebook. Encryption changes access and save
 guarantees, not the product's visual language. The redesign does not settle the
 separate Neovim/private-editor integration decision.
 
+## Notice and alignment follow-up
+
+Startup feedback previously replaced the divider, making chrome run into the
+note; its left edge also differed from the document's. The shared header now
+reserves separate title and notice rows and **always** draws the divider below
+them. Header, notice, document and action text share the two-cell gutter. Geometry
+budgets use the common header height, including small unlock forms and help.
+
+![Current notice boundary and aligned text, synthetic fixture](assets/implemented-notice-light.png)
+
+This is the latest geometry example. The broader atlas/illustrations below record
+the initial redesign snapshot; `make design-capture` regenerates them from current
+source. Unit tests, TUI race tests, vet, all 402 frame-bound checks and four live
+synthetic dark/light/narrow design-terminal cases pass. The latter tested binary
+SHA256 `aaf6cbf684c8df6ff6b5d12687bdd2390b7271f6889804bd7a3218372124af09`,
+fixture `.privacy-adversarial/design-terminal-0e1b0398fb282034`. Windows is
+cross-compiled only, not natively validated. No user note text was copied into
+fixtures or screenshots.
+
 ## Current implementation
 
 - One primary daily note. Shared updates are a separate **read-only** view,

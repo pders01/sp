@@ -428,7 +428,7 @@ func (n *Notebook) renderFooter() string {
 
 	footer := lipgloss.JoinVertical(lipgloss.Left, navLine, help)
 	if n.hasShared() {
-		footer = n.theme.Palette().MutedText.Render(ansi.Wrap("Shared updates available · c view", max(1, n.width), "")) + "\n" + footer
+		footer = n.theme.Palette().MutedText.Render(insetView(ansi.Wrap("Shared updates available · c view", max(1, n.width-2*viewGutter), ""))) + "\n" + footer
 	}
 	return footer
 }

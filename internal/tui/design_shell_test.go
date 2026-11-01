@@ -8,6 +8,43 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+func TestDesignHeaderKeepsDividerAndAlignsNoticeWithDocument(t *testing.T) {
+	p := lightPalette()
+	for _, status := range []string{"", "No page for today; opened the newest earlier page."} {
+		plain := ansi.Strip(viewHeader("Notebook · 2026-02-14", status, p, 80))
+		lines := strings.Split(plain, "\n")
+		if len(lines) != viewHeaderRows || lines[2] != strings.Repeat("─", 80) {
+			t.Fatalf("notice displaced the document boundary: %q", plain)
+		}
+		if !strings.HasPrefix(lines[0], "  sp / ") || (status != "" && !strings.HasPrefix(lines[1], "  No page")) {
+			t.Fatal("header and notice do not share the document gutter")
+		}
+	}
+	footer := ansi.Strip(screenFooter([]helpEntry{{keys: "Esc", label: "return", visible: true}}, p, 80))
+	if !strings.HasPrefix(strings.Split(footer, "\n")[1], "  Esc:") {
+		t.Fatal("footer text uses a different gutter")
+	}
+}
+
+func TestNotebookStartupNoticeDoesNotRunIntoWriting(t *testing.T) {
+	t.Setenv("GLAMOUR_STYLE", "light")
+	const date = "2026-02-14"
+	const original = "# Synthetic project\n\nGoal: keep the layout readable.\n\n- First item\n- Second item\n"
+	app := workflowApp(t, ModeNotebook, map[string]string{date: original})
+	app.nb.theme.SetStatus("No page for today; opened the newest earlier page.", 0)
+	view := ansi.Strip(app.View())
+	lines := strings.Split(view, "\n")
+	if strings.Trim(lines[2], "─") != "" || !strings.HasPrefix(lines[0], "  sp / ") || !strings.HasPrefix(lines[1], "  No page") || !strings.HasPrefix(lines[3], "  Synthetic project") {
+		t.Fatalf("startup chrome merges into writing: %q", view)
+	}
+	before := app.nb.viewport.Height
+	app.nb.theme.SetStatus("", 0)
+	app.nb.View()
+	if app.nb.viewport.Height != before || app.nb.contents[date] != original {
+		t.Fatal("notice changed the document budget or stored text")
+	}
+}
+
 func TestDesignShellKeepsFooterWithinBudget(t *testing.T) {
 	for _, size := range layoutSizes {
 		p := darkPalette()

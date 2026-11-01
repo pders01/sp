@@ -42,21 +42,26 @@ func oneLine(text string) string {
 	return strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t", " ").Replace(text)
 }
 
+const viewHeaderRows = 3
+const viewGutter = 2
+
+func insetView(text string) string {
+	return lipgloss.NewStyle().PaddingLeft(viewGutter).Render(text)
+}
+
 func viewHeader(title, status string, palette Palette, width int) string {
-	// A fixed two-row shell keeps feedback from moving the document. The
-	// quiet rule becomes an outcome row when there is something to report.
+	// Feedback owns its own reserved row; it must never replace the boundary
+	// between application chrome and writing. All text shares the body gutter.
+	innerWidth := max(0, width-2*viewGutter)
 	heading := palette.Header.Render("sp") + palette.MutedText.Render(" / ") + palette.Title.Render(oneLine(title))
-	second := palette.Separator.Render(strings.Repeat("─", max(0, width)))
-	if status != "" {
-		second = statusStyle(status, palette).Render(truncate(oneLine(safeMarkdownDisplay(status)), width))
-	}
-	return truncate(heading, width) + "\n" + second
+	notice := statusStyle(status, palette).Render(truncate(oneLine(safeMarkdownDisplay(status)), innerWidth))
+	return insetView(truncate(heading, innerWidth)) + "\n" + insetView(notice) + "\n" + palette.Separator.Render(strings.Repeat("─", max(0, width)))
 }
 
 // screenFooter keeps secondary shortcuts in help instead of filling the page
 // with instructions. Callers still own which actions are available in context.
 func screenFooter(entries []helpEntry, palette Palette, width int) string {
-	return palette.Separator.Render(strings.Repeat("─", max(0, width))) + "\n" + palette.Help.Render(wrappedHelp(entries, width))
+	return palette.Separator.Render(strings.Repeat("─", max(0, width))) + "\n" + palette.Help.Render(insetView(wrappedHelp(entries, max(1, width-2*viewGutter))))
 }
 
 // screenView is the common, bounded shell for forms and secondary views.

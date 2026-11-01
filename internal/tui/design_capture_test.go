@@ -127,7 +127,7 @@ func TestDesignCapture(t *testing.T) {
 					if view == "" || strings.Contains(view, designCaptureSecret) {
 						t.Fatal("empty frame or synthetic secret exposed")
 					}
-					if scene.id == "unlock-masked" && !strings.Contains(view, "•") {
+					if scene.id == "unlock-masked" && !strings.Contains(view, "Resize terminal") && !strings.Contains(view, "•") {
 						t.Fatal("synthetic input was not visibly masked")
 					}
 					plain := ansi.Strip(view)

@@ -388,8 +388,8 @@ func (a *App) renderTemplateChooser() string {
 		lines = append(lines, palette.MutedText.Render(truncate(oneLine(chooser.feedback), max(0, innerWidth-19))+" · F1: full details"))
 	}
 	lines = append(lines, "")
-	// Two header rows, fixed instructions/outcome, footer and one option.
-	chromeHeight := 2 + viewHeight(strings.Join(lines, "\n")) + viewHeight(footer)
+	// Reserve the common header, instructions/outcome, footer and one option.
+	chromeHeight := viewHeaderRows + viewHeight(strings.Join(lines, "\n")) + viewHeight(footer)
 	minHeight := chromeHeight + 1
 	if width < 30 || height < minHeight {
 		return smallTerminal("Templates · SAVE NOW", width, height, 30, minHeight, "F1: details/help · Esc: close/request cancel")

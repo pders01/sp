@@ -47,13 +47,13 @@ func (h *keyHelp) footer() string {
 	return wrappedHelp([]helpEntry{
 		{keys: "↑/↓ PgUp/Dn", label: "scroll", visible: true},
 		{keys: "Esc/F1/q", label: "return", visible: true},
-	}, h.width)
+	}, max(1, h.width-2*viewGutter))
 }
 
 func (h *keyHelp) resize(width, height int) {
 	h.width, h.height = max(0, width), max(0, height)
 	h.viewport.Width = max(1, width-4)
-	h.viewport.Height = max(1, height-2-(1+viewHeight(h.footer())))
+	h.viewport.Height = max(1, height-viewHeaderRows-(1+viewHeight(h.footer())))
 	h.viewport.SetContent(ansi.Wrap(displayText(h.content), max(1, width-4), ""))
 }
 
@@ -92,7 +92,7 @@ func (h *keyHelp) view(palette Palette) string {
 	if h.width < 24 || h.height < 6 {
 		return smallTerminal(h.title, h.width, h.height, 24, 6, "Esc/F1/q: close help")
 	}
-	footer := palette.Separator.Render(strings.Repeat("─", max(0, h.width))) + "\n" + palette.Help.Render(h.footer())
+	footer := palette.Separator.Render(strings.Repeat("─", max(0, h.width))) + "\n" + palette.Help.Render(insetView(h.footer()))
 	return screenView(h.title, "", lipgloss.NewStyle().PaddingLeft(2).Render(h.viewport.View()), footer, palette, h.width, h.height)
 }
 

@@ -51,7 +51,7 @@ func TestNotebook_Update_WindowSize(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, 100, updatedNotebook.width)
 	assert.Equal(t, 30, updatedNotebook.height)
-	assert.Equal(t, 25, updatedNotebook.viewport.Height) // title/status + date/rule/help
+	assert.Equal(t, 30-viewHeight(updatedNotebook.renderHeader())-viewHeight(updatedNotebook.renderFooter()), updatedNotebook.viewport.Height)
 	assert.Equal(t, 100, updatedNotebook.viewport.Width)
 	assert.Nil(t, cmd)
 }

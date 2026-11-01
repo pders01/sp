@@ -46,7 +46,7 @@ func TestCalendarPreviewUXFrameMatrix(t *testing.T) {
 				assertFrameFits(t, view, size)
 				plain := ansi.Strip(view)
 				readable := strings.Join(strings.Fields(plain), " ")
-				for _, want := range []string{"Preview · " + month.date, "PUBLIC SECOND LINE", "enter: open", "m/y: month/year", "▌"} {
+				for _, want := range []string{"Preview · " + month.date, "PUBLIC SECOND LINE", "enter: open", "m/y: view", "▌"} {
 					if !strings.Contains(readable, want) {
 						t.Fatalf("missing %q:\n%s", want, plain)
 					}

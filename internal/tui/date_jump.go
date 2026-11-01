@@ -126,7 +126,7 @@ func (p *dateJumpPrompt) view(palette Palette) string {
 	}
 	lines = append(lines, "", palette.MutedText.Render(ansi.Wrap("Selection only; no note is saved.", innerWidth, "")))
 	body := lipgloss.NewStyle().PaddingLeft(2).Render(strings.Join(lines, "\n"))
-	minHeight := 2 + viewHeight(body) + viewHeight(footer)
+	minHeight := viewHeaderRows + viewHeight(body) + viewHeight(footer)
 	if p.width < 24 || p.height < minHeight {
 		return smallTerminal("Jump to date", p.width, p.height, 24, minHeight, "F1: help · Esc: cancel; no save")
 	}

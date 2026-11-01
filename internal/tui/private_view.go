@@ -82,7 +82,7 @@ func (a *App) unlockLayout() (string, string, int) {
 	}
 	content := strings.Join(body, "\n")
 	footer := screenFooter(actions, palette, width)
-	return content, footer, 2 + viewHeight(content) + viewHeight(footer)
+	return content, footer, viewHeaderRows + viewHeight(content) + viewHeight(footer)
 }
 
 func (e *privateEditor) writerView() string {
@@ -107,11 +107,11 @@ func (e *privateEditor) writerView() string {
 		metadata = append(metadata, lipgloss.NewStyle().PaddingLeft(2).Render(statusStyle(summary, palette).Render(projected)))
 	}
 	meta := strings.Join(metadata, "\n")
-	minimum := max(8, 2+viewHeight(meta)+viewHeight(footer)+1)
+	minimum := max(8, viewHeaderRows+viewHeight(meta)+viewHeight(footer)+1)
 	if e.width < 24 || e.height < minimum {
 		return smallTerminal("Write · draft retained", e.width, e.height, 24, minimum, "F1: help · Esc: cancel")
 	}
-	canvasHeight := e.height - 2 - viewHeight(meta) - viewHeight(footer)
+	canvasHeight := e.height - viewHeaderRows - viewHeight(meta) - viewHeight(footer)
 	e.input.SetWidth(max(1, e.width-4))
 	e.input.SetHeight(canvasHeight)
 	caption := e.savePolicy

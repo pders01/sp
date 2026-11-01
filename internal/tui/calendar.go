@@ -356,14 +356,14 @@ func (c *Calendar) View() string {
 	minWidth, minBodyHeight := minCellWidth*7, weekHeaderRow+c.monthRows()*minCellHeight
 	if year {
 		title = fmt.Sprintf("Calendar · %d", c.cursor.Year())
-		minWidth, minBodyHeight = yearColumns*14, 12/yearColumns*5
+		minWidth, minBodyHeight = yearColumns*14, 12/yearColumns*4
 	}
 	title += privacyBadge(c.privacyEnabled, c.privacyState)
 	header := viewHeader(withIcon(c.icons.Calendar, title), c.theme.StatusText(), palette, c.width)
 	footer := screenFooter([]helpEntry{
 		{keys: "enter", label: "open", visible: true},
 		{keys: "e", label: c.editLabel(), visible: !year},
-		{keys: "m/y", label: "month/year", visible: true},
+		{keys: "m/y", label: "view", visible: true},
 		{keys: "t", label: "today", visible: !year},
 		{keys: "q", label: "quit", visible: true},
 		{keys: "?/F1", label: "help", visible: true},
@@ -634,8 +634,8 @@ func (c *Calendar) renderYear(width, height int) string {
 		tileW = 14
 	}
 	tileH := height / gridRows
-	if tileH < 5 {
-		tileH = 5
+	if tileH < 4 {
+		tileH = 4
 	}
 
 	year := c.cursor.Year()

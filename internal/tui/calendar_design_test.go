@@ -145,7 +145,7 @@ func TestCalendarDesignChromeAndResizeMatrix(t *testing.T) {
 							}
 							continue
 						}
-						for _, want := range []string{"sp / Calendar", "m/y: month/year", "?/F1: help", "q: quit"} {
+						for _, want := range []string{"sp / Calendar", "m/y: view", "?/F1: help", "q: quit"} {
 							if !strings.Contains(plain, want) {
 								t.Fatalf("%dx%d lost %q:\n%s", size.Width, size.Height, want, plain)
 							}
