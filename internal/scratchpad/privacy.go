@@ -306,11 +306,17 @@ func (m *Manager) EnablePrivacy(passphrase []byte) error {
 // EnablePrivacyWithProgress is EnablePrivacy with synchronous, data-free
 // notifications. See PrivacyProgress for callback restrictions and count semantics.
 func (m *Manager) EnablePrivacyWithProgress(passphrase []byte, progress func(PrivacyProgress)) error {
+	return m.enablePrivacyWithProgress(passphrase, syncDirectory, progress)
+}
+
+// Keep fault injection local to the operation, as with save and disablePrivacy.
+func (m *Manager) enablePrivacyWithProgress(passphrase []byte, syncDir func(string) error, progress func(PrivacyProgress)) error {
 	reportPrivacyProgress(progress, "inspecting", 0, 0)
 	if err := validatePassphrase(passphrase); err != nil {
 		return err
 	}
-	if err := m.initializePrivacy(passphrase); err != nil {
+	fingerprint, err := m.initializePrivacy(passphrase, syncDir)
+	if err != nil {
 		return err
 	}
 	dates, err := m.privacyDates()
@@ -333,67 +339,100 @@ func (m *Manager) EnablePrivacyWithProgress(passphrase []byte, progress func(Pri
 				return err
 			}
 			if note.disk.legacy != nil {
-				if err := m.saveInternal(note, syncDirectory, true); err != nil {
+				if err := m.saveInternal(note, syncDir, true); err != nil {
 					return fmt.Errorf("migrate %s: %w", date, err)
 				}
 			}
 		}
 		reportPrivacyProgress(progress, "migrating", i+1, len(dates))
 	}
+	// A retry can skip every publication, including the last note whose rename
+	// previously returned ErrDurabilityUnconfirmed. Confirm both the intended
+	// active policy and directory durability before reporting completion. Take
+	// only the store lock here: per-note migration locks have been released.
+	storeLock, err := lockNote(m.storageDir, "privacy")
+	if err != nil {
+		return err
+	}
+	defer storeLock.Close()
+	metadata, current, err := m.readMetadata()
+	if err != nil {
+		return err
+	}
+	if metadata != nil && metadata.State == "decrypting" {
+		return ErrPrivacyDecrypting
+	}
+	if metadata == nil || metadata.State != "" || current != fingerprint {
+		return ErrPrivacyPolicyChanged
+	}
+	if err := syncDir(m.storageDir); err != nil {
+		return fmt.Errorf("%w: sync storage directory: %w", ErrDurabilityUnconfirmed, err)
+	}
 	reportPrivacyProgress(progress, "complete", len(dates), len(dates))
 	return nil
 }
 
-func (m *Manager) initializePrivacy(passphrase []byte) error {
+func (m *Manager) initializePrivacy(passphrase []byte, syncDir func(string) error) ([sha256.Size]byte, error) {
+	var zero [sha256.Size]byte
 	lock, err := lockNote(m.storageDir, "privacy")
 	if err != nil {
-		return err
+		return zero, err
 	}
 	defer lock.Close()
-	metadata, _, err := m.readMetadata()
+	metadata, fingerprint, err := m.readMetadata()
 	if err != nil {
-		return err
+		return zero, err
 	}
 	if metadata != nil {
 		if metadata.State == "decrypting" {
-			return ErrPrivacyDecrypting
+			return zero, ErrPrivacyDecrypting
 		}
 		if metadata.State == "disabled" {
 			if _, err := m.PrivacyEnabled(); err != nil {
-				return err
+				return zero, err
 			}
 		}
 		if err := m.Unlock(passphrase); err != nil {
-			return err
+			return zero, err
 		}
 		if metadata.State == "disabled" {
-			return m.setPrivacyState(metadata, "", syncDirectory)
+			if err := m.setPrivacyState(metadata, "", syncDir); err != nil {
+				return zero, err
+			}
+			_, fingerprint, err = m.readMetadata()
+			return fingerprint, err
 		}
-		return nil
+		// Existing metadata may be the visible but unconfirmed publication
+		// from an interrupted activation. Make it durable before migrating.
+		if err := syncDir(m.storageDir); err != nil {
+			return zero, fmt.Errorf("%w: sync storage directory: %w", ErrDurabilityUnconfirmed, err)
+		}
+		return fingerprint, nil
 	}
 	// An orphan ciphertext must never cause generation of a replacement key.
 	if _, privacyErr := m.PrivacyEnabled(); privacyErr != nil {
-		return privacyErr
+		return zero, privacyErr
 	}
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {
-		return err
+		return zero, err
 	}
 	recipient, err := age.NewScryptRecipient(string(passphrase))
 	if err != nil {
-		return err
+		return zero, err
 	}
 	recipient.SetWorkFactor(scryptWorkFactor)
 	wrapped, err := encryptAge([]byte(identity.String()), recipient)
 	if err != nil {
-		return err
+		return zero, err
 	}
 	metadata = &privacyMetadata{Version: 1, Recipient: identity.Recipient().String(), WrappedIdentity: base64.StdEncoding.EncodeToString(wrapped)}
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
-		return err
+		return zero, err
 	}
-	published, err := publish(filepath.Join(m.storageDir, "privacy.json"), data, true, syncDirectory)
+	fingerprint = sha256.Sum256(data)
+	published, err := publish(filepath.Join(m.storageDir, "privacy.json"), data, true, syncDir)
 	if published {
 		m.keyMu.Lock()
 		m.identity, m.keyMetadata = identity, sha256.Sum256(data)
@@ -401,7 +440,7 @@ func (m *Manager) initializePrivacy(passphrase []byte) error {
 		m.observedPrivacy = m.keyMetadata
 		m.keyMu.Unlock()
 	}
-	return err
+	return fingerprint, err
 }
 
 func (m *Manager) PrivacyStatus() (PrivacyStatus, error) {
