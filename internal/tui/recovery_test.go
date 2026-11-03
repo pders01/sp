@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,7 +29,7 @@ func TestRecoveryReportSurvivesStatusChangesAndQuit(t *testing.T) {
 	app.Update(privacyKey("q"))
 	var out bytes.Buffer
 	app.ReportRecoveries(&out)
-	if recorded != 1 || !strings.Contains(out.String(), path) || !strings.Contains(out.String(), "could not index") || strings.Contains(out.String(), "PRIVATE_DRAFT_CANARY") {
+	if recorded != 1 || !strings.Contains(out.String(), strconv.Quote(path)) || !strings.Contains(out.String(), "could not index") || strings.Contains(out.String(), "PRIVATE_DRAFT_CANARY") {
 		t.Fatalf("lost or unsafe recovery report: %q", out.String())
 	}
 }
@@ -74,6 +75,32 @@ func TestRecoveryIndexWarningsRetryAndClearWhenBufferIsConsumed(t *testing.T) {
 	app.ReportRecoveries(&out)
 	if out.Len() != 0 {
 		t.Fatalf("consumed buffer was reported as retained: %q", out.String())
+	}
+}
+
+func TestRecoveryReportPathEncodingRoundTrips(t *testing.T) {
+	for _, tc := range []struct{ name, path string }{
+		{"unix", "/synthetic/sp-failed.md"},
+		{"windows_drive", `C:\synthetic\sp-failed.md`},
+		{"windows_unc", `\\synthetic-server\share\sp-failed.md`},
+		{"quotes_and_controls", "/synthetic/quote\"\\tab\tline\n\x1b.md"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			WriteRecoveryReport(&out, []scratchpad.RecoveryReference{{Date: "2026-01-15", Path: tc.path}})
+			lines := strings.Split(out.String(), "\n")
+			const prefix = "  2026-01-15 temporary editor buffer: "
+			if len(lines) < 2 || !strings.HasPrefix(lines[1], prefix) {
+				t.Fatalf("missing recovery entry: %q", out.String())
+			}
+			decoded, decodeErr := strconv.Unquote(strings.TrimPrefix(lines[1], prefix))
+			if decodeErr != nil || decoded != tc.path {
+				t.Fatalf("recovery path did not round-trip: %q, %v", decoded, decodeErr)
+			}
+			if strings.Contains(out.String(), "\x1b") || strings.Contains(out.String(), "\t") {
+				t.Fatalf("unescaped path controls: %q", out.String())
+			}
+		})
 	}
 }
 
