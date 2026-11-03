@@ -41,7 +41,10 @@ use `git push --tags`, or force-update published tags as part of this release.
 Coordinate the branch/history cleanup separately, inspect the remote's current
 OID without fetching old objects, and use an explicit expected-OID lease for an
 approved branch rewrite. Existing tag cleanup requires a separate decision.
-No push or tag has been performed by this preflight.
+The user subsequently pushed rewritten main and `v0.22.0-rc.1`; Ubuntu CI
+reported a terminal-reader cancellation race. The proposed rc.2 correction must
+pass hosted CI before tagging. Do not replace rc.1. See the updated preflight;
+its original local results are historical, not hosted Linux verification.
 
 **Release gates:** Windows interactive flows currently fail closed pending a
 safe console adapter. The blocked live model-driven security exercise and
@@ -73,8 +76,8 @@ a release candidate can be tagged and pushed explicitly (example only; not run
 by preflight):
 
 ```bash
-git tag -a v0.22.0-rc.1 -m 'Release v0.22.0-rc.1'
-git push origin refs/tags/v0.22.0-rc.1
+git tag -a v0.22.0-rc.2 -m 'Release v0.22.0-rc.2'
+git push origin refs/tags/v0.22.0-rc.2
 ```
 
 GoReleaser detects prerelease tags automatically. Prereleases do not update the

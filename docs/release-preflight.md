@@ -1,11 +1,61 @@
-# Release preflight — 2026-11-01
+# Release preflight and hosted follow-up
 
-**No branch push, tag, release publication or tap update has been performed.**
-This is local preparation, not hosted CI or security-release sign-off.
+## Hosted Ubuntu cancellation race — proposed rc.2 correction
+
+The user subsequently pushed rewritten main at `128413a` and the annotated tag
+`v0.22.0-rc.1`. The Ubuntu job reported a data race in
+`TestTerminalStreamCancellationRetainsCallerFile`: Tea's forced/context-cancelled
+shutdown closes cancelreader's pipe while its epoll read loop still references
+it. Local macOS results below did not establish a Linux race pass.
+
+The correction uses an attributed local replacement of cancelreader
+v0.2.2. Unix Close cancels, joins active reads, and only then closes internal
+polling/pipe descriptors; caller stdin stays owned by the caller. Cancellation
+and Close are idempotent. Windows/fallback implementations and SP's Windows
+interactive refusal are unchanged. See `third_party/cancelreader/PATCHES.md`.
+CI and local test targets run the replacement's lifecycle tests; CI also repeats
+the original failing test 100 times on Linux. Release archives include its MIT
+license. No race checks or original assertions were removed.
+
+Follow-up checks on macOS arm64 / Go 1.25.13:
+
+- Exact CI race/coverage command passes all seven application packages.
+- Original failing test and descriptor-join API regression each pass 100 race
+  repetitions; replacement lifecycle tests pass 25 race repetitions. A temporary
+  alternate modfile using unpatched upstream v0.2.2 fails the API regression with
+  "Close returned before active Read released ownership"; the working module
+  replacement was not changed for that counterfactual check.
+- Pinned v2.5.0 lint reports zero issues in macOS and Linux/amd64 build contexts;
+  actionlint and GoReleaser configuration validation pass.
+- Linux/amd64 and Windows/amd64 application and replacement test binaries compile;
+  these are compile-only checks, not native execution.
+- Module verification and the project-toolchain reachable-advisory scan pass:
+  zero detected reachable calls, still 10 imported-package / 38 module advisories
+  without detected call paths. This is not dependency clearance.
+- Rebuilt `./sp`; all 14 synthetic privacy PTY checks pass, fixture
+  `terminal-b5cb9de713a910a9`, with no saved transcript. Tested binary SHA256:
+  `a3183e65b9ebfe884c0091d37051709ed3b468d43ad32f5fcd369014631c6fc6`.
+
+This tested artifact predates the follow-up commits; a post-commit rebuild changes
+VCS metadata and may change its hash without changing application behavior.
+
+**Native Linux validation of this correction is pending.** Container execution
+and GitHub CLI access were sandbox-blocked; neither was retried or worked around.
+Require hosted CI on the pushed correction before tagging `v0.22.0-rc.2`.
+Leave `v0.22.0-rc.1` unchanged; its Release/publication outcome is not established
+here. Blocked remote Git/GitHub CLI operations must be performed manually outside
+pi; local commits do not establish hosted CI or publication success.
+
+## Original local preflight — 2026-11-01
+
+At that time, no branch push, tag, release publication or tap update had been
+performed. The evidence below is historical local preparation, not hosted CI or
+security-release sign-off.
 
 The application remediation is documented in [security-remediation.md](security-remediation.md).
-The next-version proposal is [v0.22.0-rc.1](release-notes.md), not an approved or
-created tag. Windows interactive operation remains intentionally fail-closed.
+The original next-version proposal was v0.22.0-rc.1; current candidate status is
+in [release notes](release-notes.md) and the follow-up above. Windows interactive
+operation remains intentionally fail-closed.
 
 ## CI blockers addressed
 

@@ -1,7 +1,19 @@
-# Draft next release — proposed v0.22.0-rc.1
+# Draft next release — proposed v0.22.0-rc.2
 
-This is a release-candidate proposal, not a published version. Confirm the version
-and the limitations below before creating or pushing a tag.
+The user pushed v0.22.0-rc.1; its Ubuntu CI reported a terminal-cancellation data
+race. This proposed correction leaves that tag unchanged. No rc.2 tag has been
+created. Require green hosted CI on the correction before tagging; rc.1's
+Release/publication outcome is not established here.
+
+## Correction since rc.1
+
+- Cancel and join active Unix terminal reads before closing internal polling/pipe
+  descriptors during forced shutdown. Caller stdin remains open, and literal
+  paste/privacy boundaries are unchanged. The dependency patch is locally
+  attributed; CI retains race detection and adds 100 Linux cancellation repeats.
+- Native Linux verification of the correction is still pending. Local macOS
+  race/coverage, repeated regressions and all 14 privacy PTYs pass. See
+  [release preflight](release-preflight.md).
 
 ## Highlights
 

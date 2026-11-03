@@ -33,6 +33,29 @@ Stored Markdown and private/shared ownership are not normalized by these fixes.
 No plaintext external-private-editor fallback, key rotation, secure-erasure
 claim, or Neovim architecture change was introduced.
 
+## Hosted CI follow-up: terminal reader teardown
+
+After the user pushed v0.22.0-rc.1, Ubuntu's race detector reported a concurrent
+close/descriptor access in cancelreader's epoll backend during
+`TestTerminalStreamCancellationRetainsCallerFile`. Tea v1.3.10 skips joining its
+input loop on forced shutdown, but still closes the cancellation reader.
+
+An attributed local replacement of cancelreader v0.2.2 now cancels and joins
+active Unix reads before closing internal descriptors. Repeated cancellation
+cannot fill its wakeup pipe; Close is idempotent and never closes caller stdin.
+Linux, BSD/macOS and select readers share the lifecycle guard; Windows and
+fallback implementations are unchanged. No newer released dependency version
+was available when applying the patch. Details and MIT attribution live in
+`third_party/cancelreader/`; archive configuration includes its license.
+
+The unchanged failing test and a descriptor-join API regression each pass 100
+race repetitions on macOS, alongside full race/coverage and 14 privacy PTYs.
+CI additionally repeats the failing test 100 times on Linux. **Linux runtime
+verification of this correction is pending**; cross-compilation is not a pass.
+No original race checks, assertions or input/privacy boundaries were weakened.
+Keep rc.1 immutable; require hosted CI before a proposed rc.2 tag. See the
+[updated preflight](release-preflight.md) for current versus historical evidence.
+
 ## Input compatibility and limits
 
 Bubble Tea is now v1.3.10 for file-interface/raw-mode/suspend lifecycle support.
