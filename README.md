@@ -64,6 +64,12 @@ Or manually:
 go build -o sp ./cmd/sp
 ```
 
+Keep `third_party/cancelreader` with the checkout: it carries an attributed
+terminal-reader teardown fix via a local Go module replacement. Version-suffixed
+`go install ...@version` is not supported while this replacement is required;
+use a release binary or build from the complete checkout. See
+[patch details](third_party/cancelreader/PATCHES.md).
+
 ## Usage
 
 ```sh

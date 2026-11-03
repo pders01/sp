@@ -2,6 +2,10 @@ module github.com/pders01/sp
 
 go 1.25.13
 
+// v0.2.2 has an input-descriptor Close/Read race during forced Tea shutdown.
+// Keep the attribution and narrow lifecycle patch in third_party/cancelreader.
+replace github.com/muesli/cancelreader => ./third_party/cancelreader
+
 require (
 	filippo.io/age v1.2.1
 	github.com/BurntSushi/toml v1.6.0
@@ -11,6 +15,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/x/ansi v0.10.1
 	github.com/fsnotify/fsnotify v1.10.0
+	github.com/muesli/cancelreader v0.2.2
 	github.com/muesli/termenv v0.16.0
 	github.com/rivo/uniseg v0.4.7
 	github.com/spf13/cobra v1.8.0
@@ -39,7 +44,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
-	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect

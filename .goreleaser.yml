@@ -36,6 +36,7 @@ archives:
     files:
       - README.md
       - LICENSE
+      - third_party/cancelreader/LICENSE
       - docs/*.md
 
 checksum:
