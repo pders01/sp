@@ -61,6 +61,9 @@ brews:
     skip_upload: auto
     homepage: "https://github.com/pders01/sp"
     description: "A daily scratchpad for quick notes and todos"
+    license: "MIT"
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/sp --version")
     repository:
       owner: pders01
       name: homebrew-sp

@@ -50,11 +50,18 @@ was available when applying the patch. Details and MIT attribution live in
 
 The unchanged failing test and a descriptor-join API regression each pass 100
 race repetitions on macOS, alongside full race/coverage and 14 privacy PTYs.
-CI additionally repeats the failing test 100 times on Linux. **Linux runtime
-verification of this correction is pending**; cross-compilation is not a pass.
-No original race checks, assertions or input/privacy boundaries were weakened.
-Keep rc.1 immutable; require hosted CI before a proposed rc.2 tag. See the
-[updated preflight](release-preflight.md) for current versus historical evidence.
+CI additionally repeats the failing test 100 times on Linux. A later Windows
+run exposed two test assumptions: command-start errors may wrap exec.ErrNotFound
+rather than os.ErrNotExist, and quoted paths escape Windows backslashes. Portable
+assertions now preserve typed error/path checks and round-trip drive, UNC and
+control-containing recovery paths without changing runtime output.
+
+The release owner subsequently reported all hosted CI green through `2f99dd4`
+and the v0.22.0-rc.3 release workflow green. This includes native matrix testing,
+not Windows interactive support or independent security sign-off. No original
+race checks or input/privacy boundaries were weakened. Existing RC tags remain
+unchanged; stable promotion is recorded in the
+[updated preflight](release-preflight.md), separately from historical evidence.
 
 ## Input compatibility and limits
 

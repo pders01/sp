@@ -435,7 +435,7 @@ make vuln             # reachable dependency advisories
 make coverage    # writes coverage.html
 make lint        # CI-pinned golangci-lint v2.5.0; no vet-only fallback
 make modernize   # gopls source.fixAll
-make ci          # deps + pinned lint + race/coverage + vuln + build
+make ci          # deps + pinned lint + race/coverage + release checks + vuln + build
 ```
 
 CI runs runtime tests and builds on Linux, macOS, and Windows, with synthetic
@@ -454,7 +454,9 @@ runtime evidence.
 Local CI-equivalent checks and matching synthetic PTYs pass; see the
 [release preflight record](docs/release-preflight.md) for exact tool versions,
 candidate hashes, packaging evidence and remaining manual/hosted checks.
-No native GUI/Windows, accessibility, audit, or release sign-off is implied.
+The release owner reports hosted CI and the rc.3 release workflow green. Stable
+v0.22.0 preparation retains the documented restrictions; passing Windows unit CI
+is not Windows interactive, native GUI/accessibility, or independent audit sign-off.
 
 ## License
 

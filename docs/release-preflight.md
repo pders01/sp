@@ -1,5 +1,55 @@
 # Release preflight and hosted follow-up
 
+## Stable v0.22.0 promotion
+
+The release owner reported all hosted CI green after `2f99dd4`, then reported the
+v0.22.0-rc.3 GoReleaser run green. That tag points at
+`2f99dd4588ff3994c97ecad9756eb8afc045cf1d`. Run URLs/IDs and downloaded release
+asset hashes were not supplied; these are owner-reported hosted results, not
+independently retrieved evidence. The earlier Linux/Windows failures below are
+historical, not still-open CI blockers. Windows interactive input is still
+intentionally unsupported despite passing native Windows unit CI.
+
+Stable-promotion preparation changes only documentation and release automation:
+
+- Release publishes `docs/release-notes.md` explicitly, including the platform and
+  privacy limitations rather than an empty RC-to-stable changelog.
+- `brews.skip_upload: auto` continues to skip RCs but uploads the stable formula
+  for a stable tag. Formula metadata includes MIT licensing and a version smoke
+  test. Existing RC tags are not changed.
+- The stable helper checks an exact tag ref; RC tags no longer falsely block
+  `scripts/release.sh 0.22.0`. Six hermetic regression checks stub every Git
+  operation and never change real refs or contact a remote; local/CI targets run
+  them. The actual release helper was not invoked.
+- `make ci` passes locally, including the six new helper tests and matching
+  cached application race/coverage results. Actionlint and GoReleaser
+  configuration validation pass; no lint rules were relaxed.
+- A local snapshot builds all five targets and renders the four-platform
+  Homebrew formula without publication. Archive checksums, bundled licenses,
+  release notes and absence of TODO/fixture material are verified. The rendered
+  formula passes Ruby syntax validation; the macOS arm64 binary reports its
+  synthetic version and commit. Its version is `0.22.0-stable-preflight`, not a
+  stable release or an upload attempt. Do not upload its assets or formula;
+  stable publication rebuilds them using the actual stable tag.
+
+**Stable v0.22.0 and its Homebrew update are not yet confirmed published.** Push
+this preparation commit and require hosted CI on it before creating/pushing the
+stable tag. A stable tag starts publication immediately. The release workflow
+has contents-write permission on the application repository, but the separate
+`HOMEBREW_TAP_TOKEN` must have contents-write access to `pders01/homebrew-sp`.
+A stable-only guard fails before GoReleaser if the tap token is empty, without
+printing it. Secrets and tap-write permissions were not inspected; successful RC
+publication skipped the stable tap upload and does not verify that permission. A GitHub
+release can succeed before a later tap upload fails: inspect both results and
+do not replace the stable tag when retrying a tap update.
+
+After publication, verify assets/checksums and version/commit metadata, then run
+`brew update`, install or upgrade `pders01/sp/sp`, and run `brew test sp` and
+`sp --version`. No stable tag, GitHub release or remote formula update is claimed
+by local snapshot checks. Independent audit, native GUI/accessibility testing,
+private Neovim integration and the provider-blocked exercise remain outside this
+stable-channel promotion.
+
 ## Hosted Ubuntu cancellation race — proposed rc.2 correction
 
 The user subsequently pushed rewritten main at `128413a` and the annotated tag
@@ -39,12 +89,12 @@ Follow-up checks on macOS arm64 / Go 1.25.13:
 This tested artifact predates the follow-up commits; a post-commit rebuild changes
 VCS metadata and may change its hash without changing application behavior.
 
-**Native Linux validation of this correction is pending.** Container execution
-and GitHub CLI access were sandbox-blocked; neither was retried or worked around.
-Require hosted CI on the pushed correction before tagging `v0.22.0-rc.2`.
-Leave `v0.22.0-rc.1` unchanged; its Release/publication outcome is not established
-here. Blocked remote Git/GitHub CLI operations must be performed manually outside
-pi; local commits do not establish hosted CI or publication success.
+Native Linux validation was pending when this correction was prepared; the
+release owner subsequently reported all hosted CI green, as recorded above.
+Container execution and GitHub CLI access were sandbox-blocked; neither was
+retried or worked around. Keep existing RC tags unchanged. Blocked remote
+Git/GitHub CLI operations must be performed manually outside pi; local commits
+do not establish hosted CI or publication success.
 
 ## Original local preflight — 2026-11-01
 

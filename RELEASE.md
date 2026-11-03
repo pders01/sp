@@ -22,7 +22,7 @@ CI counterparts using the toolchain selected by `go.mod`:
 ```bash
 git status --short
 git branch --show-current
-make ci                   # tidy, CI-pinned v2 lint, race + coverage, vuln, build
+make ci                   # tidy, pinned lint, race/coverage, release checks, vuln, build
 goreleaser check
 make privacy-terminal     # macOS/Linux; fresh synthetic stores only
 make ux-terminal
@@ -41,16 +41,16 @@ use `git push --tags`, or force-update published tags as part of this release.
 Coordinate the branch/history cleanup separately, inspect the remote's current
 OID without fetching old objects, and use an explicit expected-OID lease for an
 approved branch rewrite. Existing tag cleanup requires a separate decision.
-The user subsequently pushed rewritten main and `v0.22.0-rc.1`; Ubuntu CI
-reported a terminal-reader cancellation race. The proposed rc.2 correction must
-pass hosted CI before tagging. Do not replace rc.1. See the updated preflight;
-its original local results are historical, not hosted Linux verification.
+The release owner subsequently reported all hosted CI green through `2f99dd4`
+and the v0.22.0-rc.3 GoReleaser workflow green. Earlier Linux/Windows failures are
+fixed; keep their RC tags unchanged. See the updated preflight for current versus
+historical evidence. Stable v0.22.0 promotion is now approved, subject to CI on
+its final preparation commit and publication verification.
 
-**Release gates:** Windows interactive flows currently fail closed pending a
-safe console adapter. The blocked live model-driven security exercise and
-independent/native-platform validation are not completed by CI. Prefer an
-explicitly labelled release candidate; do not describe this as a fully validated
-stable cross-platform/privacy release.
+**Scope limits:** Windows interactive flows currently fail closed pending a
+safe console adapter. The blocked live exercise, independent audit and broader
+native GUI/accessibility validation are not completed by CI. A stable release
+channel does not certify these capabilities; retain the release notes' limits.
 
 ### 2. Create a Release
 
@@ -62,7 +62,7 @@ workflow does not wait for a separate CI run.
 For an approved stable version, the release script creates **and pushes** a tag:
 
 ```bash
-./scripts/release.sh 0.1.0
+./scripts/release.sh 0.22.0
 ```
 
 This script will:
@@ -72,17 +72,27 @@ This script will:
 - Create and push a git tag
 
 The script intentionally accepts stable `X.Y.Z` versions only. After approval,
-a release candidate can be tagged and pushed explicitly (example only; not run
-by preflight):
+a stable promotion can instead be tagged and pushed explicitly after main is
+pushed and its hosted CI is green (example only; not run by preflight):
 
 ```bash
-git tag -a v0.22.0-rc.2 -m 'Release v0.22.0-rc.2'
-git push origin refs/tags/v0.22.0-rc.2
+git tag -a v0.22.0 -m 'Release v0.22.0'
+git push origin refs/tags/v0.22.0
 ```
 
+Do not run both methods. The helper refuses an existing exact stable tag but
+allows promotion when only `v0.22.0-rc.*` tags exist. Local tags and commits can
+be prepared in pi; sandbox-blocked remote operations must be performed manually
+outside pi.
+
 GoReleaser detects prerelease tags automatically. Prereleases do not update the
-stable Homebrew formula (`brews.skip_upload: auto`). Snapshot builds publish
-nothing; they are packaging smoke tests, not validated/tagged releases.
+stable Homebrew formula (`brews.skip_upload: auto`). Do not merely rename an RC
+release or clear its prerelease flag: that does not rebuild version metadata or
+rerun the skipped tap publication. A stable `v0.22.0` tag enables
+the tap upload. RC success does not validate `HOMEBREW_TAP_TOKEN`: it needs
+contents-write permission on `pders01/homebrew-sp`, separately from the workflow's
+application-repository `GITHUB_TOKEN`. Never paste tokens into logs or commands.
+Snapshot builds publish nothing; they are packaging smoke tests, not releases.
 
 ### 3. Automated Release Process
 
@@ -93,23 +103,29 @@ When you push a tag, GitHub Actions will automatically:
    - Linux (amd64, arm64)
    - Windows (amd64)
 
-2. **Create GitHub Release**: Upload the binaries and create a release with changelog
+2. **Create GitHub Release**: Upload the binaries and publish `docs/release-notes.md`, including compatibility and privacy limitations
 
 3. **Update Homebrew Tap**: Automatically update the formula in `homebrew-sp` with:
    - New version number
    - Correct download URLs
    - SHA256 checksums
 
-### 4. Manual Verification (Optional)
+### 4. Publication and Homebrew Verification
 
-After the release completes, you can verify the Homebrew tap:
+Confirm the stable release is not marked prerelease; check all five archives,
+checksums, licenses and binary version/commit metadata. Then verify that the tap
+formula names v0.22.0, its four supported-platform URLs and their matching SHA256
+hashes. No native Windows interactive support is implied by its Windows archive.
+
+The workflow can create the GitHub release before failing to upload the tap.
+Inspect both outcomes; do not move the stable tag to repair a tap-only failure.
+After the release completes, verify the Homebrew tap outside pi:
 
 ```bash
-# Test the tap locally
+brew update
 brew tap pders01/sp
-brew install sp
-
-# Check the installed version
+brew install pders01/sp/sp   # or: brew upgrade pders01/sp/sp
+brew test sp
 sp --version
 ```
 
@@ -216,7 +232,7 @@ GOOS=darwin GOARCH=amd64 go build -o sp-darwin-amd64 ./cmd/sp
 ```
 
 `make ci` runs the local counterparts (`deps → pinned lint → race/coverage →
-vulnerability scan → build`). Native matrix execution, POSIX PTYs, Linux fuzz
+hermetic release-helper tests → vulnerability scan → build`). Native matrix execution, POSIX PTYs, Linux fuzz
 checks, and external coverage upload are separate jobs/steps in GitHub Actions;
 local preflight does not replace those results.
 
@@ -224,5 +240,5 @@ local preflight does not replace those results.
 
 - The release process is fully automated once a tag is pushed
 - GoReleaser handles all platform-specific builds and packaging
-- The Homebrew tap is updated automatically with each release
+- The Homebrew tap is updated automatically with stable releases, not RCs
 - Users get the latest version by running `brew upgrade sp` 

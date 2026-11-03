@@ -1,19 +1,22 @@
-# Draft next release — proposed v0.22.0-rc.2
+# SP v0.22.0
 
-The user pushed v0.22.0-rc.1; its Ubuntu CI reported a terminal-cancellation data
-race. This proposed correction leaves that tag unchanged. No rc.2 tag has been
-created. Require green hosted CI on the correction before tagging; rc.1's
-Release/publication outcome is not established here.
+Promotes the application validated through v0.22.0-rc.3 to the stable release and
+Homebrew channels. Earlier release-candidate tags remain unchanged. Stable is a
+release-channel designation, not an independent security audit or a claim of
+Windows interactive support.
 
-## Correction since rc.1
+## Release-candidate corrections
 
 - Cancel and join active Unix terminal reads before closing internal polling/pipe
   descriptors during forced shutdown. Caller stdin remains open, and literal
   paste/privacy boundaries are unchanged. The dependency patch is locally
   attributed; CI retains race detection and adds 100 Linux cancellation repeats.
-- Native Linux verification of the correction is still pending. Local macOS
-  race/coverage, repeated regressions and all 14 privacy PTYs pass. See
-  [release preflight](release-preflight.md).
+- Make command-start error assertions and quoted recovery-path checks portable
+  across Windows and Unix, including drive, UNC and control-containing paths.
+  Runtime command execution and recovery output are unchanged.
+- Hosted CI and the rc.3 GoReleaser workflow passed, as reported by the release
+  owner. See [release preflight](release-preflight.md) for the distinction between
+  these results, historical local evidence, and remaining assurance limits.
 
 ## Highlights
 
@@ -37,8 +40,8 @@ Release/publication outcome is not established here.
 
 - **Windows interactive views, masked unlock and private writing currently fail
   closed** pending a safe console input adapter. Shared CLI operations and bare
-  legacy external editing remain available. Windows cross-compilation is not
-  native interactive validation.
+  legacy external editing remain available. Passing Windows unit CI does not
+  restore the unsupported interactive console path.
 - Privacy is opt-in. Stop other SP instances and old writers, back up the store,
   and follow [the privacy guide](privacy.md) before migration. Retain the wrapped
   identity metadata with encrypted notes/recovery files and keep the passphrase
@@ -53,13 +56,17 @@ Release/publication outcome is not established here.
   are not universally contained. Graceful recovery does not cover SIGKILL or every
   terminal, storage or runtime failure.
 - Independent cryptographic review, native platform sign-off, and the separate
-  provider-blocked live exercise are not complete. Do not label this candidate
+  provider-blocked live exercise are not complete. Do not label this release
   independently audited or fully adversarially validated.
 
 ## Release status
 
-Local CI-equivalent checks and packaging evidence are tracked in
-[release preflight](release-preflight.md). Hosted CI must pass on the exact
-approved commit before tagging. Nothing in this document authorizes a push,
-publication, replacement of existing tags, or an update to the stable Homebrew
-formula from a prerelease.
+A stable `v0.22.0` tag starts the Release workflow and enables the Homebrew formula
+update; prereleases continue to skip that update. GoReleaser publishes these
+notes with the release. Confirm the stable assets, checksums, version metadata
+and tap update after publication; an earlier green RC workflow did not exercise
+the stable tap upload or its token permissions.
+
+The source checkout includes a local cancelreader module replacement. Keep
+`third_party/cancelreader` when building from source; version-suffixed
+`go install ...@version` remains unsupported while this patch is required.
