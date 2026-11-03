@@ -77,6 +77,8 @@ jobs:
     - uses: actions/setup-go@v5
       with:
         go-version-file: go.mod
+    - name: Validate release helper (stub Git; no publication)
+      run: make test-release
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v8
       with:

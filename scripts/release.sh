@@ -6,7 +6,7 @@
 
 set -e
 
-if [ $# -eq 0 ]; then
+if [ $# -ne 1 ]; then
     echo "Usage: $0 <version>"
     echo "Example: $0 0.1.0"
     exit 1
@@ -36,13 +36,10 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 # Check if tag already exists
-if git tag -l | grep -q "v$VERSION"; then
+if git show-ref --verify --quiet "refs/tags/v$VERSION"; then
     echo "Error: Tag v$VERSION already exists"
     exit 1
 fi
-
-# Update version in go.mod if needed (optional)
-# sed -i '' "s/^go 1\.[0-9]*$/go 1.24/" go.mod
 
 # Create and push tag
 echo "Creating tag v$VERSION..."

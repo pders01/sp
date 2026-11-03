@@ -1,4 +1,4 @@
-.PHONY: all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal ux-terminal design-terminal design-capture privacy-fuzz vuln
+.PHONY: all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal ux-terminal design-terminal design-capture privacy-fuzz vuln test-release
 
 # Variables
 BINARY_NAME=sp
@@ -39,6 +39,11 @@ test-race:
 	@echo "Running tests with race detection..."
 	@go test -race -v -coverprofile=$(COVERAGE_FILE) ./...
 	@go test -race -v github.com/muesli/cancelreader
+
+## test-release: Validate the release helper without changing refs or contacting remotes
+test-release:
+	@bash -n scripts/release.sh
+	@python3 -m unittest discover -s scripts -p 'test_release.py'
 
 ## coverage: Generate test coverage report
 coverage:
@@ -145,7 +150,7 @@ check: lint test build
 	@echo "All checks passed!"
 
 ## ci: Run CI pipeline
-ci: deps lint test-race vuln build
+ci: deps lint test-race test-release vuln build
 	@echo "CI pipeline complete"
 
 ## release: Create a new release using GoReleaser
