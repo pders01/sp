@@ -32,11 +32,13 @@ run: build
 test:
 	@echo "Running tests..."
 	@go test -v ./...
+	@go test -v github.com/muesli/cancelreader
 
 ## test-race: Run tests with race condition detection
 test-race:
 	@echo "Running tests with race detection..."
 	@go test -race -v -coverprofile=$(COVERAGE_FILE) ./...
+	@go test -race -v github.com/muesli/cancelreader
 
 ## coverage: Generate test coverage report
 coverage:

@@ -28,6 +28,11 @@ jobs:
         go-version-file: go.mod
     - name: Run unit tests and race detector
       run: go test -v -race '-coverprofile=coverage.out' ./...
+    - name: Test cancellation dependency lifecycle
+      run: go test -race github.com/muesli/cancelreader
+    - name: Repeat Linux terminal cancellation race regression
+      if: runner.os == 'Linux'
+      run: go test -race -count=100 -run '^TestTerminalStreamCancellationRetainsCallerFile$' ./internal/tui
     - name: Private terminal integration (synthetic stores only)
       if: runner.os != 'Windows'
       shell: bash
