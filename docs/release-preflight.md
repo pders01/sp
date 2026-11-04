@@ -1,12 +1,18 @@
 # Release preflight and hosted follow-up
 
-## Stable v0.22.0 promotion
+## Current release status — v0.22.0
 
 The release owner reported all hosted CI green after `2f99dd4`, then reported the
-v0.22.0-rc.3 GoReleaser run green. That tag points at
-`2f99dd4588ff3994c97ecad9756eb8afc045cf1d`. Run URLs/IDs and downloaded release
-asset hashes were not supplied; these are owner-reported hosted results, not
-independently retrieved evidence. The earlier Linux/Windows failures below are
+v0.22.0-rc.3 GoReleaser run green. That RC tag points at
+`2f99dd4588ff3994c97ecad9756eb8afc045cf1d`. The owner subsequently reported CI green
+on the stable-preparation commit. The annotated local `v0.22.0` tag was then
+created at `b8f4eb34d0e45416395920718bc605c42b9d1dd5`; earlier RC tags were not
+changed. Final CI and local tagging are complete, not pending preparation steps.
+
+Run URLs/IDs, confirmation of the stable tag push/release/tap update, and
+downloaded asset hashes were not supplied. Hosted results are owner-reported,
+not independently retrieved evidence. Documentation-only follow-ups on `main`
+do not move this tag or retroactively change its bundled documentation/assets. The earlier Linux/Windows failures below are
 historical, not still-open CI blockers. Windows interactive input is still
 intentionally unsupported despite passing native Windows unit CI.
 
@@ -32,9 +38,10 @@ Stable-promotion preparation changes only documentation and release automation:
   stable release or an upload attempt. Do not upload its assets or formula;
   stable publication rebuilds them using the actual stable tag.
 
-**Stable v0.22.0 and its Homebrew update are not yet confirmed published.** Push
-this preparation commit and require hosted CI on it before creating/pushing the
-stable tag. A stable tag starts publication immediately. The release workflow
+**Stable v0.22.0 and its Homebrew update are not yet confirmed published.**
+The existing annotated tag can be pushed outside pi if that has not already
+happened; do not create it again or move it to newer documentation commits.
+Pushing that tag starts publication immediately. The release workflow
 has contents-write permission on the application repository, but the separate
 `HOMEBREW_TAP_TOKEN` must have contents-write access to `pders01/homebrew-sp`.
 A stable-only guard fails before GoReleaser if the tap token is empty, without
@@ -50,7 +57,23 @@ by local snapshot checks. Independent audit, native GUI/accessibility testing,
 private Neovim integration and the provider-blocked exercise remain outside this
 stable-channel promotion.
 
-## Hosted Ubuntu cancellation race — proposed rc.2 correction
+## Documentation follow-up after stable tagging
+
+Post-tag documentation on `main` removes stale unreleased/draft labels, records
+completed final CI and local stable tagging, and explicitly labels historical
+candidate reports. It does not change v0.22.0, its bundled documentation or any
+published assets. Stable push/publication/Homebrew outcomes remain unconfirmed.
+
+The [agent hook and weekly-summary guide](agent-hooks.md) supplies the missing
+issue #4 recipe: deliberately public per-session manifests, an opt-in SessionEnd
+configuration, bounded append helper and shared-only weekly collector. Extracted
+examples passed local synthetic locked-store checks, including retry dedup,
+private-ciphertext preservation, rejected unsafe inputs, timeouts and explicit
+missing/no-shared/error handling. No user settings/hooks were installed, no
+transcripts were read and no live model trial was performed. Actual GitHub
+comments/closures remain manual because that access was sandbox-blocked.
+
+## Historical hosted Ubuntu failure and rc.2 correction
 
 The user subsequently pushed rewritten main at `128413a` and the annotated tag
 `v0.22.0-rc.1`. The Ubuntu job reported a data race in
@@ -107,7 +130,7 @@ The original next-version proposal was v0.22.0-rc.1; current candidate status is
 in [release notes](release-notes.md) and the follow-up above. Windows interactive
 operation remains intentionally fail-closed.
 
-## CI blockers addressed
+### CI blockers addressed at the original preflight
 
 - Ran the exact configured golangci-lint **v2.5.0**, rather than treating vet or
   the installed v1 binary as equivalent. The uncapped initial report contained
@@ -128,7 +151,7 @@ operation remains intentionally fail-closed.
 - GoReleaser infers prerelease tags and skips stable Homebrew uploads for
   prereleases. Its configuration validates; actual publication is not attempted.
 
-## Evidence
+### Historical local evidence
 
 Platform: local macOS arm64, Go 1.25.13. Application/CI source through `b37c4cd`,
 with release documentation in the working tree. Local acceptance binary:
@@ -176,7 +199,7 @@ The fixtures and local tool/package artifacts are under ignored
 `.privacy-adversarial/`. Earlier remediation hashes and results remain historical,
 not substituted for this candidate. No private-note transcripts are stored.
 
-## Required checks outside pi / after branch approval
+### Original checks requested outside pi / after branch approval
 
 The sandbox **blocked the Linux container operation**. It was not inspected,
 retried or worked around. Please run the intended check manually outside pi from
@@ -197,16 +220,17 @@ docker run --rm --cpus=4 --memory=6g \
 This uses synthetic stores; root containers skip the permission-injection signal
 check because root bypasses directory write permissions. Image architecture is
 host-selected; emulated amd64 execution is not native amd64 verification. Native
-Windows CI is still required; cross-compilation does not test Windows runtime
-locking/ACLs or restore the explicitly unsupported interactive console path.
+Windows CI was still required at this original snapshot; later owner-reported
+passes are recorded above. Cross-compilation is not runtime locking/ACL testing,
+and native unit CI does not restore the unsupported interactive console path.
 
-After approving the coordinated history update, require all hosted jobs on the
-exact pushed commit: Linux/macOS/Windows race/coverage, Linux/macOS private PTYs,
-Linux fuzzing, reachable vulnerabilities, pinned lint and build/artifact jobs.
+The original gate required all hosted jobs on the exact pushed commit:
+Linux/macOS/Windows race/coverage, Linux/macOS private PTYs, Linux fuzzing,
+reachable vulnerabilities, pinned lint and build/artifact jobs.
 External Codecov/tap settings, tokens, remote rules and release permissions were
 not inspected or proven by local checks.
 
-## Push and release decisions
+### Original push and release decisions
 
 `git-filter-repo` removed `TODO.md` from local history and rewrote existing branch
 and tag IDs. The file remains local and ignored via `.git/info/exclude`.

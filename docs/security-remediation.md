@@ -98,9 +98,14 @@ guarantee. Graceful draft recovery cannot survive SIGKILL, process loss, or ever
 terminal/runtime/storage failure. Go memory erasure and physical power-loss
 behavior are not guaranteed.
 
-## Verification
+## Historical local verification
 
-Final application source through `31a5ad2`, with the added privacy PTY checks and
+This section records the earlier remediation candidate, not the current tagged
+release. For later owner-reported hosted CI and the v0.22.0 tag, consult
+[release preflight](release-preflight.md). Do not substitute these hashes or
+platform limits for that newer evidence or for downloaded release verification.
+
+Application source through `31a5ad2`, with the added privacy PTY checks and
 documentation in the working tree, produced tested candidate SHA256:
 
 ```text
@@ -143,8 +148,10 @@ remain local under `review-parent/`, `review-tui/`, `review-storage/`,
 Earlier intermediate failures were investigated, not counted as final passes.
 
 Installed golangci-lint v1 is incompatible with the project's v2 configuration;
-vet is not a full configured-lint sign-off. No native Windows/Linux/GUI runtime,
-physical power-loss experiment, remote CI/release publication, independent
-cryptographic/dependency audit, or completed live model-driven trial is claimed.
-The provider-blocked trial was not retried or worked around. Those release and
-architecture gates remain separate from fixing these source findings.
+vet is not a full configured-lint sign-off. These historical local checks did not
+include native Windows/Linux runtime or remote publication verification. Later
+native CI passes were reported by the release owner and are recorded separately.
+No native GUI/accessibility sign-off, physical power-loss experiment, independent
+cryptographic/dependency audit or completed live model-driven trial is claimed.
+The provider-blocked trial was not retried or worked around. Stable publication
+and Homebrew verification remain unconfirmed by the evidence supplied here.

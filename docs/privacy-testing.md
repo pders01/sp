@@ -1,10 +1,11 @@
 # Privacy verification procedure (synthetic data only)
 
 This is a test procedure for [opt-in privacy](privacy.md), **not a passing
-adversarial report**. Actual [results and gaps](privacy-review.md) are recorded
-separately, including the provider-blocked live trial. The
-[validation follow-up](privacy-validation.md) adds real PTY, bounded fuzz, and
-dependency-scan evidence. No independent cryptographic audit is claimed.
+adversarial report**. The [initial review](privacy-review.md) and
+[validation follow-up](privacy-validation.md) record historical results and gaps,
+including the provider-blocked live trial, real PTY, bounded fuzz and dependency
+checks. [Release preflight](release-preflight.md) records the latest supplied
+release status. No independent cryptographic audit is claimed.
 
 ## Authorization and isolation first
 
@@ -92,6 +93,16 @@ a provider restriction. Terminal results are redacted and transcripts are not
 saved. Preserve explicit distinctions between zero reachable advisories and
 advisories elsewhere in imported/required dependencies.
 
+### Current release evidence versus historical snapshots
+
+The release owner reported native Linux/macOS/Windows CI green through the final
+stable-preparation commit; the annotated v0.22.0 tag points at `b8f4eb3`. Stable
+publication, downloaded-asset verification and the Homebrew update have not yet
+been confirmed here. Passing native Windows unit CI does not enable the
+explicitly unsupported interactive console adapter or establish GUI/accessibility
+and ACL guarantees. Historical cross-compilation-only results below describe
+their own candidates, not the latest CI status.
+
 ### Combined review remediation
 
 See [the current remediation report](security-remediation.md) for the shared
@@ -114,7 +125,7 @@ That candidate's byte/paste adapter was scoped to the standalone form; its
 results did not cover the other legacy decoder contexts. The current shared
 boundary and coverage are recorded separately above.
 
-### Cohesive redesign: completed local validation
+### Cohesive redesign: historical local validation snapshot
 
 The redesign is implemented, separately from the completed 40-item UX backlog.
 Full normal/race suites, vet and build pass. Eleven privacy-terminal checks,

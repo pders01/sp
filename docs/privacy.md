@@ -1,8 +1,9 @@
-# Opt-in privacy (unreleased)
+# Opt-in privacy (v0.22.0)
 
-This document describes the implementation in this source tree, not a claim that
-an installed release already supports it or that it has passed a security audit.
-Check your build's command help before use. Read the
+This guide describes privacy as implemented for v0.22.0. Older installed builds
+may not support these commands or storage guarantees; check `sp --version` and
+your build's command help before use. A versioned guide is not a claim of a
+completed security audit or verification of downloaded release artifacts. Read the
 [latest validation results and remaining gaps](privacy-validation.md) alongside the
 [verification procedure](privacy-testing.md). The live model-driven trial was
 blocked by the provider; it is not a completed adversarial pass. No independent
@@ -135,6 +136,8 @@ sp shared 2026-01-15
 
 Dates use `YYYY-MM-DD`. The `--` separates CLI options from a bullet beginning
 with `-`. `--source` is a self-reported label, not an authenticated identity.
+The [agent-hook and weekly-summary recipe](agent-hooks.md) uses only these public
+operations and explicitly reviewed public text, not transcripts or private reads.
 
 - `sp shared <date>` reads only the shared area. It must not unlock, decrypt, or
   fall back to displaying private content.
@@ -440,8 +443,12 @@ unless independently removed.
 The cohesive TUI redesign and review remediations are implemented. The
 [release preflight](release-preflight.md) records current pinned-lint,
 race/coverage, synthetic PTY and packaging evidence, including platform/manual
-limitations. Earlier candidate evidence remains historical, not native
-GUI/Windows, accessibility, independent-audit or release sign-off.
+limitations. The release owner reports native matrix CI green through the final
+stable-preparation commit; the annotated v0.22.0 tag points at `b8f4eb3`. Stable
+publication, downloaded artifacts and the Homebrew update still need confirmation.
+Earlier candidate evidence remains historical; neither that evidence nor native
+unit CI establishes Windows interactive support, GUI/accessibility validation,
+or independent audit sign-off.
 
 [Privacy testing](privacy-testing.md) specifies deterministic checks and a
 synthetic-only, black-box adversarial exercise. Required checks cover ciphertext

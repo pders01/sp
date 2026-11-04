@@ -3,7 +3,7 @@
 CLI/TUI scratchpad for daily notes, todos, and quick thoughts. Built
 with Go and the [charm.sh](https://charm.sh) toolchain.
 
-> **Opt-in privacy (unreleased):** existing notes stay plaintext until you
+> **Opt-in privacy (v0.22.0):** existing notes stay plaintext until you
 > explicitly enable it. Privacy encrypts every private day (including today),
 > while shared agent history deliberately remains plaintext. Read the
 > [privacy guide, migration instructions, and security limits](docs/privacy.md)
@@ -136,6 +136,14 @@ unconfirmed publication are explicitly labelled unsaved. Interactive
 migration/reversal reports stage/count progress, not secrets. Raw shared reads and quiet append remain the
 default; `--json` is opt-in and contains shared data only. Passphrase rotation and MCP
 access are not implemented. See the [full guide](docs/privacy.md).
+
+### Agent automation
+
+See [agent session-end notes and weekly summaries](docs/agent-hooks.md) for an
+opt-in hook using reviewed public manifests and a collector that reads only
+`sp shared --json`. It does not install hooks, read transcripts, unlock private
+notes or provide a secrets detector. All summaries remain deliberate public
+shared content.
 
 ### Flow
 
@@ -454,9 +462,12 @@ runtime evidence.
 Local CI-equivalent checks and matching synthetic PTYs pass; see the
 [release preflight record](docs/release-preflight.md) for exact tool versions,
 candidate hashes, packaging evidence and remaining manual/hosted checks.
-The release owner reports hosted CI and the rc.3 release workflow green. Stable
-v0.22.0 preparation retains the documented restrictions; passing Windows unit CI
-is not Windows interactive, native GUI/accessibility, or independent audit sign-off.
+The release owner reports hosted CI green through the final preparation commit,
+plus the rc.3 release workflow green. The annotated `v0.22.0` tag identifies
+`b8f4eb3`; stable publication and the Homebrew update still need confirmation.
+Passing Windows unit CI is not Windows interactive, native GUI/accessibility,
+or independent audit sign-off. Later documentation updates on `main` do not
+change the tagged release or its assets.
 
 ## License
 

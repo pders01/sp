@@ -32,8 +32,9 @@ make design-terminal
 Local success is not proof that GitHub's native Linux/macOS/Windows matrix,
 Codecov, publication permissions, or tap updates will pass. Use the
 [preflight record](docs/release-preflight.md) and review the
-[draft release notes](docs/release-notes.md). The sandbox blocked the Linux
-container check; run it outside pi as described in the preflight record.
+[release notes](docs/release-notes.md). The preflight separates owner-reported
+hosted results from historical local checks and the sandbox-blocked container
+operation; the latter was not retried inside pi.
 
 **History rewrite warning:** `TODO.md` was removed with `git-filter-repo`, which
 changed branch and existing local tag IDs. Do not `git pull` old history back in,
@@ -41,18 +42,33 @@ use `git push --tags`, or force-update published tags as part of this release.
 Coordinate the branch/history cleanup separately, inspect the remote's current
 OID without fetching old objects, and use an explicit expected-OID lease for an
 approved branch rewrite. Existing tag cleanup requires a separate decision.
-The release owner subsequently reported all hosted CI green through `2f99dd4`
-and the v0.22.0-rc.3 GoReleaser workflow green. Earlier Linux/Windows failures are
-fixed; keep their RC tags unchanged. See the updated preflight for current versus
-historical evidence. Stable v0.22.0 promotion is now approved, subject to CI on
-its final preparation commit and publication verification.
+The release owner reported all hosted CI green through the final preparation
+commit `b8f4eb3`, plus the v0.22.0-rc.3 GoReleaser workflow green. The annotated
+`v0.22.0` tag now points at `b8f4eb34d0e45416395920718bc605c42b9d1dd5`.
+Earlier Linux/Windows failures are fixed; keep their RC tags and the stable tag
+unchanged. Stable publication, release assets and the Homebrew update still need
+confirmation. See the preflight for current versus historical evidence.
 
 **Scope limits:** Windows interactive flows currently fail closed pending a
 safe console adapter. The blocked live exercise, independent audit and broader
 native GUI/accessibility validation are not completed by CI. A stable release
 channel does not certify these capabilities; retain the release notes' limits.
 
-### 2. Create a Release
+### 2. Publish a prepared tag or create a future release
+
+**Current v0.22.0:** its annotated tag already exists on the green preparation
+commit. If it has not been pushed, publish that exact tag outside pi:
+
+```bash
+git push origin refs/tags/v0.22.0
+```
+
+Do not run the tag-creation helper again for v0.22.0, move the tag onto newer
+`main` documentation commits, or overwrite existing release assets. Confirm the
+stable workflow and tap outcome before recording publication as complete.
+
+**Future releases:** choose an approved, unused version. The v0.22.1 commands
+below are examples only, not approval to create that next release.
 
 First push only the approved branch update and wait for **all** hosted CI jobs
 to pass on that exact commit. Confirm the version and platform/security limits
@@ -62,7 +78,7 @@ workflow does not wait for a separate CI run.
 For an approved stable version, the release script creates **and pushes** a tag:
 
 ```bash
-./scripts/release.sh 0.22.0
+./scripts/release.sh 0.22.1
 ```
 
 This script will:
@@ -76,12 +92,12 @@ a stable promotion can instead be tagged and pushed explicitly after main is
 pushed and its hosted CI is green (example only; not run by preflight):
 
 ```bash
-git tag -a v0.22.0 -m 'Release v0.22.0'
-git push origin refs/tags/v0.22.0
+git tag -a v0.22.1 -m 'Release v0.22.1'
+git push origin refs/tags/v0.22.1
 ```
 
 Do not run both methods. The helper refuses an existing exact stable tag but
-allows promotion when only `v0.22.0-rc.*` tags exist. Local tags and commits can
+allows promotion when only that version's prerelease tags exist. Local tags and commits can
 be prepared in pi; sandbox-blocked remote operations must be performed manually
 outside pi.
 

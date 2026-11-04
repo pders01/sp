@@ -1,15 +1,19 @@
 # Privacy implementation review — 2026-10-30
 
-This is the initial review. The [validation follow-up](privacy-validation.md)
-records later defects/fixes, the patched toolchain/dependencies, actual terminal
-checks, bounded fuzz results, and the latest candidate identity.
+This is the historical initial review, not the current release record. The
+[validation follow-up](privacy-validation.md) records that later local snapshot's
+defects/fixes, patched toolchain/dependencies, terminal checks and bounded fuzz
+results. For subsequent remediations, owner-reported green native CI and the
+v0.22.0 tag, see [remediation](security-remediation.md) and
+[current release status](release-preflight.md). Historical candidate hashes and
+missing-evidence statements below are not claims about current release assets.
 
-**Status: automated checks passing; same-model source review completed; live
-model-driven trial incomplete (provider-blocked). The full adversarial release
-gate is NOT satisfied.** This is not an independent security/cryptographic audit
+**Status at this review: automated checks passing; same-model source review
+completed; live model-driven trial incomplete (provider-blocked). Full
+adversarial security validation was NOT established.** This is not an independent security/cryptographic audit
 or evidence of protection from unrestricted same-user malware.
 
-## Candidate and environment
+## Historical candidate and environment
 
 - Repository base: `9b906c63279534754cce3caaa97d71918e20e9ae`, plus uncommitted
   privacy implementation changes. This report does not describe a released build.
@@ -126,11 +130,12 @@ This is neither an observed successful disclosure nor evidence that the candidat
 resisted a completed attack. The worker also operated within the host sandbox;
 it was not an unrestricted same-user OS-security experiment.
 
-## Remaining validation and limits
+## Validation not established by this initial review
 
-Before describing this as adversarially validated, a permitted, completed fresh
-model-driven exercise against the final candidate is still required. Also not
-established here:
+This initial review did not establish adversarial validation. The separately
+provider-blocked live trial remains unperformed and must not be retried or evaded.
+Later terminal/CI evidence is recorded in the linked reports, not backdated into
+this snapshot. Other capabilities not established by this initial review:
 
 - Independent cryptographic/dependency audit or exhaustive parser/fuzz testing.
 - Real terminal end-to-end enable/unlock/edit/recover automation.

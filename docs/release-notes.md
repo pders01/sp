@@ -15,7 +15,7 @@ Windows interactive support.
   across Windows and Unix, including drive, UNC and control-containing paths.
   Runtime command execution and recovery output are unchanged.
 - Hosted CI and the rc.3 GoReleaser workflow passed, as reported by the release
-  owner. See [release preflight](release-preflight.md) for the distinction between
+  owner. See [release preflight](https://github.com/pders01/sp/blob/v0.22.0/docs/release-preflight.md) for the distinction between
   these results, historical local evidence, and remaining assurance limits.
 
 ## Highlights
@@ -34,7 +34,7 @@ Windows interactive support.
   application owns cancellation and reports whether insertion was published.
 - Security/correctness fixes for signal recovery, display controls/entities,
   migration durability and policy races, template descendant-pipe waits and
-  shared-first personal creation timestamps. See [remediation](security-remediation.md).
+  shared-first personal creation timestamps. See [remediation](https://github.com/pders01/sp/blob/v0.22.0/docs/security-remediation.md).
 
 ## Important compatibility and privacy limits
 
@@ -43,7 +43,7 @@ Windows interactive support.
   legacy external editing remain available. Passing Windows unit CI does not
   restore the unsupported interactive console path.
 - Privacy is opt-in. Stop other SP instances and old writers, back up the store,
-  and follow [the privacy guide](privacy.md) before migration. Retain the wrapped
+  and follow [the privacy guide](https://github.com/pders01/sp/blob/v0.22.0/docs/privacy.md) before migration. Retain the wrapped
   identity metadata with encrypted notes/recovery files and keep the passphrase
   safe. Old writers can damage the newer storage format.
 - Decryption deliberately creates plaintext. Re-enable is not key rotation,

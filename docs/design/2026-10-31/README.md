@@ -2,7 +2,9 @@
 
 **Status: implemented and locally validated.** The original concepts are retained
 as historical design studies; the screenshots in this section are actual current
-production `View()` output from synthetic fixtures.
+production `View()` output from the captured synthetic fixtures. This dated study
+is not a regenerated atlas of every later commit; current release evidence is
+recorded in [release preflight](../../release-preflight.md).
 
 The product remains a quiet daily notebook. Encryption changes access and save
 guarantees, not the product's visual language. The redesign does not settle the
@@ -23,9 +25,11 @@ the initial redesign snapshot; `make design-capture` regenerates them from curre
 source. Unit tests, TUI race tests, vet, all 402 frame-bound checks and four live
 synthetic dark/light/narrow design-terminal cases pass. The latter tested binary
 SHA256 `aaf6cbf684c8df6ff6b5d12687bdd2390b7271f6889804bd7a3218372124af09`,
-fixture `.privacy-adversarial/design-terminal-0e1b0398fb282034`. Windows is
-cross-compiled only, not natively validated. No user note text was copied into
-fixtures or screenshots.
+fixture `.privacy-adversarial/design-terminal-0e1b0398fb282034`. That capture
+candidate had Windows cross-compilation only. Later native unit CI was reported
+green separately; neither result establishes native Windows interactive or
+GUI/accessibility validation. No user note text was copied into these fixtures
+or screenshots.
 
 ## Current implementation
 

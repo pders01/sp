@@ -1,12 +1,19 @@
 # Privacy validation follow-up — 2026-10-30
 
+**Historical report:** the candidate, hashes and local checks below describe the
+2026-10-30 validation snapshot, not the v0.22.0 release artifacts. See the
+[current release record](release-preflight.md) for later fixes, owner-reported
+green native matrix CI and the stable tag. Earlier failed/pending CI statements
+below are historical; broader platform assurance and the provider-blocked trial
+remain separate from those subsequently reported CI passes.
+
 **Local deterministic, terminal, race, lint, and bounded fuzz checks pass. The
 live model-driven trial remains provider-blocked and has not been retried.**
-This follow-up does not satisfy that separate release gate or constitute an
-independent cryptographic audit. See the [initial review](privacy-review.md) for
+This historical follow-up does not complete separate adversarial security
+validation or constitute an independent cryptographic audit. See the [initial review](privacy-review.md) for
 its scope, findings, and the blocked trial.
 
-## Candidate and scope
+## Historical candidate and scope
 
 - Validation used then-uncommitted source changes based on
   `9b906c63279534754cce3caaa97d71918e20e9ae`. Subsequent review commits package
@@ -130,7 +137,7 @@ Do not describe this as an entirely advisory-free dependency graph. Results are
 limited to the current vulnerability database and static call-graph analysis;
 future code paths or database updates can change them.
 
-## Other final checks
+## Other final checks at this snapshot
 
 Passed against the updated source:
 
@@ -147,12 +154,14 @@ Lint reported zero issues. The Windows/Linux commands validate compilation only.
 The Unix symlink regression is explicitly skipped on Windows because the test
 cannot assume symlink-creation privileges.
 
-CI now includes runtime race tests across Linux/macOS/Windows, Unix PTY checks,
-bounded Linux fuzzing, and a reachable-advisory gate. **Those workflow changes
-have not been run remotely in this session**; configuration is not passing-CI
-evidence.
+At this snapshot, CI configuration included runtime race tests across
+Linux/macOS/Windows, Unix PTY checks, bounded Linux fuzzing and a reachable-advisory
+gate, but no successful remote run had yet been supplied. That was a historical
+evidence gap, not the current status: later green CI reports are recorded in
+[release preflight](release-preflight.md). Configuration alone remains distinct
+from passing runtime evidence.
 
-## Windows CI follow-up
+## Historical Windows CI follow-up
 
 User-supplied logs from CI run `41132250043` showed two Windows failures:
 PowerShell split an unquoted coverage argument and Go treated `.out` as a package;
@@ -163,25 +172,28 @@ regular-file, wrong-passphrase, and metadata-preservation assertions still run
 on Windows. Go's `0666` mode does not validate or describe an NTFS DACL; see the
 [platform permission limits](privacy.md#storage-and-cryptography).
 
-The supplied log contains many passing Windows runtime tests, but the overall
-run failed. A successful rerun is still required; cross-compilation or a Unix
-run after these fixes must not be reported as a Windows CI pass.
+That supplied run contained many passing Windows runtime tests but failed overall.
+A successful rerun was required at the time. The owner later reported native
+matrix CI green after further Unix-reader and Windows-assertion corrections;
+see the current preflight. Cross-compilation and Unix runs were not substituted
+for that owner-reported Windows CI result.
 
 ## Platform-validation boundary
 
 A follow-up attempt to inspect local Docker configuration was denied by the
 host sandbox. That operation was stopped without retrying or using another
 access route. No container was launched and no Linux runtime result was obtained.
-Run the configured platform CI outside pi and supply its results before treating
-those runtime checks as complete.
+The later hosted results were supplied by the release owner and are recorded
+separately in the current preflight; they do not turn this blocked local attempt
+into container-execution evidence.
 
 ## Still open
 
 - The provider-blocked live same-model trial, including the final candidate.
 - Independent cryptographic/dependency review, longer fuzzing, and exhaustive
   lifecycle/error interleavings.
-- Actual Linux/Windows runtime results and filesystem/power-loss validation beyond
-  local controlled error injection.
+- Broader native GUI/accessibility, Windows interactive/ACL, and filesystem/
+  power-loss validation beyond unit CI and local controlled error injection.
 - A hostile same-user process, future-unlock tampering, OS compromise, memory/swap/
   core dumps, terminal recording, rollback, deletion, public metadata/provenance
   authenticity, and old plaintext backups remain outside the documented promise.
