@@ -62,7 +62,7 @@ func TestSharedUpdatesExplicitSecondaryAndIndependentPositions(t *testing.T) {
 	}
 }
 
-func TestSharedUpdatesIgnoreEditPublicationNavigationAndPastes(t *testing.T) {
+func TestSharedUpdatesIgnoreEditPublicationAndPastes(t *testing.T) {
 	n := sharedNotebook(t)
 	calls := 0
 	n.loader = func(string) (string, error) { calls++; return "PRIVATE_LOADED", nil }
@@ -73,8 +73,10 @@ func TestSharedUpdatesIgnoreEditPublicationNavigationAndPastes(t *testing.T) {
 	for _, msg := range []tea.Msg{
 		tea.KeyMsg{Type: tea.KeyEnter}, privacyKey("e"), privacyKey("i"),
 		privacyKey("u"), privacyKey("a"), privacyKey("d"),
-		tea.KeyMsg{Type: tea.KeyCtrlS}, tea.KeyMsg{Type: tea.KeyLeft}, tea.KeyMsg{Type: tea.KeyRight},
-		privacyKey("h"), privacyKey("l"), privacyKey("enter"),
+		tea.KeyMsg{Type: tea.KeyCtrlS}, privacyKey("enter"),
+		privacyKey("left"), privacyKey("right"),
+		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}, Paste: true},
+		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}, Alt: true},
 		privatePasteMsg("e\na\nd\nu\nc\nq"), privatePasteMsg("c"),
 		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}, Alt: true},
 	} {
@@ -113,24 +115,23 @@ func TestSharedUpdatesAvailabilityRequiresNonWhitespaceAndTruthfulAbsence(t *tes
 	}
 }
 
-func TestSharedUpdatesRefreshRemovalAndDateChangesDropProjection(t *testing.T) {
+func TestSharedUpdatesRefreshRemovalAndDateChangesStayShared(t *testing.T) {
 	n := sharedNotebook(t)
 	n.viewport.SetYOffset(12)
 	n.Update(privacyKey("c"))
 	n.shared.viewport.SetYOffset(18)
 	n.SetCurrentDate("2026-10-30")
-	if n.sharedActive() || n.sharedPositions["2026-10-31"] != 18 || n.positions["2026-10-31"] != 12 {
-		t.Fatal("date selection did not drop the shared projection and keep numeric positions")
+	if !n.sharedActive() || n.shared.date != "2026-10-30" || n.sharedPositions["2026-10-31"] != 18 || n.positions["2026-10-31"] != 12 {
+		t.Fatal("date selection did not retain shared mode and independent positions")
 	}
 	n.SetCurrentDate("2026-10-31")
-	n.Update(privacyKey("c"))
 	if n.shared.viewport.YOffset != 18 || n.viewport.YOffset != 12 {
 		t.Fatal("date selection mixed private/shared reading positions")
 	}
 	n.sharedContents[n.GetCurrentPage()] = " \n\t "
 	n.updateViewportContent()
-	if n.sharedActive() || strings.Contains(ansi.Strip(n.View()), "Shared updates available") {
-		t.Fatal("removing updates left an empty shared screen or availability placeholder")
+	if !n.sharedActive() || !strings.Contains(ansi.Strip(n.View()), "No shared updates for this day.") || strings.Contains(ansi.Strip(n.View()), "SHARED_ONLY") {
+		t.Fatal("removing updates did not show truthful absence in shared mode")
 	}
 }
 

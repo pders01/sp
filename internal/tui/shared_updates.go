@@ -23,6 +23,12 @@ func (n *Notebook) sharedActive() bool { return n.shared != nil }
 
 func (n *Notebook) sharedText(date string) string {
 	if n.privacyEnabled {
+		if available, inspected := n.sharedInspections[date]; inspected {
+			if !available {
+				return ""
+			}
+			return n.contents[date] // Fresh public inspection wins over private-page caches.
+		}
 		if n.privatePage != nil && n.privateDate == date && strings.TrimSpace(n.privatePage.Shared) != "" {
 			return n.privatePage.Shared
 		}
@@ -49,7 +55,9 @@ func (n *Notebook) closeShared() {
 	if n.shared == nil {
 		return
 	}
-	n.sharedPositions[n.shared.date] = n.shared.viewport.YOffset
+	if n.shared.ready {
+		n.sharedPositions[n.shared.date] = n.shared.viewport.YOffset
+	}
 	n.shared = nil // Drop the rendered shared projection on return.
 }
 
@@ -58,11 +66,12 @@ func (n *Notebook) sharedTitle() string {
 }
 
 func (n *Notebook) sharedStatus() string {
-	return "Not encrypted · Source labels are self-reported"
+	return "Not encrypted · Sources are self-reported"
 }
 
 func (n *Notebook) sharedFooter() string {
-	return screenFooter([]helpEntry{
+	return n.renderDateStrip() + "\n" + screenFooter([]helpEntry{
+		{keys: "←/→", label: "earlier/later", visible: true},
 		{keys: "↑/↓", label: "scroll", visible: true},
 		{keys: "Esc/c", label: "note", visible: true},
 		{keys: "?/F1", label: "help", visible: true},
@@ -75,21 +84,35 @@ func (n *Notebook) refreshShared() {
 		return
 	}
 	s := n.shared
-	text := n.sharedText(s.date)
-	if strings.TrimSpace(text) == "" {
-		n.closeShared() // There is never an empty shared placeholder screen.
-		return
+	if date := n.GetCurrentPage(); s.date != date {
+		if s.ready {
+			n.sharedPositions[s.date] = s.viewport.YOffset
+		}
+		s.date, s.ready = date, false
 	}
+	text := n.sharedText(s.date)
 	offset := n.sharedPositions[s.date]
 	if s.ready {
 		offset = s.viewport.YOffset
+		n.sharedPositions[s.date] = offset // An unavailable refresh must not erase the last reading position.
 	}
 	s.viewport.Width = max(1, n.width)
 	s.viewport.Height = max(1, n.height-viewHeight(viewHeader(n.sharedTitle(), n.sharedStatus(), n.theme.Palette(), n.width))-viewHeight(n.sharedFooter()))
-	s.viewport.SetContent(n.renderMarkdown(text))
+	content := n.renderMarkdown(text)
+	ready := strings.TrimSpace(text) != ""
+	if !ready {
+		message := "No shared updates for this day."
+		if available, inspected := n.sharedInspections[s.date]; inspected && !available {
+			message = "Shared updates unavailable for this day."
+		}
+		content = insetNotebookBody(message)
+	}
+	s.viewport.SetContent(content)
 	s.viewport.SetYOffset(offset)
-	s.ready = true
-	n.sharedPositions[s.date] = s.viewport.YOffset
+	s.ready = ready
+	if ready {
+		n.sharedPositions[s.date] = s.viewport.YOffset
+	}
 	n.resizeSharedHelp()
 }
 
@@ -115,6 +138,7 @@ func (n *Notebook) resizeSharedHelp() {
 
 func (n *Notebook) sharedKeyBindings() []helpEntry {
 	return []helpEntry{
+		{keys: "←/h →/l", label: "earlier/later saved date (stay in shared updates)", visible: true},
 		{keys: "↑/k ↓/j", label: "scroll one line", visible: true},
 		{keys: "PgUp/b PgDn/f", label: "scroll a full page", visible: true},
 		{keys: "Ctrl+U/D", label: "scroll half a page", visible: true},
@@ -128,7 +152,7 @@ func (n *Notebook) sharedKeyBindings() []helpEntry {
 }
 
 func (n *Notebook) updateShared(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.Type == tea.KeyRunes && (msg.Alt || len(msg.Runes) != 1) {
+	if msg.Paste || (msg.Type == tea.KeyRunes && (msg.Alt || len(msg.Runes) != 1)) {
 		return n, nil
 	}
 	if n.shared.help != nil {
@@ -154,6 +178,14 @@ func (n *Notebook) updateShared(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+t":
 		n.theme.Cycle()
+	case "left", "h":
+		if n.current < len(n.pages)-1 {
+			n.SetCurrentDate(n.pages[n.current+1])
+		}
+	case "right", "l":
+		if n.current > 0 {
+			n.SetCurrentDate(n.pages[n.current-1])
+		}
 	case "up", "k":
 		v.LineUp(1)
 	case "down", "j":
@@ -171,8 +203,8 @@ func (n *Notebook) updateShared(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "G", "end":
 		v.GotoBottom()
 	}
-	// Every other key is consumed, notably editing, unlock, date, templates,
-	// navigation between saved days, and publication shortcuts.
+	// Every other key is consumed, notably editing, unlock, date prompts,
+	// templates and publication shortcuts.
 	return n, nil
 }
 

@@ -65,6 +65,8 @@ func TestDesignCapture(t *testing.T) {
 		{"locked", "Locked private note", "encrypted-notebook", "Note locked.", true},
 		{"locked-shared", "Locked private note with shared updates", "encrypted-notebook", "Shared updates available", true},
 		{"shared-updates-open", "Read-only shared updates", "shared-updates", "Not encrypted", true},
+		{"shared-updates-empty", "Shared browsing on a day without updates", "shared-updates", "No shared updates for this day.", true},
+		{"shared-updates-error", "Shared browsing on an unavailable day", "shared-updates", "Shared updates unavailable for this day.", true},
 		{"locked-with-shared-open", "Shared updates while private note is locked", "shared-updates", "Not encrypted", true},
 		{"shared-updates-help", "Shared updates key reference", "shared-updates", "Shared updates", true},
 		{"locked-with-shared-help", "Locked shared updates key reference", "shared-updates", "Shared updates", true},
@@ -279,7 +281,13 @@ func designCaptureApp(t *testing.T, scene designCaptureScene, theme string, size
 			page.Private = ""
 		}
 		app.SetPrivacy(PrivacyHooks{
-			Inspect: func(string) (PublicPage, error) {
+			Inspect: func(date string) (PublicPage, error) {
+				if scene.group == "shared-updates" && date == "2026-10-30" {
+					return PublicPage{HasPrivate: true}, nil
+				}
+				if scene.id == "shared-updates-error" && date == "2026-10-28" {
+					return PublicPage{}, errors.New("synthetic public inspection failure")
+				}
 				return PublicPage{Shared: page.Shared, HasPrivate: page.HasPrivate}, nil
 			},
 			IsUnlocked: func() bool { return !locked },
@@ -322,13 +330,29 @@ func designCaptureApp(t *testing.T, scene designCaptureScene, theme string, size
 	case "shared-updates":
 		loadsBefore := privateLoads
 		runes("c")
-		for _, blocked := range []string{"u", "e", "i", "a", "d", "h", "l"} {
+		for _, blocked := range []string{"u", "e", "i", "a", "d"} {
 			runes(blocked)
 		}
+		runes("h")
+		if !nb.sharedActive() || nb.GetCurrentPage() != "2026-10-30" || !strings.Contains(ansi.Strip(nb.shared.viewport.View()), "No shared updates") || privateLoads != loadsBefore {
+			t.Fatal("shared navigation did not inspect an empty date without private loads")
+		}
+		runes("l")
+		key(tea.KeyLeft)
+		key(tea.KeyRight)
 		key(tea.KeyEnter)
 		key(tea.KeyCtrlS)
 		if !nb.sharedActive() || privateLoads != loadsBefore || privateSaves != 0 || privateUnlocks != 0 || app.privacy.prompt != nil || app.privacy.editor != nil || app.templateChooser != nil || app.dateJump != nil || nb.GetCurrentPage() != designCaptureDate {
-			t.Fatal("secondary shared viewer forwarded a private load, edit, unlock, template, or date action")
+			t.Fatal("secondary shared viewer forwarded a private load, edit, unlock, template, or date-form action")
+		}
+		if scene.id == "shared-updates-empty" || scene.id == "shared-updates-error" {
+			runes("h")
+			if scene.id == "shared-updates-error" {
+				runes("h")
+			}
+			if privateLoads != loadsBefore {
+				t.Fatal("shared absence/error date loaded private writing")
+			}
 		}
 		if strings.HasSuffix(scene.id, "help") {
 			key(tea.KeyF1)

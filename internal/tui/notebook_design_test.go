@@ -146,8 +146,8 @@ func TestNotebookSharedAppRelockDropsHiddenPrivateProjection(t *testing.T) {
 		}
 	}
 	app.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if loads != 1 || app.nb.positions[date] != 19 {
-		t.Fatal("return from shared pane loaded private writing or lost its position")
+	if loads != 2 || app.nb.positions[date] != 19 || !app.nb.privatePage.Locked {
+		t.Fatal("explicit return did not refresh the locked personal note or lost its position")
 	}
 	unlocked = true // Synthetic session transition; no real secret or storage.
 	app.refreshPrivatePage()
@@ -196,7 +196,7 @@ func TestNotebookSharedAppOwnsKeysWhileLockedWithoutPrivateLoad(t *testing.T) {
 		t.Fatal("session lock did not preserve shared viewing without a private load")
 	}
 	app.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if app.nb.sharedActive() || app.IsQuitting() || loads != initialLoads {
-		t.Fatal("return from locked shared view invoked private work or quit")
+	if app.nb.sharedActive() || app.IsQuitting() || loads != initialLoads+1 || unlocks+saves != 0 {
+		t.Fatal("explicit return did not refresh the personal note, or authorized private actions")
 	}
 }

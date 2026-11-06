@@ -203,6 +203,7 @@ def exercise(binary, root, theme, cols, rows):
     finally:
         terminal.close()
     cli("append", dates[1], "--section", "Updates", "--source", "synthetic-source", "--", "- PUBLIC_SHARED_ONLY")
+    cli("append", dates[0], "--section", "Updates", "--source", "synthetic-source", "--", "- PUBLIC_EARLIER_ONLY")
     before = {path.name: path.read_bytes() for path in store.glob("*.json")}
     shared_before = cli("shared", dates[1], "--json")
     assert b"PRIVATE_" not in shared_before, "private text in shared CLI"
@@ -215,15 +216,39 @@ def exercise(binary, root, theme, cols, rows):
         pager = [line for line in terminal.screen().splitlines() if all(day in line for day in dates)]
         assert pager and all(line.index(dates[0]) < line.index(dates[1]) < line.index(dates[2]) for line in pager), "date strip is not chronological"
 
-        def shared_is_read_only():
+        def shared_is_read_only(unlocked=False):
             terminal.visible("sp /", "Shared updates", "Read-only", "Not encrypted", "self-reported", "PUBLIC_SHARED_ONLY")
-            # No unlock, private editor, templates, date form or saved-day
-            # navigation, regardless of whether the session is locked.
-            for key in ["u", "e", "i", "\r", "a", "d", "h", "l", b"\x1b[D", b"\x1b[C", b"\x13"]:
+            # Private/form/publication actions remain blocked in either session state.
+            for key in ["u", "e", "i", "\r", "a", "d", b"\x13"]:
                 terminal.act(key, "Shared updates", "Not encrypted", "PUBLIC_SHARED_ONLY")
                 terminal.no_private()
                 for forbidden in ["Passphrase:", "Write ·", "SAVE NOW", "YYYY-MM-DD"]:
                     assert forbidden not in terminal.screen(), "shared viewer forwarded a private/form action"
+            for literal in ["h", "l", "left", "right", "c"]:
+                terminal.act(b"\x1b[200~" + literal.encode() + b"\x1b[201~", "Shared updates · " + dates[1], "PUBLIC_SHARED_ONLY")
+                terminal.no_private()
+            # Navigate all saved dates without reopening shared mode. Absence is
+            # explicit, not skipped and never an implicit personal-note return.
+            for key, day, marker in [
+                ("h", dates[0], "PUBLIC_EARLIER_ONLY"),
+                (b"\x1b[D", dates[0], "PUBLIC_EARLIER_ONLY"),
+                ("l", dates[1], "PUBLIC_SHARED_ONLY"),
+                (b"\x1b[C", dates[2], "No shared updates for this day."),
+                ("l", dates[2], "No shared updates for this day."),
+                (b"\x1b[D", dates[1], "PUBLIC_SHARED_ONLY"),
+                ("h", dates[0], "PUBLIC_EARLIER_ONLY"),
+            ]:
+                terminal.act(key, "Shared updates · " + day, "Not encrypted", marker)
+                terminal.no_private()
+            # Explicit return selects the browsed personal date, not the day on
+            # which shared mode was first opened. Then resume public browsing.
+            terminal.act("c", "Notebook · " + dates[0], "PRIVATE_LINE_000" if unlocked else "Note locked.")
+            if not unlocked:
+                terminal.no_private()
+            terminal.act("c", "Shared updates · " + dates[0], "PUBLIC_EARLIER_ONLY")
+            terminal.no_private()
+            terminal.act("l", "Shared updates · " + dates[1], "PUBLIC_SHARED_ONLY")
+            terminal.no_private()
 
         terminal.act("c", "Shared updates", "PUBLIC_SHARED_ONLY")
         shared_is_read_only()
@@ -233,7 +258,7 @@ def exercise(binary, root, theme, cols, rows):
         terminal.act(secret + "\r", "PRIVATE_LINE_000")
         terminal.act("G", "PRIVATE_LINE_079")
         terminal.act("c", "Shared updates", "PUBLIC_SHARED_ONLY")
-        shared_is_read_only()
+        shared_is_read_only(unlocked=True)
         terminal.act("\x1b", "Notebook", dates[1], "PRIVATE_LINE_079")
         terminal.act("c", "Shared updates", "PUBLIC_SHARED_ONLY")
         terminal.act("c", "Notebook", dates[1], "PRIVATE_LINE_079")

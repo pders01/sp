@@ -87,17 +87,29 @@ func TestPlainNotebookDistinguishesSavedEmptyAbsentAndSharedOnly(t *testing.T) {
 func TestRelockingSharedViewClearsHiddenPrivateRendering(t *testing.T) {
 	app := newTestApp(ModeNotebook)
 	defer app.Close()
-	unlocked := true
+	unlocked, loads := true, 0
+	initialDate := app.nb.GetCurrentPage()
+	app.nb.AddPage("2024-01-14")
 	app.SetPrivacy(PrivacyHooks{Inspect: func(string) (PublicPage, error) { return PublicPage{Shared: "PUBLIC", HasPrivate: true}, nil }, IsUnlocked: func() bool { return unlocked }, Lock: func() { unlocked = false }, Load: func(string) (PrivatePage, error) {
+		loads++
 		p := PrivatePage{Shared: "PUBLIC", HasPrivate: true, Locked: !unlocked}
 		if unlocked {
-			p.Private = "PRIVATE_CANARY"
+			p.Private = strings.Repeat("PRIVATE_CANARY\n\n", 100)
 		}
 		return p, nil
 	}})
+	app.nb.viewport.SetYOffset(19)
 	app.Update(privacyKey("c"))
+	app.Update(privacyKey("h"))
 	app.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
 	if unlocked || strings.Contains(app.nb.viewport.View(), "PRIVATE_CANARY") || strings.Contains(app.View(), "PRIVATE_CANARY") || app.nb.privatePage.Private != "" {
 		t.Fatal("relock left decrypted projections behind the shared pane")
+	}
+	if loads != 1 || !app.nb.sharedActive() || app.nb.shared.date != "2024-01-14" || app.nb.positions[initialDate] != 19 {
+		t.Fatal("shared navigation/relock loaded a personal note or lost its offset")
+	}
+	app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if loads != 2 || app.nb.privateDate != "2024-01-14" || !app.nb.privatePage.Locked {
+		t.Fatal("explicit return did not refresh the selected locked personal day")
 	}
 }

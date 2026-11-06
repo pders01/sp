@@ -300,9 +300,18 @@ func (a *App) drillToNotebook(date string) {
 }
 
 func (a *App) updateNotebook(msg tea.Msg) (tea.Model, tea.Cmd) {
-	previousDate := a.nb.GetCurrentPage()
+	previousDate, wasShared := a.nb.GetCurrentPage(), a.nb.sharedActive()
 	_, cmd := a.nb.Update(msg)
-	if a.nb.GetCurrentPage() != previousDate {
+	dateChanged := a.nb.GetCurrentPage() != previousDate
+	if a.nb.sharedActive() {
+		if a.privacy != nil && (dateChanged || !wasShared) {
+			// Browsing public updates must not load private notes, even in an
+			// already-unlocked session. Refresh the public result on each visit.
+			a.refreshPublicPage(a.nb.GetCurrentPage())
+		}
+	} else if dateChanged || (wasShared && !a.nb.IsQuitting()) {
+		// Explicit return loads the selected personal day, including same-date
+		// returns where the public data may have changed while reading.
 		a.refreshPrivatePage()
 	}
 

@@ -61,7 +61,8 @@ type Notebook struct {
 	privateDate        string
 	sharedContents     map[string]string
 	shared             *sharedUpdates
-	sharedPositions    map[string]int // Read-only shared offsets; never private text.
+	sharedPositions    map[string]int  // Read-only shared offsets; never private text.
+	sharedInspections  map[string]bool // Present: authoritative public result; false: unavailable.
 	onChange           func(date, content string)
 	onLoad             func(date, content string)
 	onRecovery         func(scratchpad.RecoveryReference)
@@ -82,18 +83,19 @@ func newNotebookAt(pages []string, today string) *Notebook {
 	owned := append([]string(nil), pages...)
 	sort.Sort(sort.Reverse(sort.StringSlice(owned)))
 	n := &Notebook{
-		pages:           owned,
-		contents:        make(map[string]string),
-		drafts:          make(map[string]editDoneMsg),
-		positions:       make(map[string]int),
-		personalDates:   make(map[string]bool),
-		sharedPositions: make(map[string]int),
-		current:         notebookStartIndex(owned, today),
-		today:           today,
-		width:           80,
-		height:          24,
-		icons:           DefaultIconSet(),
-		theme:           newThemeWatcher(ThemePrefAuto),
+		pages:             owned,
+		contents:          make(map[string]string),
+		drafts:            make(map[string]editDoneMsg),
+		positions:         make(map[string]int),
+		personalDates:     make(map[string]bool),
+		sharedPositions:   make(map[string]int),
+		sharedInspections: make(map[string]bool),
+		current:           notebookStartIndex(owned, today),
+		today:             today,
+		width:             80,
+		height:            24,
+		icons:             DefaultIconSet(),
+		theme:             newThemeWatcher(ThemePrefAuto),
 	}
 	for _, date := range owned {
 		n.personalDates[date] = true
@@ -337,8 +339,8 @@ func (n *Notebook) layoutViewport() {
 	n.viewport.SetYOffset(n.viewport.YOffset)
 }
 
-// renderFooter budgets dates independently of the controls below them.
-func (n *Notebook) renderFooter() string {
+// renderDateStrip is shared by both readers, without personal editing actions.
+func (n *Notebook) renderDateStrip() string {
 	if len(n.pages) == 0 {
 		return ""
 	}
@@ -350,7 +352,8 @@ func (n *Notebook) renderFooter() string {
 			reserved += lipgloss.Width(icon) + 1
 		}
 	}
-	maxVisibleDates := max(1, (n.width-reserved+lipgloss.Width(separator))/(10+lipgloss.Width(separator)))
+	innerWidth := max(1, n.width-2*viewGutter)
+	maxVisibleDates := max(1, (innerWidth-reserved+lipgloss.Width(separator))/(10+lipgloss.Width(separator)))
 	maxVisibleDates = min(maxVisibleDates, len(n.pages))
 
 	// Calculate start index to show current date with neighbors
@@ -390,6 +393,20 @@ func (n *Notebook) renderFooter() string {
 		navLine = navLine + " " + n.theme.Palette().MutedText.Render(n.icons.Next)
 	}
 
+	return n.centerNotebookLine(truncate(navLine, innerWidth))
+}
+
+// Center each wrapped line inside the same gutters as the writing and controls.
+func (n *Notebook) centerNotebookLine(text string) string {
+	width := max(1, n.width-2*viewGutter)
+	return insetView(lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(ansi.Wrap(text, width, "")))
+}
+
+// renderFooter budgets dates independently of the controls below them.
+func (n *Notebook) renderFooter() string {
+	if len(n.pages) == 0 {
+		return ""
+	}
 	back := "quit"
 	if n.canPop {
 		back = "back"
@@ -401,13 +418,9 @@ func (n *Notebook) renderFooter() string {
 		{keys: "?/F1", label: "help", visible: true},
 	}, n.theme.Palette(), n.width)
 
-	// Center the navigation line
-	navStyle := lipgloss.NewStyle().Width(n.width).Align(lipgloss.Center)
-	navLine = navStyle.Render(truncate(navLine, n.width))
-
-	footer := lipgloss.JoinVertical(lipgloss.Left, navLine, help)
+	footer := lipgloss.JoinVertical(lipgloss.Left, n.renderDateStrip(), help)
 	if n.hasShared() {
-		footer = n.theme.Palette().MutedText.Render(insetView(ansi.Wrap("Shared updates available · c view", max(1, n.width-2*viewGutter), ""))) + "\n" + footer
+		footer = n.theme.Palette().MutedText.Render(n.centerNotebookLine("Shared updates available · c view")) + "\n" + footer
 	}
 	return footer
 }
@@ -475,9 +488,6 @@ func (n *Notebook) GetSelectedDate() string {
 func (n *Notebook) SetCurrentDate(date string) {
 	for i, p := range n.pages {
 		if p == date {
-			if date != n.GetCurrentPage() {
-				n.closeShared()
-			}
 			n.current = i
 			n.updateViewportContent()
 			return

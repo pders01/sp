@@ -81,6 +81,7 @@ func (a *App) SetPrivacy(hooks PrivacyHooks) {
 		return
 	}
 	a.privacy = &privacyState{hooks: hooks}
+	a.nb.sharedInspections = make(map[string]bool)
 	a.installPrivacyIndicators()
 	a.nb.privacyEnabled = true
 	a.cal.privacyEnabled = true
@@ -104,8 +105,11 @@ func (a *App) refreshPublicPage(date string) {
 		return
 	}
 	page, err := a.privacy.hooks.Inspect(date)
+	a.nb.sharedInspections[date] = err == nil
 	if err != nil {
 		a.cal.loadErrors[date] = err.Error()
+		delete(a.nb.contents, date)
+		a.nb.updateViewportContent()
 		return
 	}
 	delete(a.cal.loadErrors, date)
@@ -126,7 +130,7 @@ func (a *App) privateLoadFailed(date string, err error) {
 }
 
 func (a *App) refreshPrivatePage() {
-	if a.privacy == nil || a.mode != ModeNotebook || a.privacy.hooks.Load == nil {
+	if a.privacy == nil || a.mode != ModeNotebook || a.nb.sharedActive() || a.privacy.hooks.Load == nil {
 		return
 	}
 	date := a.nb.GetCurrentPage()
