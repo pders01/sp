@@ -9,12 +9,21 @@ on the stable-preparation commit. The annotated local `v0.22.0` tag was then
 created at `b8f4eb34d0e45416395920718bc605c42b9d1dd5`; earlier RC tags were not
 changed. Final CI and local tagging are complete, not pending preparation steps.
 
-Run URLs/IDs, confirmation of the stable tag push/release/tap update, and
-downloaded asset hashes were not supplied. Hosted results are owner-reported,
-not independently retrieved evidence. Documentation-only follow-ups on `main`
-do not move this tag or retroactively change its bundled documentation/assets. The earlier Linux/Windows failures below are
-historical, not still-open CI blockers. Windows interactive input is still
-intentionally unsupported despite passing native Windows unit CI.
+User-supplied GitHub CLI release metadata confirms **v0.22.0 was published on
+2026-11-03 at 22:41:36 UTC**, with `isDraft: false` and `isPrerelease: false`:
+https://github.com/pders01/sp/releases/tag/v0.22.0. All six listed assets are
+uploaded: `checksums.txt`, Darwin arm64/x86_64 and Linux arm64/x86_64 tarballs,
+and the Windows x86_64 ZIP. The supplied `targetCommitish: main` field does not
+resolve the remote tag's commit. No independent remote request was completed;
+GitHub CLI access inside pi was sandbox-blocked and was not retried.
+
+Workflow run URLs/IDs, tap-update results and downloaded asset hashes have not
+been supplied. Hosted CI results remain owner-reported. Publication is complete;
+these remaining evidence checks must not be presented as an unpublished release.
+Main-branch follow-ups do not move the tag or retroactively change its bundled
+documentation/assets. The earlier Linux/Windows failures below are historical,
+not still-open CI blockers. Windows interactive input remains intentionally
+unsupported despite passing native Windows unit CI.
 
 Stable-promotion preparation changes only documentation and release automation:
 
@@ -38,11 +47,10 @@ Stable-promotion preparation changes only documentation and release automation:
   stable release or an upload attempt. Do not upload its assets or formula;
   stable publication rebuilds them using the actual stable tag.
 
-**Stable v0.22.0 and its Homebrew update are not yet confirmed published.**
-The existing annotated tag can be pushed outside pi if that has not already
-happened; do not create it again or move it to newer documentation commits.
-Pushing that tag starts publication immediately. The release workflow
-has contents-write permission on the application repository, but the separate
+**Stable v0.22.0 is published; the Homebrew update remains unverified here.**
+Do not recreate or move its tag, republish its assets, or treat newer main-branch
+work as part of that immutable release. The release workflow has contents-write
+permission on the application repository, but the separate
 `HOMEBREW_TAP_TOKEN` must have contents-write access to `pders01/homebrew-sp`.
 A stable-only guard fails before GoReleaser if the tap token is empty, without
 printing it. Secrets and tap-write permissions were not inspected; successful RC
@@ -50,7 +58,9 @@ publication skipped the stable tap upload and does not verify that permission. A
 release can succeed before a later tap upload fails: inspect both results and
 do not replace the stable tag when retrying a tap update.
 
-After publication, verify assets/checksums and version/commit metadata, then run
+For the remaining verification, check downloaded assets/checksums and
+version/commit metadata (see the offline helper in
+[the release process](../RELEASE.md#4-publication-and-homebrew-verification)), then run
 `brew update`, install or upgrade `pders01/sp/sp`, and run `brew test sp` and
 `sp --version`. No stable tag, GitHub release or remote formula update is claimed
 by local snapshot checks. Independent audit, native GUI/accessibility testing,
@@ -62,7 +72,8 @@ stable-channel promotion.
 Post-tag documentation on `main` removes stale unreleased/draft labels, records
 completed final CI and local stable tagging, and explicitly labels historical
 candidate reports. It does not change v0.22.0, its bundled documentation or any
-published assets. Stable push/publication/Homebrew outcomes remain unconfirmed.
+published assets. Stable publication is now confirmed by supplied metadata above;
+Homebrew outcomes and downloaded-asset verification remain unconfirmed.
 
 The [agent hook and weekly-summary guide](agent-hooks.md) supplies the missing
 issue #4 recipe: deliberately public per-session manifests, an opt-in SessionEnd

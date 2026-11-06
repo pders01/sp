@@ -441,8 +441,9 @@ make test-race   # race detector + coverage (matches the CI test command)
 make privacy-terminal # POSIX PTY enable/edit/recover checks; synthetic stores only
 make ux-terminal      # integrated reader/editor/template/privacy UX; synthetic stores only
 make design-terminal  # 4 synthetic PTY cases: dark/light × 100x30/56x16
-make design-capture   # 402 actual frames / 53 scenes + historical concepts; needs ImageMagick
-make privacy-fuzz     # bounded parser/append fuzz campaigns
+make design-capture   # 418 actual frames / 55 scenes + historical concepts; needs ImageMagick
+make privacy-fuzz     # five bounded record/private/append fuzz campaigns
+make test-release     # stub-Git release checks + offline synthetic asset checks
 make vuln             # reachable dependency advisories
 make coverage    # writes coverage.html
 make lint        # CI-pinned golangci-lint v2.5.0; no vet-only fallback
@@ -458,7 +459,7 @@ See `RELEASE.md` for the GoReleaser flow.
 
 The cohesive TUI redesign is implemented: personal-note-first reading, secondary
 shared updates, ascending date navigation, and shared reader/writer chrome.
-`make design-capture` captures 402 actual application frames across 53 synthetic
+`make design-capture` captures 418 actual application frames across 55 synthetic
 scenes alongside labelled historical concepts from the
 [visual design study](docs/design/2026-10-31/README.md); concept images are not
 runtime evidence.
@@ -467,8 +468,11 @@ Local CI-equivalent checks and matching synthetic PTYs pass; see the
 [release preflight record](docs/release-preflight.md) for exact tool versions,
 candidate hashes, packaging evidence and remaining manual/hosted checks.
 The release owner reports hosted CI green through the final preparation commit,
-plus the rc.3 release workflow green. The annotated `v0.22.0` tag identifies
-`b8f4eb3`; stable publication and the Homebrew update still need confirmation.
+plus the rc.3 release workflow green. The annotated local `v0.22.0` tag identifies
+`b8f4eb3`. User-supplied GitHub metadata confirms the stable release was
+[published November 3, 2026](https://github.com/pders01/sp/releases/tag/v0.22.0),
+with all five platform archives and `checksums.txt` uploaded. Downloaded checksum
+verification and the Homebrew update remain unconfirmed here.
 Passing Windows unit CI is not Windows interactive, native GUI/accessibility,
 or independent audit sign-off. Later documentation updates on `main` do not
 change the tagged release or its assets.

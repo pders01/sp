@@ -153,5 +153,8 @@ include native Windows/Linux runtime or remote publication verification. Later
 native CI passes were reported by the release owner and are recorded separately.
 No native GUI/accessibility sign-off, physical power-loss experiment, independent
 cryptographic/dependency audit or completed live model-driven trial is claimed.
-The provider-blocked trial was not retried or worked around. Stable publication
-and Homebrew verification remain unconfirmed by the evidence supplied here.
+The provider-blocked trial was not retried or worked around. This historical
+snapshot did not establish publication or Homebrew verification. Later supplied
+GitHub metadata confirms stable publication; see the
+[current release record](release-preflight.md) for that evidence and the still
+unverified downloaded-asset/Homebrew checks.

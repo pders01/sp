@@ -444,8 +444,10 @@ The cohesive TUI redesign and review remediations are implemented. The
 [release preflight](release-preflight.md) records current pinned-lint,
 race/coverage, synthetic PTY and packaging evidence, including platform/manual
 limitations. The release owner reports native matrix CI green through the final
-stable-preparation commit; the annotated v0.22.0 tag points at `b8f4eb3`. Stable
-publication, downloaded artifacts and the Homebrew update still need confirmation.
+stable-preparation commit; the annotated local v0.22.0 tag points at `b8f4eb3`.
+User-supplied GitHub metadata confirms stable publication on November 3, 2026,
+with five platform archives and `checksums.txt` uploaded. Downloaded checksum/
+version verification and the Homebrew update remain unconfirmed here.
 Earlier candidate evidence remains historical; neither that evidence nor native
 unit CI establishes Windows interactive support, GUI/accessibility validation,
 or independent audit sign-off.

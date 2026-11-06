@@ -46,8 +46,10 @@ The release owner reported all hosted CI green through the final preparation
 commit `b8f4eb3`, plus the v0.22.0-rc.3 GoReleaser workflow green. The annotated
 `v0.22.0` tag now points at `b8f4eb34d0e45416395920718bc605c42b9d1dd5`.
 Earlier Linux/Windows failures are fixed; keep their RC tags and the stable tag
-unchanged. Stable publication, release assets and the Homebrew update still need
-confirmation. See the preflight for current versus historical evidence.
+unchanged. User-supplied GitHub metadata confirms stable v0.22.0 publication on
+November 3, 2026, with five platform archives and the checksum manifest uploaded.
+Downloaded checksums/version metadata and the Homebrew update remain unverified
+here. See the preflight for current versus historical evidence.
 
 **Scope limits:** Windows interactive flows currently fail closed pending a
 safe console adapter. The blocked live exercise, independent audit and broader
@@ -56,16 +58,11 @@ channel does not certify these capabilities; retain the release notes' limits.
 
 ### 2. Publish a prepared tag or create a future release
 
-**Current v0.22.0:** its annotated tag already exists on the green preparation
-commit. If it has not been pushed, publish that exact tag outside pi:
-
-```bash
-git push origin refs/tags/v0.22.0
-```
-
-Do not run the tag-creation helper again for v0.22.0, move the tag onto newer
-`main` documentation commits, or overwrite existing release assets. Confirm the
-stable workflow and tap outcome before recording publication as complete.
+**Current v0.22.0 is already published:** supplied GitHub release metadata records
+`2026-11-03T22:41:36Z`, non-draft and non-prerelease. Do not run the tag-creation
+helper again, move its tag onto newer `main` commits, or overwrite existing
+release assets. Remaining workflow/tap and downloaded-asset evidence is separate
+from the completed publication; record those results when supplied.
 
 **Future releases:** choose an approved, unused version. The v0.22.1 commands
 below are examples only, not approval to create that next release.
@@ -132,6 +129,28 @@ Confirm the stable release is not marked prerelease; check all five archives,
 checksums, licenses and binary version/commit metadata. Then verify that the tap
 formula names v0.22.0, its four supported-platform URLs and their matching SHA256
 hashes. No native Windows interactive support is implied by its Windows archive.
+
+For offline checksum and packaging-layout checks of an explicitly downloaded
+bundle, use the standard-library helper on a supported POSIX host:
+
+```bash
+python3 -B scripts/verify_release_assets.py /absolute/disposable-assets \
+  --manifest /absolute/disposable-assets/checksums.txt
+```
+
+The directory must contain exactly the five expected archives and, if kept there,
+the manifest. Use regular, singly linked files and a quiescent directory with no
+symlink path components. The helper bounds input/decompression, rejects unsafe
+archive members, and checks required executable/README/license/release-note
+presence without extracting or executing anything. Its platform/resource limits
+are listed by `--help`. `make test-release` exercises tiny generated archives
+and stub Git only; it does not download or verify actual release assets.
+
+An unsigned manifest establishes consistency, not publisher authenticity. This
+check neither validates binary runtime version/commit metadata nor proves a
+Homebrew update/install. Obtain downloads and any blocked remote evidence outside
+pi; do not substitute local snapshot artifacts or treat these synthetic tests as
+successful verification of v0.22.0 downloads.
 
 The workflow can create the GitHub release before failing to upload the tap.
 Inspect both outcomes; do not move the stable tag to repair a tap-only failure.

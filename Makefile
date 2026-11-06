@@ -40,10 +40,10 @@ test-race:
 	@go test -race -v -coverprofile=$(COVERAGE_FILE) ./...
 	@go test -race -v github.com/muesli/cancelreader
 
-## test-release: Validate the release helper without changing refs or contacting remotes
+## test-release: Validate release tooling with stub Git and synthetic assets; no remotes
 test-release:
 	@bash -n scripts/release.sh
-	@python3 -m unittest discover -s scripts -p 'test_release.py'
+	@python3 -B -m unittest discover -s scripts -p 'test_*release*.py'
 
 ## coverage: Generate test coverage report
 coverage:
