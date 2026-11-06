@@ -135,9 +135,9 @@ design-capture:
 	@python3 scripts/design-capture/concepts.py --output .privacy-adversarial/design-review/concepts/frames.json
 	@python3 scripts/design-capture/render.py --frames .privacy-adversarial/design-review/concepts/frames.json --output .privacy-adversarial/design-review/concepts --kind concept
 
-## privacy-fuzz: Run four bounded parser/append fuzz campaigns (20 seconds each)
+## privacy-fuzz: Run five bounded record/private/append fuzz campaigns (20 seconds each)
 privacy-fuzz:
-	@set -e; for target in FuzzDecodeRecord FuzzStrictJSONCanonicalRoundtrip FuzzAppendBullets FuzzValidateAgeEnvelope; do \
+	@set -e; for target in FuzzDecodeRecord FuzzStrictJSONCanonicalRoundtrip FuzzAppendBullets FuzzValidateAgeEnvelope FuzzDecodePrivateDocumentFollowup; do \
 		GOMAXPROCS=2 go test ./internal/scratchpad -run='^$$' -fuzz="^$${target}$$" -fuzztime=20s -parallel=2; \
 	done
 

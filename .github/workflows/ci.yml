@@ -46,7 +46,7 @@ jobs:
       env:
         GOMAXPROCS: '2'
       run: |
-        for target in FuzzDecodeRecord FuzzStrictJSONCanonicalRoundtrip FuzzAppendBullets FuzzValidateAgeEnvelope; do
+        for target in FuzzDecodeRecord FuzzStrictJSONCanonicalRoundtrip FuzzAppendBullets FuzzValidateAgeEnvelope FuzzDecodePrivateDocumentFollowup; do
           go test ./internal/scratchpad -run='^$' -fuzz="^${target}$" -fuzztime=5s -parallel=2
         done
     - name: Upload coverage to Codecov
