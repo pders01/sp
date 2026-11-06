@@ -124,7 +124,10 @@ copies created during reversal or revoke older backups/keys.
 Reversal metadata uses a newer format. Older privacy-aware builds reject it;
 very old builds may ignore unknown fields and remain unsafe. Continue using a
 supported build even after disabling. Passphrase changes and key rotation are
-not implemented; disabling and re-enabling is **not** either operation.
+not implemented; disabling and re-enabling is **not** either operation. The
+[key-lifecycle proposal](key-lifecycle-design.md) separates passphrase-only
+rewrapping from data-key rotation, including retained-key/backup limitations;
+it is a design for review, not an available command or approved migration.
 
 ## Daily operation
 

@@ -138,8 +138,10 @@ outcomes distinguish saved, unchanged, cancelled, not saved, and unconfirmed
 durability; F1 retains full error/recovery details. Newer edits after an
 unconfirmed publication are explicitly labelled unsaved. Interactive
 migration/reversal reports stage/count progress, not secrets. Raw shared reads and quiet append remain the
-default; `--json` is opt-in and contains shared data only. Passphrase rotation and MCP
-access are not implemented. See the [full guide](docs/privacy.md).
+default; `--json` is opt-in and contains shared data only. Passphrase changes,
+data-key rotation and MCP access are not implemented. See the
+[full guide](docs/privacy.md) and the [key-lifecycle proposal](docs/key-lifecycle-design.md);
+that proposal does not authorize changing encryption or recovery formats.
 
 ### Agent automation
 
@@ -147,7 +149,9 @@ See [agent session-end notes and weekly summaries](docs/agent-hooks.md) for an
 opt-in hook using reviewed public manifests and a collector that reads only
 `sp shared --json`. It does not install hooks, read transcripts, unlock private
 notes or provide a secrets detector. All summaries remain deliberate public
-shared content.
+shared content. A [shared-only MCP proposal](docs/shared-mcp-design.md) describes
+explicit date grants and access limits; no adapter or client configuration has
+been implemented or installed.
 
 ### Flow
 
@@ -325,7 +329,9 @@ not an external editor. The notebook's personal note and separate read-only
 shared updates are independently rendered under application-owned labels, so
 note Markdown cannot consume the shared provenance boundary. The custom lossless
 input is unchanged by the redesign. Neovim/external-private-editor integration
-remains unresolved; no plaintext fallback is introduced. External editor plugins,
+remains unresolved; no plaintext fallback is introduced. The
+[private-editor proposal](docs/private-editor-design.md) separates storage and
+editor-file guarantees and lists decisions requiring approval. External editor plugins,
 swap files, and backups have no privacy guarantee. See [private editing and recovery](docs/privacy.md#edit-failures-recovery-and-backups).
 
 In legacy mode, an explicit edit resolves the editor via `$EDITOR`, then `$VISUAL`, then
