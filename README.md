@@ -94,8 +94,12 @@ The primary notebook shows only your personal note. Press `c` in an ordinary
 calendar or notebook viewer to open separate, read-only **Shared updates** for
 that date—even while locked, without unlocking or loading the private note.
 Shared updates are labelled **Not encrypted**; provenance is self-reported, not
-verified authorship. `Esc` or `c` returns to the note with its reading offset
-preserved. If help is open, close that layer first; Escape closes help only.
+verified authorship. Left/h and Right/l browse earlier/later saved dates while
+staying in shared updates, without loading private notes—even when unlocked.
+Days without updates or with unavailable shared data remain explicitly labelled
+in this view. `Esc` or `c` returns to the selected day's personal note; personal
+and shared reading offsets are remembered independently. If help is open, close
+that layer first; Escape closes help only.
 
 ### Opt-in privacy usage (privacy-aware builds)
 
