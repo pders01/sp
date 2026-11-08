@@ -73,7 +73,9 @@ func newRootCommand(factory managerFactory) *cobra.Command {
 	)
 	appendCmd, sharedCmd, privacyCmd := newAppendCommand(factory), newSharedCommand(factory), newPrivacyCommand(factory)
 	appendCmd.GroupID, sharedCmd.GroupID, privacyCmd.GroupID = "shared", "shared", "privacy"
-	cmd.AddCommand(appendCmd, sharedCmd, privacyCmd)
+	editCmd := newEditCommand(factory)
+	editCmd.GroupID = "privacy"
+	cmd.AddCommand(appendCmd, sharedCmd, privacyCmd, editCmd)
 	cmd.SetHelpCommandGroupID("utilities")
 	cmd.SetCompletionCommandGroupID("utilities")
 	return cmd

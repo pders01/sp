@@ -23,6 +23,10 @@ func TestHelpIsCompactAndDoesNotOpenStore(t *testing.T) {
 				"--calendar", "--notebook", "--version", "without unlocking"},
 		},
 		{
+			name: "edit", args: []string{"edit", "--help"}, max: 700,
+			want: []string{"sp edit [YYYY-MM-DD]", "--editor", "vim", "experimental", "unchanged"},
+		},
+		{
 			name: "privacy", args: []string{"privacy", "--help"}, max: 550,
 			want: []string{"sp privacy [command]", "disable", "enable", "recover", "status", "without unlocking"},
 		},

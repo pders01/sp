@@ -1,4 +1,4 @@
-.PHONY: all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal ux-terminal design-terminal design-capture privacy-fuzz vuln test-release
+.PHONY: embedded-vim-assets all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal ux-terminal design-terminal design-capture privacy-fuzz vuln test-release
 
 # Variables
 BINARY_NAME=sp
@@ -22,6 +22,10 @@ build:
 	@echo "Building $(BINARY_NAME)..."
 	@go build -o $(BINARY_PATH) $(MAIN_PATH)
 	@echo "Build complete: $(BINARY_PATH)"
+
+## embedded-vim-assets: Regenerate linked public Vim guest (Node is build-time only)
+embedded-vim-assets:
+	@node scripts/embedded-vim/build-bundle.js internal/embeddedvim/assets
 
 ## run: Build and run sp
 run: build

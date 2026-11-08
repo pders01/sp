@@ -12,6 +12,15 @@ with Go and the [charm.sh](https://charm.sh) toolchain.
 > This is not an independent security audit. **Old SP versions are unsafe for
 > privacy stores:** stop all instances and use only a privacy-aware build.
 
+## Experimental embedded Vim (explicit opt-in)
+
+`sp edit --editor=vim [YYYY-MM-DD]` edits one encrypted private note using the
+bundled in-memory Vim-compatible engine. Existing `sp`/notebook/calendar defaults
+are unchanged; Node and external editors are not used at runtime. Privacy must
+already be enabled. This is capability-runtime isolation, **not OS enforcement**
+or security/release approval; the note limit is 1 MiB. Start with a disposable
+fixture and read the [integration and recovery guide](docs/embedded-vim-integration.md).
+
 ## Features
 
 - Daily scratchpad: a fresh page per day, kept on disk forever
