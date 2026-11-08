@@ -323,6 +323,10 @@ func decodePrivateDocument(plain []byte, date string) (*privateDocument, error) 
 }
 
 func (m *Manager) encodeScratchpad(s *Scratchpad, encrypted bool) ([]byte, *diskRecord, error) {
+	return m.encodeScratchpadReviewed(s, encrypted, nil)
+}
+
+func (m *Manager) encodeScratchpadReviewed(s *Scratchpad, encrypted bool, generation *[32]byte) ([]byte, *diskRecord, error) {
 	if !utf8.ValidString(s.Content) {
 		return nil, nil, errors.New("invalid private content encoding")
 	}
@@ -354,6 +358,9 @@ func (m *Manager) encodeScratchpad(s *Scratchpad, encrypted bool) ([]byte, *disk
 	identity, err := m.unlockedIdentity()
 	if err != nil {
 		return nil, nil, err
+	}
+	if !m.matchesEditGeneration(generation, identity) {
+		return nil, nil, ErrLocked
 	}
 	inner := privateDocument{Version: 2, Date: s.Date, Content: s.Content, Created: s.Created, Modified: s.Modified, AppliedTemplates: s.AppliedTemplates}
 	plain, err := json.Marshal(inner)

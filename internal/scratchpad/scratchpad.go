@@ -45,7 +45,8 @@ type Manager struct {
 	keyMu             sync.RWMutex
 	identity          *age.X25519Identity
 	keyMetadata       [sha256.Size]byte
-	recoveryRecipient string // Public key pinned by unlock; survives Lock for safe recovery.
+	keyGeneration     [32]byte // Non-secret authentication nonce; changes on every key installation.
+	recoveryRecipient string   // Public key pinned by unlock; survives Lock for safe recovery.
 	// Remember observation across Lock so disappearing metadata cannot silently
 	// opt this manager out, even if no encrypted daily page exists yet.
 	observedPrivacy [sha256.Size]byte
@@ -143,6 +144,10 @@ func (m *Manager) save(scratchpad *Scratchpad, syncDir func(string) error) error
 }
 
 func (m *Manager) saveInternal(scratchpad *Scratchpad, syncDir func(string) error, migrating bool, expectedPolicy ...bool) error {
+	return m.saveInternalReviewed(scratchpad, syncDir, migrating, nil, expectedPolicy...)
+}
+
+func (m *Manager) saveInternalReviewed(scratchpad *Scratchpad, syncDir func(string) error, migrating bool, generation *[32]byte, expectedPolicy ...bool) error {
 	if scratchpad == nil {
 		return errors.New("cannot save a nil scratchpad")
 	}
@@ -165,6 +170,9 @@ func (m *Manager) saveInternal(scratchpad *Scratchpad, syncDir func(string) erro
 		return errors.New("privacy policy changed during migration; retry sp privacy enable")
 	}
 	if enabled && !m.IsUnlocked() {
+		return ErrLocked
+	}
+	if !m.matchesEditGeneration(generation, nil) {
 		return ErrLocked
 	}
 	lock, err := lockNote(m.storageDir, scratchpad.Date)
@@ -200,9 +208,12 @@ func (m *Manager) saveInternal(scratchpad *Scratchpad, syncDir func(string) erro
 			pending.Created = pending.Modified
 		}
 	}
-	data, record, err := m.encodeScratchpad(&pending, enabled)
+	data, record, err := m.encodeScratchpadReviewed(&pending, enabled, generation)
 	if err != nil {
 		return err
+	}
+	if !m.matchesEditGeneration(generation, nil) {
+		return ErrLocked
 	}
 	_, err = publish(filename, data, false, func(dir string) error {
 		// Publication advances the revision before the durability check, even

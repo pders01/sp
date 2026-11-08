@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -211,6 +210,7 @@ func (m *Manager) Lock() {
 	defer m.keyMu.Unlock()
 	m.identity = nil
 	m.keyMetadata = [sha256.Size]byte{}
+	m.keyGeneration = [32]byte{}
 }
 
 func (m *Manager) unlockedIdentity() (*age.X25519Identity, error) {
@@ -289,8 +289,13 @@ func (m *Manager) Unlock(passphrase []byte) error {
 	if current != fingerprint {
 		return errors.New("privacy metadata changed during unlock")
 	}
+	generation, err := newAuthGeneration()
+	if err != nil {
+		return err
+	}
 	m.keyMu.Lock()
 	m.identity, m.keyMetadata = identity, fingerprint
+	m.keyGeneration = generation
 	m.recoveryRecipient = identity.Recipient().String()
 	m.keyMu.Unlock()
 	return nil
@@ -455,11 +460,16 @@ func (m *Manager) initializePrivacy(passphrase []byte, syncDir func(string) erro
 	if lockErr != nil {
 		return zero, lockErr
 	}
+	generation, generationErr := newAuthGeneration()
+	if generationErr != nil {
+		return zero, generationErr
+	}
 	fingerprint = sha256.Sum256(data)
 	published, lockErr := publish(filepath.Join(m.storageDir, "privacy.json"), data, true, syncDir)
 	if published {
 		m.keyMu.Lock()
 		m.identity, m.keyMetadata = identity, sha256.Sum256(data)
+		m.keyGeneration = generation
 		m.recoveryRecipient = identity.Recipient().String()
 		m.observedPrivacy = m.keyMetadata
 		m.keyMu.Unlock()
@@ -508,58 +518,21 @@ func (m *Manager) PrivacyStatus() (PrivacyStatus, error) {
 // SealRecovery encrypts unsaved private content using only the public recipient.
 // No plaintext is written, even to a temporary file. It works while locked.
 func (m *Manager) SealRecovery(date, content string) (string, error) {
-	if err := validateDate(date); err != nil {
+	if err := validateRecoveryInput(date, content); err != nil {
 		return "", err
 	}
-	if len(content) > maxPrivateSize || !utf8.ValidString(content) {
-		return "", errors.New("invalid recovery content or size")
-	}
-	m.keyMu.RLock()
-	pinned := m.recoveryRecipient
-	m.keyMu.RUnlock()
-	if pinned == "" {
-		metadata, _, err := m.readMetadata()
-		if err != nil {
-			return "", err
-		}
-		if metadata == nil {
-			return "", errors.New("recovery encryption requires privacy metadata")
-		}
-		m.keyMu.Lock()
-		if m.recoveryRecipient == "" {
-			m.recoveryRecipient = metadata.Recipient
-		}
-		pinned = m.recoveryRecipient
-		m.keyMu.Unlock()
-	}
-	// Do not redirect a live editor's recovery to a public key substituted on
-	// disk after unlock. Keeping this PUBLIC recipient after Lock is safe.
-	recipient, err := age.ParseX25519Recipient(pinned)
+	recipient, err := m.pinnedRecoveryRecipient()
 	if err != nil {
 		return "", err
 	}
-	now := time.Now()
-	plain, err := json.Marshal(privateDocument{Version: 2, Date: date, Content: content, Created: now, Modified: now})
-	if err != nil {
-		return "", err
-	}
-	if len(plain) > maxPrivateSize {
-		return "", errors.New("recovery content too large")
-	}
-	ciphertext, err := encryptAge(plain, recipient)
-	if err != nil {
-		return "", err
-	}
-	id, err := randomID()
-	if err != nil {
-		return "", err
-	}
-	path := filepath.Join(m.storageDir, ".sp-recovery-"+date+"-"+id+".age")
-	published, err := publish(path, ciphertext, true, syncDirectory)
-	if published {
-		return path, err
-	}
-	return "", err
+	return sealValidatedRecovery(m.storageDir, recipient, date, content, syncDirectory)
+}
+
+// Authentication generation is an in-memory nonce, NOT a new data key or format.
+func newAuthGeneration() ([32]byte, error) {
+	var generation [32]byte
+	_, err := rand.Read(generation[:])
+	return generation, err
 }
 
 func randomID() (string, error) {
