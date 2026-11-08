@@ -44,6 +44,8 @@ type terminalInput struct {
 	end                []byte
 	eof                bool
 	escape             *terminalEscape
+	onEnd              func()
+	notified           bool
 }
 
 func newTerminalInput(source io.Reader) *terminalInput { return &terminalInput{source: source} }
@@ -51,6 +53,8 @@ func newTerminalInput(source io.Reader) *terminalInput { return &terminalInput{s
 func (r *terminalInput) clear() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.onEnd = nil
+	r.notified = true
 	clear(r.queue)
 	r.queue = nil
 	clear(r.pending)
@@ -84,7 +88,11 @@ func (r *terminalInput) filter(model tea.Model, msg tea.Msg) tea.Msg {
 			r.queue[0] = nil
 			r.queue = r.queue[1:]
 		}
+		notify := r.endNotificationLocked()
 		r.mu.Unlock()
+		if notify != nil {
+			notify()
+		}
 	}
 	// Compose R1's recovery/cancellation filter using the actual editor, not
 	// the transport wrapper. Callers need not (and must not) replace this filter.
@@ -195,7 +203,11 @@ func (r *terminalInput) Read(out []byte) (int, error) {
 		}
 	}
 	count := len(r.queue) - before
+	notify := r.endNotificationLocked()
 	r.mu.Unlock()
+	if notify != nil {
+		notify()
+	}
 	if count > len(out) {
 		panic("terminal input expanded transport")
 	}
@@ -204,6 +216,16 @@ func (r *terminalInput) Read(out []byte) (int, error) {
 		return count, nil
 	}
 	return 0, err
+}
+
+// endNotificationLocked claims the notification only once, after every queued
+// transport event has passed through the filter. Invoke the result unlocked.
+func (r *terminalInput) endNotificationLocked() func() {
+	if !r.eof || len(r.queue) != 0 || r.notified || r.onEnd == nil {
+		return nil
+	}
+	r.notified = true
+	return r.onEnd
 }
 
 func (r *terminalInput) emit(msg tea.Msg)     { r.queue = append(r.queue, msg) }
@@ -382,6 +404,9 @@ func RunTerminalProgram(model tea.Model, input *os.File, options ...tea.ProgramO
 		return model, err
 	}
 	r := newTerminalInput(input)
+	if observer, ok := terminalUnderlying(model).(TerminalInputObserver); ok {
+		r.onEnd = observer.TerminalInputEnded
+	}
 	defer r.clear()
 	options = append(options, tea.WithInput(&terminalFileInput{terminalInput: r, file: input}), tea.WithFilter(r.filter))
 	wrapped := &terminalModel{model: model, input: r}
