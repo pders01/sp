@@ -1,0 +1,27 @@
+{
+  "formatVersion": 3,
+  "bundle": {
+    "file": "guest.js",
+    "sha256": "fd260627b6c0405da59a8bc9c9b765b9ff13d9a2c0c33fa45484d6b5b9c46fe0"
+  },
+  "core": {
+    "sha256": "a8c2887193e966a6d1c4acf01105a0b6e8ed11e8ff26dfe3bb8a898649efe650"
+  },
+  "packages": {
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/streamparser": "6.0.0",
+    "@replit/codemirror-vim-core": "0.1.0",
+    "esbuild": "0.28.2",
+    "quickjs-emscripten": "0.32.0"
+  },
+  "sources": {
+    "adapter.js": "a4d74e82bfe26096de87eaca058bb6506166e682fc6ba5c398c49f5f37508a16",
+    "guest-entry.js": "abd63784447e1507da73ed646dc36d67e97cc0b35ff782d46164398b2db60d99",
+    "bundle.js": "60a4b3591f6e4962a9517f3fe7284f0c9087c61e1324de52f4d7fb16c3203c9f",
+    "core-policy.js": "b8efb5bd6c093041c2a8078ae5bbfba4ec8bce0ca1281fee57fc5fd7c99e3806",
+    "package.json": "19da33f02d987dd959c2086d0df989873c76e7368bfbabfb7eee1e383e3292f4",
+    "package-lock.json": "ef5415cd2f46ed99b0f95dd3b5234b9a97c562609d9154cb803bf705176ac054"
+  }
+}

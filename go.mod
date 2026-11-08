@@ -20,6 +20,7 @@ require (
 	github.com/rivo/uniseg v0.4.7
 	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.8.4
+	github.com/tetratelabs/wazero v1.9.0
 	golang.org/x/sys v0.36.0
 	golang.org/x/term v0.31.0
 )

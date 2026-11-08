@@ -1,0 +1,18 @@
+{
+  "name": "sp-embedded-vim-proof",
+  "private": true,
+  "type": "module",
+  "description": "Synthetic headless compatibility proof; not an SP editor or security approval",
+  "scripts": {
+    "test": "node --test *.test.js"
+  },
+  "dependencies": {
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/streamparser": "6.0.0",
+    "@replit/codemirror-vim-core": "0.1.0",
+    "esbuild": "0.28.2",
+    "quickjs-emscripten": "0.32.0"
+  }
+}

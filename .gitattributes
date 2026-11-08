@@ -1,0 +1,4 @@
+# Preserve hash-pinned generated code and verbatim upstream license formatting.
+internal/embeddedvim/assets/guest.js -whitespace linguist-generated=true
+internal/embeddedvim/assets/licenses/* -whitespace linguist-vendored=true
+internal/embeddedvim/assets/qjs.wasm binary
