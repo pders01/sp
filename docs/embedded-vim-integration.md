@@ -14,10 +14,15 @@ is no external-editor fallback. Date/editor/foreground-terminal/public-asset
 admission precedes normal-store preparation. Installed program code comes only
 from linked public artifacts, never CWD paths, Node or `$EDITOR`.
 
-Normal `sp`, notebook/calendar editing, configuration and external plaintext
-editing remain unchanged. This first integration is a standalone dated command,
-not a notebook/calendar editor preference. The Vim path is explicit experimental
-opt-in; it is NOT independent security/release approval or OS enforcement.
+`editor.private = "vim"` in `~/.sp/config.toml` makes the bundled engine the
+default for bare `sp` and `sp edit`; an explicit `--editor` flag still wins.
+Loading the configuration never unlocks storage or admits assets by itself.
+
+Normal notebook/calendar in-viewer editing and external plaintext editing
+remain unchanged. In-viewer editing keeps the built-in writer; the Vim path
+applies to bare `sp` and the standalone dated command only. The Vim path is
+explicit experimental opt-in; it is NOT independent security/release approval
+or OS enforcement.
 
 ## Lifecycle and failure ownership
 

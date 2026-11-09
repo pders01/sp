@@ -143,8 +143,9 @@ sp edit --editor=vim 2026-01-15
 ```
 
 Privacy must already be enabled. The bundled editor runs in memory without Node
-or an external Vim installation. It is explicitly selected per invocation;
-notebook and calendar editing defaults do not change.
+or an external Vim installation. It is selected per invocation or via
+`editor.private = "vim"` in `~/.sp/config.toml`; an explicit `--editor` flag
+always wins, and notebook/calendar in-viewer editing keeps the built-in writer.
 
 | Command | Action |
 | --- | --- |
@@ -183,6 +184,9 @@ Settings live in `~/.sp/config.toml`. See
 [ui]
 icons = "unicode"  # or "nerd"
 theme = "auto"     # "auto", "light", or "dark"
+
+[editor]
+private = "builtin" # or "vim" for the experimental bundled Vim engine
 
 [templates]
 allow_commands = false
