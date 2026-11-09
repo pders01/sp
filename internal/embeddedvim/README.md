@@ -15,6 +15,14 @@ Root Go dependency: `github.com/tetratelabs/wazero v1.9.0`. The root does NOT de
 on or call `fastschema/qjs.New`. Only that module's existing artifact is reused.
 See [integration and manual testing](../../docs/embedded-vim-integration.md).
 
+Cold compilation of the hash-pinned public Wasm program is synchronous host
+work, outside the guest's 10-second startup budget. Caller cancellation is
+checked before compilation and again before instantiation; wazero's compiler
+is not forcibly interruptible. Instantiation and initial guest execution share
+a fresh 10-second deadline, shortened by any earlier caller deadline. Subsequent
+input operations retain their separate 500 ms default budget. Compilation does
+not execute guest code or cache documents, JS sources or instance state.
+
 ## Public assets and attribution
 
 - `assets/qjs.wasm`: fastschema/qjs v0.0.6 artifact (MIT), module sum

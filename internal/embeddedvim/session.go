@@ -97,7 +97,7 @@ type Session struct {
 // mounts the host CWD and defaults stdout/stderr to host files. This small ABI
 // host deliberately supplies no filesystem, environment, arguments or host FDs.
 // The artifact is reused without rebuilding/porting the JS interpreter.
-func New(ctx context.Context, wasm, bundle []byte, initial string, opts Options) (_ *Session, err error) {
+func New(ctx context.Context, wasm, bundle []byte, initial string, opts Options) (*Session, error) {
 	if ctx == nil || !validText(initial) || len(bundle) == 0 || len(bundle) > 2<<20 || !utf8.Valid(bundle) {
 		return nil, ErrInput
 	}
@@ -117,29 +117,40 @@ func New(ctx context.Context, wasm, bundle []byte, initial string, opts Options)
 	if ctx.Err() != nil {
 		return nil, ErrGuest
 	}
-	cfg := wazero.NewRuntimeConfig().WithCompilationCache(compilationCache).WithMemoryLimitPages(2048).
+	s := &Session{runtime: wazero.NewRuntimeWithConfig(context.Background(), runtimeConfig()), budget: opts.OperationTime}
+	if err := s.initialize(ctx, wasm, bundle, initial, opts.HeapBytes); err != nil {
+		_ = s.runtime.Close(context.Background())
+		return nil, err
+	}
+	return s, nil
+}
+
+func runtimeConfig() wazero.RuntimeConfig {
+	return wazero.NewRuntimeConfig().WithCompilationCache(compilationCache).WithMemoryLimitPages(2048).
 		WithCloseOnContextDone(true).WithDebugInfoEnabled(false)
-	s := &Session{runtime: wazero.NewRuntimeWithConfig(context.Background(), cfg), budget: opts.OperationTime}
-	defer func() {
-		if err != nil {
-			_ = s.runtime.Close(context.Background())
-		}
-	}()
+}
+
+// initialize is called only after New validates the pinned program and inputs.
+func (s *Session) initialize(ctx context.Context, wasm, bundle []byte, initial string, heapBytes uint32) error {
+	// Compile only the hash-validated public interpreter here. Compilation is
+	// synchronous host work, not guest execution, and must not exhaust the
+	// guest's startup deadline before its first instruction. Keep the caller's
+	// context and check it again: wazero compilation need not stop on cancellation.
+	compiled, e := s.runtime.CompileModule(ctx, wasm)
+	if e != nil || ctx.Err() != nil {
+		return ErrGuest
+	}
 	startup, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	compiled, e := s.runtime.CompileModule(startup, wasm)
-	if e != nil {
-		return nil, ErrGuest
-	}
 	// Only the pinned WASI imports and a rejecting callback stub are admissible.
 	for _, fn := range compiled.ImportedFunctions() {
 		module, name, _ := fn.Import()
 		if module != wasi_snapshot_preview1.ModuleName && (module != "env" || name != "jsFunctionProxy") {
-			return nil, ErrGuest
+			return ErrGuest
 		}
 	}
 	if _, e = wasi_snapshot_preview1.Instantiate(startup, s.runtime); e != nil {
-		return nil, ErrGuest
+		return ErrGuest
 	}
 	for _, fn := range compiled.ImportedFunctions() {
 		module, name, _ := fn.Import()
@@ -149,7 +160,7 @@ func New(ctx context.Context, wasm, bundle []byte, initial string, opts Options)
 					panic("proof: guest Go callback unavailable")
 				}), fn.ParamTypes(), fn.ResultTypes()).Export(name).Instantiate(startup)
 			if e != nil {
-				return nil, ErrGuest
+				return ErrGuest
 			}
 		}
 	}
@@ -158,42 +169,42 @@ func New(ctx context.Context, wasm, bundle []byte, initial string, opts Options)
 	s.module, e = s.runtime.InstantiateModule(startup, compiled,
 		wazero.NewModuleConfig().WithStartFunctions().WithStdout(io.Discard).WithStderr(io.Discard))
 	if e != nil {
-		return nil, ErrGuest
+		return ErrGuest
 	}
 	// The shipped C factory registers built-in std/os modules. They have NO
 	// resources in this host. Remove their ambient global bindings before any
 	// draft, but do not claim registered module imports have been removed.
-	rt, e := s.call(startup, "New_QJS", uint64(opts.HeapBytes), 512<<10, 0, 0)
+	rt, e := s.call(startup, "New_QJS", uint64(heapBytes), 512<<10, 0, 0)
 	if e != nil || rt == 0 {
-		return nil, ErrGuest
+		return ErrGuest
 	}
 	s.jsctx, e = s.call(startup, "QJS_GetContext", rt)
 	if e != nil || s.jsctx == 0 {
-		return nil, ErrGuest
+		return ErrGuest
 	}
 	pending, e := s.call(startup, "JS_HasException", s.jsctx)
 	if e != nil || pending != 0 {
-		return nil, errors.Join(errors.New("proof: constructor pending exception"), ErrGuest)
+		return errors.Join(errors.New("proof: constructor pending exception"), ErrGuest)
 	}
 	if _, e = s.eval(startup, "void 0", false); e != nil {
-		return nil, errors.Join(errors.New("proof: startup ABI evaluation"), e)
+		return errors.Join(errors.New("proof: startup ABI evaluation"), e)
 	}
 	for _, name := range []string{"std", "os", "bjson", "print", "console", "loadScript", "scriptArgs",
 		"navigator", "setTimeout", "setInterval", "clearTimeout", "clearInterval"} {
 		// name is a fixed public allowlist entry, never guest/draft metadata.
 		bootstrap := "delete globalThis." + name + "; if(typeof globalThis." + name + "!=='undefined') throw Error('ambient binding remains')"
 		if _, e = s.eval(startup, bootstrap, false); e != nil {
-			return nil, errors.Join(errors.New("proof: startup sanitize "+name), e)
+			return errors.Join(errors.New("proof: startup sanitize "+name), e)
 		}
 	}
 	if _, e = s.eval(startup, string(bundle), false); e != nil {
-		return nil, errors.Join(errors.New("proof: startup bundle"), e)
+		return errors.Join(errors.New("proof: startup bundle"), e)
 	}
 	encoded, _ := json.Marshal(initial)
 	if _, e = s.operation(startup, "proof.open("+string(encoded)+")"); e != nil {
-		return nil, errors.Join(errors.New("proof: startup open"), e)
+		return errors.Join(errors.New("proof: startup open"), e)
 	}
-	return s, nil
+	return nil
 }
 
 func validText(s string) bool { return len(s) <= MaxTextBytes && utf8.ValidString(s) }
