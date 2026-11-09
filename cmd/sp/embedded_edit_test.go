@@ -75,6 +75,9 @@ func memoryDeps(t *testing.T) memoryEditDeps {
 	return memoryEditDeps{
 		terminal: func(*os.File, *os.File) error { return nil },
 		assets:   func() error { _, err := embeddedvim.BundledAssets(); return err },
+		configEditor: func() (string, []string) {
+			return "builtin", nil
+		},
 		unlock: func(*scratchpad.Manager, *os.File, *os.File) error {
 			t.Fatal("unexpected unlock in owned test")
 			return nil
@@ -115,7 +118,7 @@ func memoryEx(t *testing.T, e *privateedit.Embedded, command string) {
 }
 
 func TestMemoryEditAdmissionBeforeFactory(t *testing.T) {
-	for _, tc := range []string{"bad-choice", "bad-date", "terminal", "assets"} {
+	for _, tc := range []string{"bad-choice", "bad-date", "terminal", "assets", "bad-config"} {
 		t.Run(tc, func(t *testing.T) {
 			called := false
 			d := memoryDeps(t)
@@ -129,6 +132,9 @@ func TestMemoryEditAdmissionBeforeFactory(t *testing.T) {
 				d.terminal = func(*os.File, *os.File) error { return editorterminal.ErrTerminal }
 			case "assets":
 				d.assets = func() error { return embeddedvim.ErrAssets }
+			case "bad-config":
+				d.configEditor = func() (string, []string) { return "native", nil }
+				args = []string{memoryDate}
 			}
 			err := memoryCommand(t, func() (*scratchpad.Manager, error) { called = true; return nil, errors.New("forbidden factory") }, d, args...)
 			if err == nil || called {
@@ -287,4 +293,46 @@ func TestMemoryEditRetainsOwnerBeforeReentryAndRelock(t *testing.T) {
 	if memoryCommand(t, func() (*scratchpad.Manager, error) { return m, nil }, d, "--editor=vim", memoryDate) != nil || waits != 2 || resumes != 2 || m.IsUnlocked() {
 		t.Fatal("retained reentry/closure ordering failed")
 	}
+}
+
+func TestMemoryEditConfiguredDefault(t *testing.T) {
+	t.Run("config vim is honored", func(t *testing.T) {
+		d := memoryDeps(t)
+		d.configEditor = func() (string, []string) { return "vim", []string{"notice"} }
+		assetsCalled := false
+		d.assets = func() error { assetsCalled = true; return nil }
+		d.unlock = func(*scratchpad.Manager, *os.File, *os.File) error { return nil }
+		runs := 0
+		d.run = func(context.Context, editorterminal.Options) (editorterminal.Report, error) {
+			runs++
+			return editorterminal.Report{}, nil
+		}
+		if err := memoryCommand(t, func() (*scratchpad.Manager, error) { return memoryFixture(t), nil }, d, memoryDate); err != nil {
+			t.Fatalf("configured vim default failed: %v", err)
+		}
+		if runs != 1 || !assetsCalled {
+			t.Fatalf("vim runs=%d assets=%v, want 1/true", runs, assetsCalled)
+		}
+	})
+	t.Run("explicit builtin overrides configured vim", func(t *testing.T) {
+		d := memoryDeps(t)
+		d.configEditor = func() (string, []string) { return "vim", nil }
+		d.assets = func() error { t.Fatal("builtin must not admit vim assets"); return nil }
+		runs := 0
+		d.builtin = func(*scratchpad.Manager, string) error { runs++; return nil }
+		if err := memoryCommand(t, func() (*scratchpad.Manager, error) { return memoryFixture(t), nil }, d, "--editor=builtin", memoryDate); err != nil {
+			t.Fatalf("explicit builtin failed: %v", err)
+		}
+		if runs != 1 {
+			t.Fatalf("builtin runs = %d, want 1", runs)
+		}
+	})
+	t.Run("config is not read before terminal admission", func(t *testing.T) {
+		d := memoryDeps(t)
+		d.terminal = func(*os.File, *os.File) error { return editorterminal.ErrTerminal }
+		d.configEditor = func() (string, []string) { t.Fatal("config read before terminal admission"); return "vim", nil }
+		if err := memoryCommand(t, func() (*scratchpad.Manager, error) { return nil, errors.New("forbidden") }, d, memoryDate); err == nil {
+			t.Fatal("expected terminal rejection")
+		}
+	})
 }

@@ -116,6 +116,9 @@ func runScratchpad(_ *cobra.Command, _ []string) error {
 	if private {
 		if !calendarFlag && !notebookFlag {
 			printConfigurationNotices(os.Stderr, notices)
+			if cfg.Editor.Private == "vim" {
+				return editPrivateVim(mgr, "")
+			}
 			return editPrivateAndSave(mgr, "", cfg.UI.Theme)
 		}
 		return runApp(mgr, nil, icons, cfg, appStartup{notices: notices})
