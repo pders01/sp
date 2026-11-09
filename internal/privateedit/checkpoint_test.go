@@ -158,7 +158,7 @@ func TestCheckpointUnchangedNoPublicationAndCancelRecovery(t *testing.T) {
 		}
 		u.freeze("cancel")
 		if changedAfter {
-			if _, err := e.Cancel(context.Background(), false); !errors.Is(err, ErrConfirmationRequired) {
+			if _, operationErr := e.Cancel(context.Background(), false); !errors.Is(operationErr, ErrConfirmationRequired) {
 				t.Fatal("checkpoint bypassed draft recovery consent")
 			}
 		}
@@ -207,7 +207,7 @@ func TestCheckpointLaterAuthFailureKeepsEarlierPublicationAndRecovery(t *testing
 		if !errors.Is(err, injected) || !r.Published || r.DurabilityUnconfirmed || r.Closed || e.Retained().Baseline != privateCanary || s.content != privateCanary || u.resumes != 1 || u.r.Observed.Text != later {
 			t.Fatal("later auth failure rewound earlier publication or lost draft")
 		}
-		if _, err := e.Cancel(context.Background(), false); !errors.Is(err, ErrConfirmationRequired) {
+		if _, operationErr := e.Cancel(context.Background(), false); !errors.Is(operationErr, ErrConfirmationRequired) {
 			t.Fatal("earlier checkpoint bypassed later draft recovery consent")
 		}
 		r, err = e.Cancel(context.Background(), true)

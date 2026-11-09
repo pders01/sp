@@ -27,25 +27,25 @@ func TestEncryptedLiveCheckpointPreservesHistoryBaselineAndSharedData(t *testing
 	if r.Editor.Mirror.Frozen || r.Editor.Mirror.Revision <= action.Snapshot.Revision || r.Baseline != canary+syntheticOriginal {
 		t.Fatal("checkpoint retained stale authority or baseline")
 	}
-	if _, err := owner.Finish(context.Background()); !errors.Is(err, editorcore.ErrNotFrozen) {
+	if _, operationErr := owner.Finish(context.Background()); !errors.Is(operationErr, editorcore.ErrNotFrozen) {
 		t.Fatal("checkpoint allowed old finish authority")
 	}
-	if _, err := owner.Type(context.Background(), "iX"); err != nil {
+	if _, operationErr := owner.Type(context.Background(), "iX"); operationErr != nil {
 		t.Fatal("checkpoint did not reopen input")
 	}
-	if _, err := owner.Key(context.Background(), "Escape"); err != nil {
+	if _, operationErr := owner.Key(context.Background(), "Escape"); operationErr != nil {
 		t.Fatal("checkpoint Escape failed")
 	}
-	if _, err := owner.Type(context.Background(), "u"); err != nil {
+	if _, operationErr := owner.Type(context.Background(), "u"); operationErr != nil {
 		t.Fatal("checkpoint undo failed")
 	}
 	if owner.Retained().Editor.Mirror.Text != r.Baseline {
 		t.Fatal("checkpoint lost prior history")
 	}
-	if _, err := owner.Type(context.Background(), "iY"); err != nil {
+	if _, operationErr := owner.Type(context.Background(), "iY"); operationErr != nil {
 		t.Fatal("second checkpoint edit failed")
 	}
-	if _, err := owner.Key(context.Background(), "Escape"); err != nil {
+	if _, operationErr := owner.Key(context.Background(), "Escape"); operationErr != nil {
 		t.Fatal("second checkpoint Escape failed")
 	}
 	expected := owner.Retained().Editor.Mirror.Text

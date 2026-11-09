@@ -47,8 +47,8 @@ func TestSelectionMetadataBounds(t *testing.T) {
 			t.Fatal("reversed selection was rejected")
 		}
 	}
-	copy := clone(base)
-	copy.Selections[0].Head.Ch = 0
+	cloned := clone(base)
+	cloned.Selections[0].Head.Ch = 0
 	if base.Selections[0].Head.Ch != 3 {
 		t.Fatal("selection snapshot clone aliases owner")
 	}

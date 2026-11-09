@@ -9,7 +9,7 @@ func TestSearchMatchesComposeWithSelectionAndCursor(t *testing.T) {
 	f := Frame{Width: 5, Height: 2, Lines: []string{"abcde", "next"}, CursorColumn: 2,
 		Selections: []CellSpan{{0, 1, 4}}, Matches: []CellSpan{{0, 0, 2}}}
 	rows := f.StyledLines(true)
-	if rows == nil || !strings.Contains(rows[0], "\x1b[4ma") || !strings.Contains(rows[0], "\x1b[4;7mbc") || rows[1] != "next" {
+	if len(rows) < 2 || !strings.Contains(rows[0], "\x1b[4ma") || !strings.Contains(rows[0], "\x1b[4;7mbc") || rows[1] != "next" {
 		t.Fatal("match/selection/cursor composition or row reset failed")
 	}
 	f.Matches = []CellSpan{{0, 0, 6}}
@@ -21,7 +21,7 @@ func TestSearchMatchesComposeWithSelectionAndCursor(t *testing.T) {
 		t.Fatal("match split a wide glyph")
 	}
 	f.Matches[0].End = 2
-	if rows := f.StyledLines(false); rows == nil || !strings.HasPrefix(rows[0], "\x1b[4m界\x1b[0m") {
+	if rows := f.StyledLines(false); len(rows) < 1 || !strings.HasPrefix(rows[0], "\x1b[4m界\x1b[0m") {
 		t.Fatal("whole glyph match rejected")
 	}
 }

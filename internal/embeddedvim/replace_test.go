@@ -63,20 +63,20 @@ func TestWasmReplaceCheckpointAndPinnedCancelKeepExactBytes(t *testing.T) {
 	if err != nil || result.Closed || !result.Published || owner.Retained().Baseline != saved {
 		t.Fatal("replace checkpoint failed or changed bytes")
 	}
-	if _, err := owner.Type(context.Background(), "iQ"); err != nil {
+	if _, operationErr := owner.Type(context.Background(), "iQ"); operationErr != nil {
 		t.Fatal("checkpoint left replacement active")
 	}
-	if _, err := owner.Key(context.Background(), "Escape"); err != nil {
+	if _, operationErr := owner.Key(context.Background(), "Escape"); operationErr != nil {
 		t.Fatal("resumed insert exit failed")
 	}
 	latest := canary + "xyQ" + syntheticOriginal[2:]
 	if owner.Retained().Editor.Mirror.Text != latest {
 		t.Fatal("checkpoint did not leave normal insertion semantics")
 	}
-	if _, err := owner.Key(context.Background(), "Cancel"); err != nil {
+	if _, operationErr := owner.Key(context.Background(), "Cancel"); operationErr != nil {
 		t.Fatal("replace follow-up cancellation failed")
 	}
-	if _, err := owner.Cancel(context.Background(), false); !errors.Is(err, privateedit.ErrConfirmationRequired) {
+	if _, operationErr := owner.Cancel(context.Background(), false); !errors.Is(operationErr, privateedit.ErrConfirmationRequired) {
 		t.Fatal("replace edits bypassed cancellation consent")
 	}
 	manager.Lock()

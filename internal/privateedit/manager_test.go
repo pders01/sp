@@ -190,7 +190,7 @@ func TestFactoryOpenRequiresReviewedEnabledUnlockedStoreAndRetainsStartupOwner(t
 	if w, openErr := OpenDocumentExperiment(context.Background(), manager, fixtureDate, open); w != nil || !errors.Is(openErr, scratchpad.ErrLocked) || called {
 		t.Fatal("locked store reached generic editor startup")
 	}
-	if err := manager.Unlock([]byte(fixtureSecret)); err != nil {
+	if operationErr := manager.Unlock([]byte(fixtureSecret)); operationErr != nil {
 		t.Fatal("owned reauthentication failed")
 	}
 	w, err := OpenDocumentExperiment(context.Background(), manager, fixtureDate, open)

@@ -149,11 +149,12 @@ func runWithFactory(ctx context.Context, o Options, factory func(*model, int, in
 		options := editorcore.Options{DocumentID: o.DocumentID, Width: w, Height: h}
 		var owner *privateedit.Embedded
 		var err error
-		if o.InMemory != nil {
+		switch {
+		case o.InMemory != nil:
 			owner, err = privateedit.OpenInMemory(context.Background(), o.Manager, options, o.InMemory)
-		} else if o.Experiment != nil {
+		case o.Experiment != nil:
 			owner, err = privateedit.OpenExperimentWithDriver(context.Background(), o.Manager, options, o.Experiment)
-		} else {
+		default:
 			owner, err = privateedit.OpenDriver(context.Background(), o.Manager, options, o.Driver)
 		}
 		if owner == nil {

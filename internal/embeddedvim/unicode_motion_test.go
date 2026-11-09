@@ -65,7 +65,7 @@ func TestEncryptedCountedUnicodeDeleteAndUndoCheckpoint(t *testing.T) {
 	if err != nil || note.Content != expected {
 		t.Fatal("Unicode checkpoint changed bytes")
 	}
-	if _, err := owner.Type(context.Background(), "u"); err != nil {
+	if _, operationErr := owner.Type(context.Background(), "u"); operationErr != nil {
 		t.Fatal("Unicode delete history lost across checkpoint")
 	}
 	if owner.Retained().Editor.Mirror.Text != canary+syntheticOriginal {

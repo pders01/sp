@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func hostAssets(t *testing.T) ([]byte, []byte) {
+func hostAssets(t *testing.T) (wasmBytes, guestBytes []byte) {
 	t.Helper()
 	wasm, err := os.ReadFile("assets/qjs.wasm")
 	if err != nil {
@@ -74,7 +74,7 @@ func TestBuiltinModulesHaveNoHostResources(t *testing.T) {
 	  });
 	  return true;
 	})()`
-	if _, err := s.EvaluateForTest(context.Background(), expression); err != nil {
+	if _, operationErr := s.EvaluateForTest(context.Background(), expression); operationErr != nil {
 		t.Fatal("builtin module resource observation failed")
 	}
 	out, err := s.EvaluateForTest(context.Background(), "globalThis.resourceObservation")

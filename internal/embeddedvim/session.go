@@ -134,7 +134,7 @@ func New(ctx context.Context, wasm, bundle []byte, initial string, opts Options)
 	// Only the pinned WASI imports and a rejecting callback stub are admissible.
 	for _, fn := range compiled.ImportedFunctions() {
 		module, name, _ := fn.Import()
-		if module != wasi_snapshot_preview1.ModuleName && !(module == "env" && name == "jsFunctionProxy") {
+		if module != wasi_snapshot_preview1.ModuleName && (module != "env" || name != "jsFunctionProxy") {
 			return nil, ErrGuest
 		}
 	}
@@ -265,8 +265,8 @@ func (s *Session) eval(ctx context.Context, source string, resultNeeded bool) (o
 		}
 	}()
 	fields, ok := s.module.Memory().Read(uint32(opts), 20)
-	if !ok || binary.LittleEndian.Uint32(fields) != uint32(src) ||
-		binary.LittleEndian.Uint32(fields[12:]) != uint32(file) ||
+	if !ok || uint64(binary.LittleEndian.Uint32(fields)) != src ||
+		uint64(binary.LittleEndian.Uint32(fields[12:])) != file ||
 		binary.LittleEndian.Uint32(fields[16:]) != 8 {
 		return "", errors.Join(errors.New("proof: unexpected eval option layout"), ErrGuest)
 	}

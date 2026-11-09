@@ -635,7 +635,7 @@ func (m *model) finished(r jobMsg) tea.Cmd {
 		}
 		// A close can fail after actual publication/reaping. Never turn that
 		// outcome into "not saved" or keep a dead screen waiting for keys.
-		if m.editor.Retained().Editor.Closed && !(r.kind == "known" && (m.held != nil || len(m.queue) != 0)) {
+		if m.editor.Retained().Editor.Closed && (r.kind != "known" || (m.held == nil && len(m.queue) == 0)) {
 			m.exitErr = r.err
 			m.phase = "done"
 			return tea.Quit

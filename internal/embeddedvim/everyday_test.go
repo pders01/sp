@@ -82,17 +82,17 @@ func TestEncryptedEverydayCorrectionRepeatsAcrossCheckpoint(t *testing.T) {
 	if err != nil || note.Content != first {
 		t.Fatal("corrected checkpoint changed bytes")
 	}
-	if _, err := owner.Type(ctx, "."); err != nil {
+	if _, operationErr := owner.Type(ctx, "."); operationErr != nil {
 		t.Fatal("correction repeat after checkpoint failed")
 	}
 	second := canary + strings.Replace(syntheticOriginal, "\r\n", " X X\r\n", 1)
 	if owner.Retained().Editor.Mirror.Text != second {
 		t.Fatal("checkpoint lost original insert correction record")
 	}
-	if _, err := owner.Type(ctx, "u"); err != nil || owner.Retained().Editor.Mirror.Text != first {
+	if _, operationErr := owner.Type(ctx, "u"); operationErr != nil || owner.Retained().Editor.Mirror.Text != first {
 		t.Fatal("correction repeat undo failed")
 	}
-	if _, err := owner.Key(ctx, "Redo"); err != nil || owner.Retained().Editor.Mirror.Text != second {
+	if _, operationErr := owner.Key(ctx, "Redo"); operationErr != nil || owner.Retained().Editor.Mirror.Text != second {
 		t.Fatal("correction repeat redo failed")
 	}
 	typeEncryptedCommand(t, owner, "wq")

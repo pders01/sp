@@ -421,14 +421,15 @@ func clipViewportLine(line viewportLine, left, width int) string {
 		end := column + cell.width
 		if end > left && column < left+width {
 			n := min(end, left+width) - max(column, left)
-			if cell.ascii {
+			switch {
+			case cell.ascii:
 				out.WriteString(cell.text[max(column, left)-column : min(end, left+width)-column])
-			} else if column >= left && end <= left+width {
+			case column >= left && end <= left+width:
 				out.WriteString(cell.text)
-			} else if cell.width > width && column == left && n == width {
+			case cell.width > width && column == left && n == width:
 				// Tiny geometry cannot fit this grapheme. Do not emit half.
 				out.WriteString("?" + strings.Repeat(" ", n-1))
-			} else {
+			default:
 				out.WriteString(strings.Repeat(" ", n))
 			}
 			used += n

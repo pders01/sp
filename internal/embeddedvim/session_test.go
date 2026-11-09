@@ -549,8 +549,8 @@ func TestSnapshotDeepCopies(t *testing.T) {
 	if !reflect.DeepEqual(before, s.Snapshot()) {
 		t.Fatal("proof: caller mutated acknowledgement through returned operation snapshot")
 	}
-	copy := s.Snapshot()
-	mutate(&copy)
+	cloned := s.Snapshot()
+	mutate(&cloned)
 	if !reflect.DeepEqual(before, s.Snapshot()) {
 		t.Fatal("proof: caller mutated acknowledgement through snapshot copy")
 	}
@@ -567,8 +567,10 @@ func TestSnapshotDeepCopies(t *testing.T) {
 func TestRepeatedClose(t *testing.T) {
 	s := openProof(t, "synthetic fixture", Options{})
 	before := s.Snapshot()
-	if s.Close() != nil || s.Close() != nil {
-		t.Fatal("proof: repeated close was not successful")
+	for range 2 {
+		if s.Close() != nil {
+			t.Fatal("proof: repeated close was not successful")
+		}
 	}
 	if s.Faulted() || !reflect.DeepEqual(before, s.Snapshot()) {
 		t.Fatal("proof: clean close faulted or changed acknowledged state")

@@ -20,7 +20,7 @@ import (
 const syntheticDate = "2000-01-01"
 const syntheticOriginal = "SYNTHETIC fixture only\r\nsecond e\u0301🙂\n"
 
-func encryptedFixture(t *testing.T) (*scratchpad.Manager, []byte, string) {
+func encryptedFixture(t *testing.T) (fixtureManager *scratchpad.Manager, fixturePassphrase []byte, fixtureDirectory string) {
 	t.Helper()
 	root := t.TempDir()
 	manager, err := scratchpad.NewManagerAt(root)
@@ -28,7 +28,7 @@ func encryptedFixture(t *testing.T) (*scratchpad.Manager, []byte, string) {
 		t.Fatal("synthetic manager creation failed")
 	}
 	entropy := make([]byte, 32)
-	if _, err := rand.Read(entropy); err != nil {
+	if _, operationErr := rand.Read(entropy); operationErr != nil {
 		t.Fatal("synthetic entropy failed")
 	}
 	pass := []byte(hex.EncodeToString(entropy))
@@ -214,21 +214,21 @@ func TestWasmInputFaultCanSealKnownDraftAfterExplicitLossConsent(t *testing.T) {
 	owner, err := privateedit.OpenExperimentWithDriver(context.Background(), manager,
 		editorcore.Options{DocumentID: syntheticDate, Width: 80, Height: 20},
 		func(ctx context.Context, options editorcore.Options, text string) (editorcore.UI, error) {
-			var err error
-			ui, err = OpenUI(ctx, assets.Wasm, assets.Guest, options, text)
-			return ui, err
+			var openErr error
+			ui, openErr = OpenUI(ctx, assets.Wasm, assets.Guest, options, text)
+			return ui, openErr
 		})
 	if err != nil {
 		t.Fatal("synthetic fault owner open failed")
 	}
 	canary := addEncryptedDraft(t, owner)
-	if _, err := ui.session.EvaluateForTest(context.Background(), `(()=>{throw new Error('synthetic input fault')})()`); err == nil {
+	if _, operationErr := ui.session.EvaluateForTest(context.Background(), `(()=>{throw new Error('synthetic input fault')})()`); operationErr == nil {
 		t.Fatal("synthetic guest fault did not fail")
 	}
-	if _, err := owner.Type(context.Background(), "x"); err == nil || !owner.Retained().Editor.LatestUnknown {
+	if _, operationErr := owner.Type(context.Background(), "x"); operationErr == nil || !owner.Retained().Editor.LatestUnknown {
 		t.Fatal("guest fault did not retain uncertain owner")
 	}
-	if _, err := owner.RecoverKnown(context.Background(), false); !errors.Is(err, privateedit.ErrConfirmationRequired) {
+	if _, operationErr := owner.RecoverKnown(context.Background(), false); !errors.Is(operationErr, privateedit.ErrConfirmationRequired) {
 		t.Fatal("known-copy loss consent bypassed")
 	}
 	manager.Lock()
@@ -266,7 +266,7 @@ func TestWasmResumeRevokesActionAndConflictRetainsEncryptedOwner(t *testing.T) {
 		t.Fatal("synthetic concurrent publication failed")
 	}
 	typeEncryptedCommand(t, owner, "wq")
-	if _, err := owner.Finish(context.Background()); !errors.Is(err, scratchpad.ErrConflict) || owner.Retained().Editor.Closed {
+	if _, operationErr := owner.Finish(context.Background()); !errors.Is(operationErr, scratchpad.ErrConflict) || owner.Retained().Editor.Closed {
 		t.Fatal("conflict overwrote or dropped the private owner")
 	}
 	manager.Lock()

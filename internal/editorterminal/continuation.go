@@ -37,7 +37,7 @@ func ResumeInMemory(ctx context.Context, o Options, retained Report) (Report, er
 	c.used = true
 	c.mu.Unlock()
 	opened := false
-	report, err := runWithFactory(ctx, o, func(m *model, w, h int) (editor, error) {
+	report, err := runWithFactory(ctx, o, func(m *model, _, _ int) (editor, error) {
 		opened = true
 		restoreContinuation(m, retained)
 		return c.editor, nil

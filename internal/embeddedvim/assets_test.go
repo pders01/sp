@@ -13,18 +13,18 @@ func TestPublicAssetManifestRejectsOldSelectionABI(t *testing.T) {
 	// control ensures failure cannot be explained by missing files/hash inputs.
 	base := t.TempDir()
 	dir := filepath.Join(base, "go-proof", "assets")
-	if os.MkdirAll(dir, 0700) != nil {
+	if os.MkdirAll(dir, 0o700) != nil {
 		t.Fatal("owned public asset fixture setup failed")
 	}
 	for _, name := range []string{"qjs.wasm", "guest.js", "manifest.json"} {
 		data, err := os.ReadFile(filepath.Join("assets", name))
-		if err != nil || os.WriteFile(filepath.Join(dir, name), data, 0600) != nil {
+		if err != nil || os.WriteFile(filepath.Join(dir, name), data, 0o600) != nil {
 			t.Fatal("owned public asset fixture copy failed")
 		}
 	}
 	for _, name := range []string{"adapter.js", "guest-entry.js", "bundle.js", "core-policy.js", "package.json", "package-lock.json"} {
 		data, err := os.ReadFile(filepath.Join("..", "..", "scripts", "embedded-vim", name))
-		if err != nil || os.WriteFile(filepath.Join(base, name), data, 0600) != nil {
+		if err != nil || os.WriteFile(filepath.Join(base, name), data, 0o600) != nil {
 			t.Fatal("owned public source fixture copy failed")
 		}
 	}
@@ -43,7 +43,7 @@ func TestPublicAssetManifestRejectsOldSelectionABI(t *testing.T) {
 	for _, version := range []int{1, 2, 4} {
 		manifest["formatVersion"] = version
 		data, err := json.Marshal(manifest)
-		if err != nil || os.WriteFile(manifestPath, data, 0600) != nil {
+		if err != nil || os.WriteFile(manifestPath, data, 0o600) != nil {
 			t.Fatal("owned public manifest update failed")
 		}
 		assets, err := LoadAssets(dir)

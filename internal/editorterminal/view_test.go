@@ -180,7 +180,7 @@ func TestViewConsumesSelectionStylesWithoutAbsoluteCursorControls(t *testing.T) 
 			if !strings.HasPrefix(rows[bodyRow], want) || !strings.HasPrefix(rows[bodyRow+1], "next") || strings.Contains(rows[bodyRow+1], "\x1b[") {
 				t.Fatal("view lost selection/cursor composition or leaked styles into the next row")
 			}
-			if !strings.Contains(rows[bodyRow], "\x1b[7m") || regexp.MustCompile(`\x1b\[[0-9]+;[0-9]+H`).MatchString(view) || strings.Contains(view, "\x1b[2K") || strings.Contains(view, "\x1b[?25") {
+			if !strings.Contains(rows[bodyRow], "\x1b[7m") || regexp.MustCompile(`\x1b\[\d+;\d+H`).MatchString(view) || strings.Contains(view, "\x1b[2K") || strings.Contains(view, "\x1b[?25") {
 				t.Fatal("view omitted selections or embedded Frame.ANSI terminal controls")
 			}
 			if strings.Contains(rows[bodyRow], "\x1b[4;7m") != (phase == "editing") {

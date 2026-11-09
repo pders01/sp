@@ -164,10 +164,10 @@ func TestViewportSelectionScrollResizeAndWideClipping(t *testing.T) {
 		{"界x", 0, 1}, {"界界x", 1, 2}, {"a界x", 1, 2},
 	} {
 		var tiny Viewport
-		s := viewportVisual(tc.text, "char", viewportRange(0, 0, 0, 2))
-		s.Cursor.Ch = tc.ch
-		f := viewportRender(t, &tiny, s, tc.width, 2)
-		viewportWantSelections(t, f, editorcore.CellSpan{Row: 0, Start: 0, End: tc.width})
+		tinySnapshot := viewportVisual(tc.text, "char", viewportRange(0, 0, 0, 2))
+		tinySnapshot.Cursor.Ch = tc.ch
+		tinyFrame := viewportRender(t, &tiny, tinySnapshot, tc.width, 2)
+		viewportWantSelections(t, tinyFrame, editorcore.CellSpan{Row: 0, Start: 0, End: tc.width})
 	}
 	var other Viewport
 	s = viewportVisual("012345\n界abcd", "char", viewportRange(1, 0, 1, 1))

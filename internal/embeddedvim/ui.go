@@ -80,7 +80,7 @@ func OpenUI(ctx context.Context, wasm, bundle []byte, options editorcore.Options
 	}
 	initial, err := s.ResizeEditor(ctx, width, height)
 	if err != nil || initial.Text != text || initial.Action != nil {
-		u.failLocked()
+		_ = u.failLocked()
 		u.fault = errUIStartup
 		return u, errUIStartup
 	}
@@ -292,7 +292,7 @@ func (u *UI) InsertText(ctx context.Context, text string) (editorcore.Snapshot, 
 	s, err := u.session.InsertLiteral(ctx, text)
 	if err == nil && s.Action != nil {
 		u.receipt.Known = false
-		u.failLocked()
+		_ = u.failLocked()
 		return u.observedSnapshot, u.fault
 	}
 	_, err = u.completeInputLocked(s, err, "")
@@ -368,7 +368,7 @@ func (u *UI) Resume(ctx context.Context, frozen editorcore.Snapshot) (editorcore
 	u.signalLocked()
 	s, err := u.session.ResumeAction(ctx)
 	if err != nil || s.Action != nil || s.Text != frozen.Text {
-		u.failLocked()
+		_ = u.failLocked()
 		return u.observedSnapshot, u.fault
 	}
 	if err := u.acceptLocked(s, ""); err != nil {
@@ -419,7 +419,7 @@ func (u *UI) Discard(ctx context.Context, possibleLossConsent bool) (editorcore.
 	}
 	if !u.closed {
 		if u.session != nil && u.session.Close() != nil {
-			u.failLocked()
+			_ = u.failLocked()
 			return u.observationLocked(), u.fault
 		}
 		u.closed, u.action = true, nil
