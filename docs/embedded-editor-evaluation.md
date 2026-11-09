@@ -158,10 +158,9 @@ recovery still requires consent. No new Ex/key parser, normal routing or key
 capability was introduced. Headless tests include actual encrypted ZZ publication
 with shared updates and ZQ consent/resume/pinned recovery without canonical save.
 
-A manual-only demo command and acceptance steps are in the Go README. A bounded
-transient Rex Lua action can request the user's attention; it has no document
-input and cannot launch the editor. The user has since reported the first
-manual synthetic run working and supplied a screenshot. That is initial
+The earlier manual-only demo tools have since been removed; current instructions
+are in the [integration guide](embedded-vim-integration.md). The user reported the
+first manual synthetic run working and supplied a screenshot. That is initial
 interaction evidence, not complete lifecycle/platform acceptance. UI polish
 addresses the crowded/stale footer, adds line numbers/EOF markers and position
 feedback, and removes per-keystroke busy flashing, using headless regression

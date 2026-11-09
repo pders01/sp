@@ -8,8 +8,8 @@ See [integration and manual testing](../../docs/embedded-vim-integration.md).
 The Node harness below is synthetic build/compatibility tooling, not the
 application entry point or a security approval. Canonical Go execution uses a
 different pinned QuickJS-NG WASI artifact and the shared encrypted lifecycle.
-Older local proof/demo tools remain synthetic-only and are not prerequisites
-of this application/source commit series.
+Superseded local proof/demo tools were removed; canonical Go tests and linked
+assets are the maintained execution path.
 
 This Node harness has no normal-note routing, encrypted store or real terminal.
 Node is only its trusted test/build host. The Vim core and editor model execute

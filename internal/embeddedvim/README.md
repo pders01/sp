@@ -1,8 +1,8 @@
 # Embedded Vim application runtime
 
 Canonical runtime implementation and synthetic Go/Wasm/lifecycle regressions.
-The pinned JS source/build harness lives in `scripts/embedded-vim`. Older local
-proof/demo tools are not required by or included with the application runtime.
+The pinned JS source/build harness lives in `scripts/embedded-vim`. Superseded
+local proof/demo tools were removed; this package is the maintained runtime.
 
 `OpenBundledUI` links public immutable QuickJS-NG Wasm, guest JS and manifest via
 `go:embed`. It validates ABI/core/runtime/bundle hashes and needs no runtime Node,

@@ -3,7 +3,9 @@
 Status: the user subsequently authorized preparation and execution of this
 five-commit series. Portable/native tests have been separated; unrelated work
 remains outside the selection. This document retains the original inventory and
-explains the boundaries used. No application, native editor, terminal or PTY was
+explains the boundaries used. Subsequent user-authorized cleanup removed the
+superseded native prototypes, native-only fixtures and legacy demo tools; native
+research documents are retained as historical records. No application, native editor, terminal or PTY was
 launched, no normal notes/configuration were inspected, and nothing is pushed.
 
 The first four commits are `4ed0fdc` (storage), `6f24401` (shared lifecycle),
@@ -220,19 +222,16 @@ working-tree files are preserved unchanged.
   macos-editor-sandbox-dts-request}.md`, and native-prototype edits to
   `docs/private-editor-design.md` and README. The shared fail-closed
   `internal/editorsandbox` contract itself IS required and remains included.
-- Rex attention bridge: `scripts/rex/` is not a runtime/build prerequisite.
 - Ignored handoff/build/dependency files: `TODO.md`, `.privacy-adversarial/`,
   `scripts/embedded-vim/node_modules/`, `scripts/embedded-vim/go-proof/assets/`.
   Do not confuse these with canonical embedded program/attribution assets.
 
-## Optional separate follow-up
+## Legacy tooling decision
 
-`chore(vim): retain synthetic runtime preparation and demo tools` may include
-`scripts/embedded-vim/go-proof/{.gitignore,go.mod,go.sum,README.md,cmd/}` after the
-required series. Its demo imports the terminal controller and canonical runtime;
-it is not needed by SP or the main JS suite. Keep all nested generated demo
-executables/assets ignored. If deferred, update/hold final-tree documentation
-links to these legacy tools rather than introducing dangling references.
+The optional nested `go-proof` preparation/demo module was not included in the
+series and has now been removed at the user's request. SP and the main JS suite
+use the canonical runtime/assets directly. No demo binary or generated nested
+asset is a runtime/build prerequisite.
 
 ## Verification record
 
@@ -245,5 +244,6 @@ tests and has no native test imports. Final CLI export validation passed command
 help/recovery-policy race tests (51.099s), shared controller/lifecycle races,
 CGo-free runtime tests (37.188s), vet, module verification, 14 local documentation
 targets and native/Linux/Windows compilation. No built executable was launched.
-No source-tree-only success substitutes for these selected-tree gates. Legacy demo tools remain deferred and available only
-in the working tree; active documentation links target the canonical runtime.
+No source-tree-only success substitutes for these selected-tree gates. Legacy
+demo tools were subsequently removed; active documentation links target the
+canonical runtime.

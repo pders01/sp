@@ -43,8 +43,7 @@
 // second editor; only fresh physical confirmation can release pending input
 // after durable recovery/close. Failed terminal admission returns the old owner.
 //
-// Editor-specific compatibility wiring (including the unconfined sp-nvim-demo)
-// belongs outside this package. The required OS child write/process/channel
-// enforcement remains unimplemented; interfaces, options, process groups and
-// null logging are not protection receipts. No trusted-editor fallback is allowed.
+// Editor-specific compatibility wiring belongs outside this package. Required
+// OS child write/process/channel enforcement remains unimplemented. Interfaces,
+// options, process groups and null logging are not protection receipts. No trusted-editor fallback is allowed.
 package editorterminal

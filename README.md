@@ -340,7 +340,13 @@ note Markdown cannot consume the shared provenance boundary. The custom lossless
 input is unchanged by the redesign. Neovim/external-private-editor integration
 remains unresolved; no plaintext fallback is introduced. The
 [private-editor proposal](docs/private-editor-design.md) separates storage and
-editor-file guarantees and lists decisions requiring approval. External editor plugins,
+editor-file guarantees. Superseded native Neovim prototypes, synthetic demos and
+native-only fixtures have been removed; their
+[research record](docs/nvim-integration-plan.md) is retained, not an active roadmap.
+Shared lifecycle contracts and protected admission remain fail-closed: no native
+OS-enforcement backend is implemented or approved. The opt-in embedded Vim path
+above is a separate capability-runtime integration, not native sandbox approval.
+External editor plugins,
 swap files, and backups have no privacy guarantee. See [private editing and recovery](docs/privacy.md#edit-failures-recovery-and-backups).
 
 In legacy mode, an explicit edit resolves the editor via `$EDITOR`, then `$VISUAL`, then

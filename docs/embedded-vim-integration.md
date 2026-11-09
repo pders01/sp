@@ -89,7 +89,7 @@ matrix or security approval. Vim remains explicitly opt-in.
 First use a disposable home/store, not your normal notes. Build a fresh versioned
 binary (never overwrite a possibly running demo). From your own terminal at the
 checkout, with the reviewed integration binary already built. Resolve the root
-explicitly so these commands also work from the legacy `go-proof` directory:
+explicitly so these commands do not depend on the current checkout subdirectory:
 
 ```sh
 sp_bin="$(git rev-parse --show-toplevel)/.privacy-adversarial/sp-vim-integration-v3"
