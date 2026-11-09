@@ -1,72 +1,78 @@
-# SP v0.22.0
+# SP v0.23.0-rc.1
 
-Promotes the application validated through v0.22.0-rc.3 to the stable release and
-Homebrew channels. Earlier release-candidate tags remain unchanged. Stable is a
-release-channel designation, not an independent security audit or a claim of
-Windows interactive support.
+Candidate for v0.23.0, adding explicitly opted-in private editing and same-key
+passphrase changes while retaining existing defaults. This prerelease is not
+stable-channel promotion, native platform sign-off or independent security
+approval. See the preflight record for local versus hosted validation evidence.
 
-## Release-candidate corrections
+## New since v0.22.0
 
-- Cancel and join active Unix terminal reads before closing internal polling/pipe
-  descriptors during forced shutdown. Caller stdin remains open, and literal
-  paste/privacy boundaries are unchanged. The dependency patch is locally
-  attributed; CI retains race detection and adds 100 Linux cancellation repeats.
-- Make command-start error assertions and quoted recovery-path checks portable
-  across Windows and Unix, including drive, UNC and control-containing paths.
-  Runtime command execution and recovery output are unchanged.
-- Hosted CI and the rc.3 GoReleaser workflow passed, as reported by the release
-  owner. See [release preflight](https://github.com/pders01/sp/blob/v0.22.0/docs/release-preflight.md) for the distinction between
-  these results, historical local evidence, and remaining assurance limits.
+- Explicitly opt in to an embedded Vim-compatible private editor with
+  `sp edit --editor=vim [YYYY-MM-DD]`. Existing notebook/calendar and built-in
+  defaults are unchanged. Privacy must already be enabled; the note limit is
+  1 MiB. Pinned public Wasm/JS assets are linked into the executable: no runtime
+  Node, external editor, user vimrc or filesystem-backed editing buffer.
+- Vim-style movement, visual editing, search, undo/redo, counts, registers and
+  repeat support common note editing. `:w`/Ctrl+S checkpoints encrypted content
+  without losing editor history; `:wq`/F2 finishes. Cancel requests still require
+  consent and durable encrypted recovery for changed drafts. Retained or
+  uncertain input is never silently replayed or treated as discard consent.
+- `sp privacy change-passphrase` explicitly rewraps the **same private key** using
+  exact masked current/new/confirmation input. It requires a fully migrated,
+  enabled store and rechecks policy/metadata at publication. Daily and recovery
+  files are not rewritten. Stop other SP instances first and retain matching
+  metadata with backups. Old metadata/key copies remain usable: this is not
+  key rotation or revocation.
+- Browse shared updates across saved dates without unlocking private text;
+  reading positions and date navigation remain independent from private views.
+- Source-only agent-hook examples and a bounded shared-only MCP stdio experiment
+  use deliberate public shared data. The MCP executable is **not included in
+  release archives**, installed or registered automatically. It requires an
+  explicit existing store and separate exact read/append date grants. External
+  client interoperability is unverified; the adapter is not release-ready.
+- Offline asset checks support the embedded-engine license set. Release archives
+  carry all 15 upstream notices, the application license and the existing
+  cancelreader patch license. Superseded native Neovim/demo prototypes and
+  repository-local notification tooling are removed; native research is archived.
 
-## Highlights
+See the [Vim integration guide](https://github.com/pders01/sp/blob/v0.23.0-rc.1/docs/embedded-vim-integration.md),
+[privacy guide](https://github.com/pders01/sp/blob/v0.23.0-rc.1/docs/privacy.md), [key lifecycle record](https://github.com/pders01/sp/blob/v0.23.0-rc.1/docs/key-lifecycle-design.md) and
+[preflight evidence](https://github.com/pders01/sp/blob/v0.23.0-rc.1/docs/release-preflight.md).
 
-- Opt-in encrypted personal notes for every date, including today, with resumable
-  activation and explicit confirmed decryption/re-enable. Shared updates remain
-  deliberately public and available without unlocking.
-- A quieter notebook, separate read-only shared updates, earlier-left/later-right
-  navigation, today-first startup, remembered reading positions and direct dates.
-- A memory-only private writer with bounded undo/redo, navigation and literal find.
-  Shared raw-byte handling preserves marked paste without interpreting it as save,
-  template or conflict-confirmation keys.
-- Consistent masked unlock, encrypted recovery discovery/review, conflict handling,
-  truthful publication/durability outcomes and explicit relock.
-- Process-finished external-editor completion in legacy plaintext mode; template
-  application owns cancellation and reports whether insertion was published.
-- Security/correctness fixes for signal recovery, display controls/entities,
-  migration durability and policy races, template descendant-pipe waits and
-  shared-first personal creation timestamps. See [remediation](https://github.com/pders01/sp/blob/v0.22.0/docs/security-remediation.md).
+## Compatibility and privacy limits
 
-## Important compatibility and privacy limits
+- **Windows interactive views, masked prompts and private editing remain
+  unavailable** pending a safe console adapter. Cross-compilation and unit CI
+  do not establish Windows interactive support. Shared CLI operations and bare
+  legacy external editing remain separate existing paths.
+- Capability-limited in-memory Wasm execution is **not native OS enforcement**,
+  an independent security audit or crash-proof persistence. The host/interpreter,
+  memory, paging/dumps, display capture and unrestricted same-user code remain
+  relevant risks. No native sandbox backend or plaintext private-editor fallback
+  is enabled.
+- This is bounded Vim compatibility, not full Vim/Neovim parity: no vimrc,
+  plugins, clipboard, shell/filesystem commands, tabs/windows, language formatting
+  or full regex/options/mapping parity. Replace-mode Backspace moves left; it
+  does not restore overwritten text. Complex virtual-column/block semantics
+  remain limited.
+- Graceful ownership/recovery handling cannot guarantee the latest unacknowledged
+  text after a guest fault, SIGKILL, host crash or power loss. Failed/uncertain
+  recovery retains ownership; interruption is not rollback or discard consent.
+- Privacy remains opt-in; shared text, provenance, dates and sizes are public.
+  Stop old writers and back up the store before migration. Re-enable is not a
+  passphrase change, data-key rotation, revocation or secure erasure. Command
+  templates remain trusted user programs, not sandboxed integrations.
+- User-reported Vim terminal smoke acceptance applies to the earlier integration
+  v2 binary. Later builds have headless checks, not newly attributed manual or
+  cross-platform acceptance. No fresh editor/PTY launch was performed inside pi.
 
-- **Windows interactive views, masked unlock and private writing currently fail
-  closed** pending a safe console input adapter. Shared CLI operations and bare
-  legacy external editing remain available. Passing Windows unit CI does not
-  restore the unsupported interactive console path.
-- Privacy is opt-in. Stop other SP instances and old writers, back up the store,
-  and follow [the privacy guide](https://github.com/pders01/sp/blob/v0.22.0/docs/privacy.md) before migration. Retain the wrapped
-  identity metadata with encrypted notes/recovery files and keep the passphrase
-  safe. Old writers can damage the newer storage format.
-- Decryption deliberately creates plaintext. Re-enable is not key rotation,
-  passphrase replacement, revocation or secure erasure. Shared updates, metadata,
-  dates and file sizes remain visible.
-- No plaintext external-private-editor fallback was added. Neovim integration
-  remains a separate design decision. Plaintext and secrets exist in an unlocked
-  process; encryption does not protect against unrestricted same-user malware.
-- Command templates are trusted user programs, not sandboxed. Escaped descendants
-  are not universally contained. Graceful recovery does not cover SIGKILL or every
-  terminal, storage or runtime failure.
-- Independent cryptographic review, native platform sign-off, and the separate
-  provider-blocked live exercise are not complete. Do not label this release
-  independently audited or fully adversarially validated.
+## Candidate publication
 
-## Release status
+The `v0.23.0-rc.1` tag marks a prerelease and skips the stable Homebrew formula
+update. Publication requires explicit owner approval and hosted CI on the exact
+candidate commit. Verify the actual five published platform archives and
+checksums separately; local preflight snapshots are not release assets. Keep
+existing tags unchanged.
 
-A stable `v0.22.0` tag starts the Release workflow and enables the Homebrew formula
-update; prereleases continue to skip that update. GoReleaser publishes these
-notes with the release. Confirm the stable assets, checksums, version metadata
-and tap update after publication; an earlier green RC workflow did not exercise
-the stable tap upload or its token permissions.
-
-The source checkout includes a local cancelreader module replacement. Keep
-`third_party/cancelreader` when building from source; version-suffixed
-`go install ...@version` remains unsupported while this patch is required.
+Source builds still require `third_party/cancelreader`; version-suffixed
+`go install ...@version` is unsupported while the local replacement is required.

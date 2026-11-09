@@ -12,6 +12,35 @@ This document explains how to release a new version of the `sp` application and 
 
 3. **GitHub Token**: A GitHub token with appropriate permissions for creating releases and pushing to the tap repository.
 
+## Current candidate: v0.23.0-rc.1
+
+Local preparation targets **v0.23.0-rc.1**, not a stable-channel promotion.
+The opt-in embedded Vim editor and same-key passphrase changes are new; the
+experimental MCP executable remains source-only and is not a packaged release
+product. See [candidate notes](docs/release-notes.md) and
+[the current preflight](docs/release-preflight.md). No candidate tag, push,
+publication or tap update is authorized by preparation. v0.22.0 is unchanged.
+
+Before tagging, the release owner must confirm all hosted CI on the exact commit,
+including native matrix, passphrase/privacy PTYs and the candidate version/limits.
+No native editor/terminal/PTY/browser or sandbox probes may be run inside pi.
+Full `cmd/sp` tests include external-editor helpers; run those and manual terminal
+checks outside pi. Headless subsets and compilation are not a full CI pass.
+Do not run `make ci` inside pi as a workaround: it includes those full tests and
+an unversioned build output.
+
+After explicit owner approval and green hosted CI, check that the proposed tag
+is unused remotely outside pi, then create/push only that single RC tag. These
+commands are documentation, not performed by preparation:
+
+```bash
+git tag -a v0.23.0-rc.1 -m 'Release v0.23.0-rc.1'
+git push origin refs/tags/v0.23.0-rc.1
+```
+
+The stable-only helper below does not accept RC versions. An RC skips Homebrew
+stable uploads; a later stable promotion requires its own approval and rebuild.
+
 ## Release Steps
 
 ### 1. Prepare for Release
@@ -64,8 +93,8 @@ helper again, move its tag onto newer `main` commits, or overwrite existing
 release assets. Remaining workflow/tap and downloaded-asset evidence is separate
 from the completed publication; record those results when supplied.
 
-**Future releases:** choose an approved, unused version. The v0.22.1 commands
-below are examples only, not approval to create that next release.
+**Future stable promotion:** choose an approved, unused version. The v0.23.0
+commands below are examples only, not approval to promote this RC to stable.
 
 First push only the approved branch update and wait for **all** hosted CI jobs
 to pass on that exact commit. Confirm the version and platform/security limits
@@ -75,7 +104,7 @@ workflow does not wait for a separate CI run.
 For an approved stable version, the release script creates **and pushes** a tag:
 
 ```bash
-./scripts/release.sh 0.22.1
+./scripts/release.sh 0.23.0
 ```
 
 This script will:
@@ -89,8 +118,8 @@ a stable promotion can instead be tagged and pushed explicitly after main is
 pushed and its hosted CI is green (example only; not run by preflight):
 
 ```bash
-git tag -a v0.22.1 -m 'Release v0.22.1'
-git push origin refs/tags/v0.22.1
+git tag -a v0.23.0 -m 'Release v0.23.0'
+git push origin refs/tags/v0.23.0
 ```
 
 Do not run both methods. The helper refuses an existing exact stable tag but
@@ -101,8 +130,7 @@ outside pi.
 GoReleaser detects prerelease tags automatically. Prereleases do not update the
 stable Homebrew formula (`brews.skip_upload: auto`). Do not merely rename an RC
 release or clear its prerelease flag: that does not rebuild version metadata or
-rerun the skipped tap publication. A stable `v0.22.0` tag enables
-the tap upload. RC success does not validate `HOMEBREW_TAP_TOKEN`: it needs
+rerun the skipped tap publication. A stable tag enables the tap upload. RC success does not validate `HOMEBREW_TAP_TOKEN`: it needs
 contents-write permission on `pders01/homebrew-sp`, separately from the workflow's
 application-repository `GITHUB_TOKEN`. Never paste tokens into logs or commands.
 Snapshot builds publish nothing; they are packaging smoke tests, not releases.
@@ -135,8 +163,11 @@ bundle, use the standard-library helper on a supported POSIX host:
 
 ```bash
 python3 -B scripts/verify_release_assets.py /absolute/disposable-assets \
-  --manifest /absolute/disposable-assets/checksums.txt
+  --manifest /absolute/disposable-assets/checksums.txt --require-embedded-vim
 ```
+
+For v0.22 and earlier bundles omit `--require-embedded-vim`; v0.23+ bundles must
+include all 15 embedded-engine notices. A partial notice set is always rejected.
 
 The directory must contain exactly the five expected archives and, if kept there,
 the manifest. Use regular, singly linked files and a quiescent directory with no

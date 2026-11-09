@@ -39,7 +39,17 @@ MAX_EXPANDED = 256 * 1024 * 1024
 MAX_MEMBERS = 256
 REQUIRED = {"README.md", "LICENSE", "third_party/cancelreader/LICENSE",
             "docs/release-notes.md"}
-DIRECTORIES = {"docs", "third_party", "third_party/cancelreader"}
+EMBEDDED_LICENSES = frozenset(
+    f"internal/embeddedvim/assets/licenses/{name}.txt" for name in (
+        "codemirror-commands", "codemirror-language", "codemirror-state",
+        "codemirror-streamparser", "codemirror-view", "crelt", "fastschema-qjs",
+        "lezer-common", "lezer-highlight", "lezer-lr", "marijn-find-cluster-break",
+        "quickjs-ng", "replit-codemirror-vim-core", "style-mod", "w3c-keyname",
+    )
+)
+DIRECTORIES = {"docs", "third_party", "third_party/cancelreader", "internal",
+               "internal/embeddedvim", "internal/embeddedvim/assets",
+               "internal/embeddedvim/assets/licenses"}
 LIMITATIONS = ("Unsigned checksums do not establish authenticity. Archive layout "
                "is not runtime version/commit metadata or Homebrew validation.")
 
@@ -121,7 +131,8 @@ def parse_manifest(data):
 
 
 class Layout:
-    def __init__(self, windows):
+    def __init__(self, windows, require_embedded_vim=False):
+        self.require_embedded_vim = require_embedded_vim
         self.binary = "sp.exe" if windows else "sp"
         self.seen = set()
         self.files = set()
@@ -148,7 +159,7 @@ class Layout:
                     f"unexpected archive directory: {name!r}")
             return
         allowed_doc = re.fullmatch(r"docs/[A-Za-z0-9_-][A-Za-z0-9_.-]*\.md", name)
-        require(name in REQUIRED | {self.binary} or allowed_doc,
+        require(name in REQUIRED | EMBEDDED_LICENSES | {self.binary} or allowed_doc,
                 f"unexpected archive file: {name!r}")
         require(0 < size <= MAX_EXPANDED, f"invalid member size: {name!r}")
         self.total += size
@@ -158,6 +169,11 @@ class Layout:
     def finish(self):
         require(REQUIRED | {self.binary} <= self.files,
                 "archive is missing executable, README, licenses or release notes")
+        # Old releases remain verifiable without the opt-in flag. If any new
+        # attribution is present, a partial set is never accepted.
+        if self.require_embedded_vim or self.files & EMBEDDED_LICENSES:
+            require(EMBEDDED_LICENSES <= self.files,
+                    "archive is missing embedded Vim dependency licenses")
 
 
 class TarHeaders(io.BytesIO):
@@ -177,13 +193,13 @@ class TarHeaders(io.BytesIO):
         return data
 
 
-def inspect_tar(data):
+def inspect_tar(data, require_embedded_vim=False):
     # Decompress fully (bounded) so gzip CRC, truncation and trailer errors are
     # checked even when tar's logical end occurs before gzip's physical end.
     with gzip.GzipFile(fileobj=io.BytesIO(data)) as compressed:
         raw = compressed.read(MAX_EXPANDED + 1)
     require(len(raw) <= MAX_EXPANDED, "expanded tar exceeds limit")
-    layout = Layout(windows=False)
+    layout = Layout(windows=False, require_embedded_vim=require_embedded_vim)
     with tarfile.open(fileobj=TarHeaders(raw), mode="r:") as archive:
         for member in archive:
             require(member.type in {tarfile.REGTYPE, tarfile.AREGTYPE, tarfile.DIRTYPE}
@@ -220,9 +236,9 @@ def zip_directory_count(data):
     return count
 
 
-def inspect_zip(data):
+def inspect_zip(data, require_embedded_vim=False):
     count = zip_directory_count(data)
-    layout = Layout(windows=True)
+    layout = Layout(windows=True, require_embedded_vim=require_embedded_vim)
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         require(len(archive.infolist()) == count, "ZIP member count mismatch")
         for member in archive.infolist():
@@ -264,7 +280,7 @@ def inspect_zip(data):
     layout.finish()
 
 
-def verify(asset_directory, manifest):
+def verify(asset_directory, manifest, require_embedded_vim=False):
     """Verify explicit local inputs; return names only after ALL checks succeed.
 
     The directory must contain exactly the five archives, plus the manifest if
@@ -293,7 +309,8 @@ def verify(asset_directory, manifest):
             require(hashlib.sha256(data).hexdigest() == hashes[name],
                     f"SHA256 mismatch: {name!r}")
             try:
-                (inspect_zip if name.endswith(".zip") else inspect_tar)(data)
+                (inspect_zip if name.endswith(".zip") else inspect_tar)(
+                    data, require_embedded_vim=require_embedded_vim)
             except (OSError, EOFError, tarfile.TarError, zipfile.BadZipFile,
                     RuntimeError, ValueError, OverflowError, struct.error, zlib.error) as error:
                 raise VerificationError(f"invalid archive {name!r}: {error}") from error
@@ -311,9 +328,12 @@ def main(argv=None):
                 "Keep only the five expected archives and optional manifest in the directory."))
     parser.add_argument("asset_directory", help="explicit local directory containing the five archives")
     parser.add_argument("--manifest", required=True, help="explicit local SHA256 manifest path")
+    parser.add_argument("--require-embedded-vim", action="store_true",
+                        help="require all 15 embedded-engine licenses (v0.23+ bundles)")
     args = parser.parse_args(argv)
     try:
-        names = verify(args.asset_directory, args.manifest)
+        names = verify(args.asset_directory, args.manifest,
+                       require_embedded_vim=args.require_embedded_vim)
     except (OSError, ValueError, EOFError, RuntimeError) as error:
         print(f"Verification failed: {str(error)!r}", file=sys.stderr)
         return 1

@@ -1,6 +1,84 @@
 # Release preflight and hosted follow-up
 
-## Current release status — v0.22.0
+## Candidate preparation — v0.23.0-rc.1
+
+**Local preparation, not publication or stable promotion.** Proposed version:
+`v0.23.0-rc.1`; no candidate tag or push has been made. The last confirmed stable
+release remains v0.22.0 below. Candidate notes cover opt-in embedded Vim,
+same-key passphrase changes and shared browsing. MCP stays source-only and
+experimental; its executable is not in the release build configuration.
+
+### Repository/artifact audit
+
+No committed temp builds, synthetic stores, logs, `node_modules`, coverage,
+`.privacy-adversarial` files or `TODO.md` were found. Hash-pinned
+`internal/embeddedvim/assets/{qjs.wasm,guest.js,manifest.json}` and 15 license
+notices are intentional program/attribution assets, not disposable outputs.
+The session-specific commit-plan document is removed from the current tree
+without rewriting previous commits. Obsolete native/demo/notification code was
+untracked and removed with approval; retained research is explicitly historical.
+
+### Local gates and remaining evidence
+
+Pinned golangci-lint v2.5.0 exposed static-check issues beyond the previous vet
+runs. They were corrected without disabling checks or changing guest pins:
+explicit best-effort diagnostic cleanup, retained-fault handling, nontruncating
+pointer comparisons, equivalent control-flow/boolean cleanup and stronger
+bounds/idempotence test assertions. The same pinned linter now reports zero
+issues. Actionlint v1.7.7 and GoReleaser v2.12.0 config checks pass; the existing
+`brews` deprecation warning is not a failure and no tap migration is attempted.
+
+Release archives now explicitly include the 15 embedded-engine notices. The
+offline verifier accepts complete new license sets, rejects partial sets and
+supports `--require-embedded-vim` for v0.23+ bundles. Legacy v0.22 verification
+remains available without that flag. Synthetic tests exercise both tar and ZIP.
+
+Completed local checks:
+
+- Race + coverage passes for the bundled runtime (203.442s, 86.2%), terminal
+  controller (10.537s, 70.8%), private lifecycle (76.4%), core/sandbox (100%),
+  scratchpad (126.933s, 88.0%) and shared MCP (21.364s, 57.1%). Selected CLI
+  memory-edit/passphrase/help/recovery tests pass (51.097s); their 23.9% command
+  coverage is deliberately a subset, not full command-suite evidence.
+- Secret/terminal model races (12.210s), patched cancelreader races, module
+  verification and pinned lint in host macOS and Linux/amd64 build contexts pass.
+  The unchanged pinned JS suite last passed 552/552 with zero skips at wrap-up.
+- All 44 synthetic release-tool tests pass, including complete/partial license
+  sets and CLI strict-mode checks. No downloads, editor launches or publication
+  occur in these tests.
+- A GoReleaser v2.12.0 snapshot builds all five archives under ignored
+  `.privacy-adversarial/release-0.23.X1fdPa/`. Version is explicitly
+  `0.23.0-rc.1-preflight`, with source commit
+  `d4785b0e5f8494ce42178bf69aa9a75b5520b320` and dirty packaging/documentation
+  metadata. This is not the final tagged artifact. Before/publish/sign stages
+  are skipped; no credentials, tags, uploads or tap writes are used.
+- The offline verifier passes all five snapshot archives/checksums with
+  `--require-embedded-vim`. All 15 notices are byte-identical to their source.
+  Archive inspection confirms no session plan, TODO, fixtures, `node_modules`
+  or MCP executable. Rendered formula Ruby syntax passes; compile metadata contains
+  the expected preflight version/commit. No packaged application was executed.
+  Snapshot formula URLs derive the old tag and are not an installable candidate
+  or tap-verification artifact; never upload this snapshot/formula.
+
+**Advisory gate unresolved:** `go run .../govulncheck@v1.1.4 ./...` built the
+scanner with Go 1.24 in its separate tool-module context and failed to load the
+Go 1.25 application. This yields no current vulnerability result. No toolchain
+or proxy override/upgrade was made; run the scanner in the hosted Go toolchain
+selected by `go.mod` before approving the tag.
+
+Full `cmd/sp` external-editor-helper tests, native terminal/PTY checks, hosted
+Linux/macOS/Windows CI, fresh advisory results, actual published assets/runtime
+version metadata and tap permissions are not established by local subsets or
+cross-compilation. No native launch/probe or blocked remote
+operation is attempted or retried inside pi. User-reported earlier Vim v2
+acceptance is not acceptance of this candidate's rebuilt binaries.
+
+Tag only after explicit owner approval of version/scope and all hosted jobs on
+the exact commit. A tag push starts publication immediately. The RC skips the
+stable Homebrew upload; it cannot prove stable tap credentials or permissions.
+Do not upload local `-preflight` snapshots or move any existing tag.
+
+## Last confirmed published release — v0.22.0
 
 The release owner reported all hosted CI green after `2f99dd4`, then reported the
 v0.22.0-rc.3 GoReleaser run green. That RC tag points at

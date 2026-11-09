@@ -281,6 +281,40 @@ class AssetVerificationTests(unittest.TestCase):
                     data = zip_bytes(entries) if windows else tar_bytes(entries)
                     self.assert_bad_archive(name, data)
 
+    def test_embedded_license_modes_and_partial_sets(self):
+        self.assertEqual(len(verifier.EMBEDDED_LICENSES), 15)
+        for windows in (False, True):
+            inspect = verifier.inspect_zip if windows else verifier.inspect_tar
+            pack = zip_bytes if windows else tar_bytes
+            base = members(windows)
+            # Existing v0.22 bundles stay supported by the default mode.
+            inspect(pack(base))
+            with self.assertRaisesRegex(verifier.VerificationError, "embedded Vim"):
+                inspect(pack(base), require_embedded_vim=True)
+            licenses = [(name, b"synthetic attribution\n", "file", 0o644)
+                        for name in sorted(verifier.EMBEDDED_LICENSES)]
+            inspect(pack(base + licenses), require_embedded_vim=True)
+            inspect(pack(base + licenses))
+            for omitted in licenses:
+                with self.subTest(windows=windows, omitted=omitted[0]):
+                    partial = [entry for entry in licenses if entry != omitted]
+                    for strict in (False, True):
+                        with self.assertRaisesRegex(verifier.VerificationError, "embedded Vim"):
+                            inspect(pack(base + partial), require_embedded_vim=strict)
+
+    def test_embedded_license_flag_requires_and_accepts_complete_bundle(self):
+        args = [str(self.assets), "--manifest", str(self.manifest), "--require-embedded-vim"]
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.assertEqual(verifier.main(args), 1)
+        for name in verifier.ASSETS:
+            windows = name.endswith(".zip")
+            entries = members(windows) + [
+                (license_name, b"synthetic attribution\n", "file", 0o644)
+                for license_name in sorted(verifier.EMBEDDED_LICENSES)]
+            self.replace_archive(name, zip_bytes(entries) if windows else tar_bytes(entries))
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.assertEqual(verifier.main(args), 0)
+
     def test_expected_optional_directories(self):
         for name, windows in ((TAR, False), (ZIP, True)):
             entries = [(directory + "/", b"", "dir", 0o755)
