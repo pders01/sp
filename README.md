@@ -161,9 +161,11 @@ See [agent session-end notes and weekly summaries](docs/agent-hooks.md) for an
 opt-in hook using reviewed public manifests and a collector that reads only
 `sp shared --json`. It does not install hooks, read transcripts, unlock private
 notes or provide a secrets detector. All summaries remain deliberate public
-shared content. A [shared-only MCP proposal](docs/shared-mcp-design.md) describes
-explicit date grants and access limits; no adapter or client configuration has
-been implemented or installed.
+shared content. An [experimental shared-only stdio adapter](docs/shared-mcp-design.md)
+can be built separately with `make build-mcp`. It requires an explicit existing
+store and separate exact read/append date grants, never private/key access.
+Nothing is installed or registered automatically. This bounded protocol subset
+has no verified external-client interoperability and is not release-ready.
 
 ### Flow
 
@@ -464,6 +466,7 @@ make test        # all packages
 make test-race   # race detector + coverage (matches the CI test command)
 make privacy-terminal # POSIX PTY enable/edit/recover checks; synthetic stores only
 make key-terminal     # five masked same-key passphrase-change PTY checks
+make build-mcp        # experimental stdio adapter under .privacy-adversarial/
 make ux-terminal      # integrated reader/editor/template/privacy UX; synthetic stores only
 make design-terminal  # 4 synthetic PTY cases: dark/light × 100x30/56x16
 make design-capture   # 418 actual frames / 55 scenes + historical concepts; needs ImageMagick

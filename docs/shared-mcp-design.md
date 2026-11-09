@@ -1,8 +1,46 @@
 # Shared-only MCP adapter proposal
 
-**Status: design only; not implemented, enabled, or approved for release.**
-MCP access remains deferred. This document does not establish a shipped security
-boundary, install client settings/hooks, or change the CLI/storage contract.
+**Status: an experimental bounded stdio implementation exists; not release-ready.**
+`cmd/sp-shared-mcp` / `internal/sharedmcp` implement the two shared-only tools with
+fixed explicit grants, without adding dependencies or changing the normal SP
+CLI/storage contract. Nothing is installed or registered in a client. It is not
+a private-note API, filesystem sandbox, complete SDK or verified client integration.
+
+## Experimental implementation
+
+```sh
+make build-mcp
+.privacy-adversarial/sp-shared-mcp --store=/absolute/existing/synthetic-store \
+  --read-dates=2026-11-02,2026-11-08 --append-dates=2026-11-08
+```
+
+All three options must be explicit; empty read/append lists disable the respective
+operation, and at least one exact grant is required. No HOME/today/history default,
+remote transport, secret/key API, configuration installation or arbitrary command
+is provided. Store ancestors remain trusted; backend policy scans can inspect
+outer records outside the date grants. Shared content and provenance are public
+and self-reported.
+
+The implementation deliberately accepts a narrow initialization shape:
+`capabilities: {}` and `clientInfo` containing only `name` and `version`, targeting
+exactly `2025-06-18`. Optional client fields/capabilities and pagination cursors
+are unsupported. These restrictions can prevent a real client from connecting;
+external-client interoperability is not verified. The hand-written protocol is
+bounded and tested, not a claim of complete MCP conformance. Parent review used
+the published [lifecycle](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle),
+[stdio transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
+and [tool result](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)
+references; no live client/provider trial was run.
+
+The process owns and exits its entire lifetime: current backend locks have no
+context cancellation. It must never be embedded in a persistent host. Deadline,
+EOF, cancellation or blocked-output failure ends the session rather than serving
+new calls while a storage worker remains active; an interrupted append may already
+have published. See [implementation limits and synthetic checks](../internal/sharedmcp/README.md)
+for exact bounds and release gates. Packaging the existing SP release is unchanged.
+
+The original design below records requirements/options, not a promise that every
+proposed interoperability, operational or native-platform gate has been completed.
 
 ## Existing boundary and intended scope
 
@@ -28,8 +66,9 @@ Recommend a separate, opt-in Go entrypoint in the same module, using the existin
 shared APIs directly, not shelling out to `sp`, parsing human CLI output, or
 implementing a raw daily-JSON writer. Its manager is always locked and constructed
 only with `NewManagerAt` for the configured store. This avoids the ordinary CLI's
-implicit home-directory store. The proposed entrypoint and startup options do not
-exist today. No runtime or dependency changes are part of this document.
+implicit home-directory store. The experimental entrypoint above now implements
+this shape without new dependencies; the original proposal did not itself ship
+runtime code. Alternative policies and the release gates below remain proposals.
 
 ## Transport and compatibility assumptions
 

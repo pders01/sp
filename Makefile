@@ -1,4 +1,4 @@
-.PHONY: embedded-vim-assets all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal key-terminal ux-terminal design-terminal design-capture privacy-fuzz vuln test-release
+.PHONY: embedded-vim-assets all help build build-mcp run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal key-terminal ux-terminal design-terminal design-capture privacy-fuzz vuln test-release
 
 # Variables
 BINARY_NAME=sp
@@ -22,6 +22,11 @@ build:
 	@echo "Building $(BINARY_NAME)..."
 	@go build -o $(BINARY_PATH) $(MAIN_PATH)
 	@echo "Build complete: $(BINARY_PATH)"
+
+## build-mcp: Build the experimental shared-only stdio adapter (no configuration/install)
+build-mcp:
+	@mkdir -p .privacy-adversarial
+	@go build -o .privacy-adversarial/sp-shared-mcp ./cmd/sp-shared-mcp
 
 ## embedded-vim-assets: Regenerate linked public Vim guest (Node is build-time only)
 embedded-vim-assets:
