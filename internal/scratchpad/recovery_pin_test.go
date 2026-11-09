@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -297,7 +298,12 @@ func assertPinnedRecovery(t *testing.T, path string, identity *age.X25519Identit
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	if !info.Mode().IsRegular() {
+		t.Fatal("recovery is not a regular file")
+	}
+	// Windows uses inherited ACLs, not Unix permission bits. Keep all format,
+	// exact-content and key-ownership assertions above active on every platform.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("recovery permissions = %v", info.Mode().Perm())
 	}
 }
