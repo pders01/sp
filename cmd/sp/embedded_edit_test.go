@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"filippo.io/age"
 	"github.com/pders01/sp/internal/editorcore"
 	"github.com/pders01/sp/internal/editorterminal"
 	"github.com/pders01/sp/internal/embeddedvim"
@@ -19,11 +23,40 @@ const memoryPassword = "synthetic-cli-fixture-only"
 
 func memoryFixture(t *testing.T) *scratchpad.Manager {
 	t.Helper()
-	m, err := scratchpad.NewManagerAt(filepath.Join(t.TempDir(), "store"))
+	store := filepath.Join(t.TempDir(), "store")
+	if os.MkdirAll(store, 0o700) != nil {
+		t.Fatal("owned CLI store directory failed")
+	}
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal("owned CLI identity failed")
+	}
+	recipient, err := age.NewScryptRecipient(memoryPassword)
+	if err != nil {
+		t.Fatal("owned CLI recipient failed")
+	}
+	recipient.SetWorkFactor(1)
+	var wrapped bytes.Buffer
+	writer, err := age.Encrypt(&wrapped, recipient)
+	if err != nil {
+		t.Fatal("owned CLI wrap failed")
+	}
+	if _, err = writer.Write([]byte(identity.String())); err != nil || writer.Close() != nil {
+		t.Fatal("owned CLI wrap write failed")
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"version":          1,
+		"recipient":        identity.Recipient().String(),
+		"wrapped_identity": base64.StdEncoding.EncodeToString(wrapped.Bytes()),
+	})
+	if err != nil || os.WriteFile(filepath.Join(store, "privacy.json"), metadata, 0o600) != nil {
+		t.Fatal("owned CLI metadata write failed")
+	}
+	m, err := scratchpad.NewManagerAt(store)
 	if err != nil {
 		t.Fatal("owned CLI fixture setup failed")
 	}
-	if m.EnablePrivacy([]byte(memoryPassword)) != nil {
+	if m.Unlock([]byte(memoryPassword)) != nil {
 		t.Fatal("owned CLI privacy setup failed")
 	}
 	note, err := m.GetByDate(memoryDate)

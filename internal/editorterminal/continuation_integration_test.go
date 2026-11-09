@@ -1,11 +1,16 @@
 package editorterminal
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"filippo.io/age"
 	"github.com/pders01/sp/internal/editorcore"
 	"github.com/pders01/sp/internal/embeddedvim"
 	"github.com/pders01/sp/internal/privateedit"
@@ -17,11 +22,41 @@ import (
 // it is not a claim to have reproduced a real transport outage.
 func TestContinuationQuarantineWithBundledVMAndEncryptedStore(t *testing.T) {
 	ctx := context.Background()
-	manager, err := scratchpad.NewManagerAt(filepath.Join(t.TempDir(), "store"))
+	store := filepath.Join(t.TempDir(), "store")
+	if os.MkdirAll(store, 0o700) != nil {
+		t.Fatal("owned recovery store directory failed")
+	}
+	const secret = "synthetic-recovery-fixture-only"
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal("owned recovery identity failed")
+	}
+	recipient, err := age.NewScryptRecipient(secret)
+	if err != nil {
+		t.Fatal("owned recovery recipient failed")
+	}
+	recipient.SetWorkFactor(1)
+	var wrapped bytes.Buffer
+	writer, err := age.Encrypt(&wrapped, recipient)
+	if err != nil {
+		t.Fatal("owned recovery wrap failed")
+	}
+	if _, err = writer.Write([]byte(identity.String())); err != nil || writer.Close() != nil {
+		t.Fatal("owned recovery wrap write failed")
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"version":          1,
+		"recipient":        identity.Recipient().String(),
+		"wrapped_identity": base64.StdEncoding.EncodeToString(wrapped.Bytes()),
+	})
+	if err != nil || os.WriteFile(filepath.Join(store, "privacy.json"), metadata, 0o600) != nil {
+		t.Fatal("owned recovery metadata write failed")
+	}
+	manager, err := scratchpad.NewManagerAt(store)
 	if err != nil {
 		t.Fatal("owned recovery fixture setup failed")
 	}
-	if manager.EnablePrivacy([]byte("synthetic-recovery-fixture-only")) != nil {
+	if manager.Unlock([]byte(secret)) != nil {
 		t.Fatal("owned recovery privacy setup failed")
 	}
 	defer manager.Lock()

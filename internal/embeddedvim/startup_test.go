@@ -87,14 +87,13 @@ func TestCallerCancellationDuringCompilationPreventsGuestStartup(t *testing.T) {
 
 func coldStartupSession(ctx context.Context, t *testing.T) (*startupRuntime, *Session) {
 	t.Helper()
-	cache := wazero.NewCompilationCache()
 	r := &startupRuntime{
-		Runtime: wazero.NewRuntimeWithConfig(context.Background(), runtimeConfig().WithCompilationCache(cache)),
+		Runtime: wazero.NewRuntimeWithConfig(context.Background(), runtimeConfig()),
 		caller:  ctx,
 	}
 	s := &Session{runtime: r, budget: 500 * time.Millisecond}
 	t.Cleanup(func() {
-		if s.Close() != nil || cache.Close(context.Background()) != nil {
+		if s.Close() != nil {
 			t.Error("owned startup runtime cleanup failed")
 		}
 	})

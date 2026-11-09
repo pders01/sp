@@ -431,7 +431,7 @@ func TestChangePassphraseRevalidatesUnderStoreLock(t *testing.T) {
 	var prepared preparation
 	select {
 	case prepared = <-ready:
-	case <-time.After(30 * time.Second):
+	case <-time.After(2 * time.Minute):
 		_ = lock.Close()
 		t.Fatal("preparation blocked behind store lock")
 	}

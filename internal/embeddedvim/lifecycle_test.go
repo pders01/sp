@@ -1,9 +1,12 @@
 package embeddedvim
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -12,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"filippo.io/age"
 	"github.com/pders01/sp/internal/editorcore"
 	"github.com/pders01/sp/internal/privateedit"
 	"github.com/pders01/sp/internal/scratchpad"
@@ -20,21 +24,55 @@ import (
 const syntheticDate = "2000-01-01"
 const syntheticOriginal = "SYNTHETIC fixture only\r\nsecond e\u0301🙂\n"
 
+// Cheap scrypt wrapping is confined to disposable test metadata, matching
+// internal/privateedit and internal/scratchpad fixtures; X25519 note/recovery
+// encryption and manager policy checks remain identical.
 func encryptedFixture(t *testing.T) (fixtureManager *scratchpad.Manager, fixturePassphrase []byte, fixtureDirectory string) {
 	t.Helper()
 	root := t.TempDir()
-	manager, err := scratchpad.NewManagerAt(root)
-	if err != nil {
-		t.Fatal("synthetic manager creation failed")
-	}
 	entropy := make([]byte, 32)
 	if _, operationErr := rand.Read(entropy); operationErr != nil {
 		t.Fatal("synthetic entropy failed")
 	}
 	pass := []byte(hex.EncodeToString(entropy))
 	clear(entropy)
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal("synthetic identity creation failed")
+	}
+	recipient, err := age.NewScryptRecipient(string(pass))
+	if err != nil {
+		t.Fatal("synthetic recipient creation failed")
+	}
+	recipient.SetWorkFactor(1)
+	var wrapped bytes.Buffer
+	writer, err := age.Encrypt(&wrapped, recipient)
+	if err != nil {
+		t.Fatal("synthetic identity wrap failed")
+	}
+	if _, writeErr := writer.Write([]byte(identity.String())); writeErr != nil {
+		t.Fatal("synthetic identity write failed")
+	}
+	if closeErr := writer.Close(); closeErr != nil {
+		t.Fatal("synthetic identity close failed")
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"version":          1,
+		"recipient":        identity.Recipient().String(),
+		"wrapped_identity": base64.StdEncoding.EncodeToString(wrapped.Bytes()),
+	})
+	if err != nil {
+		t.Fatal("synthetic metadata marshal failed")
+	}
+	if writeErr := os.WriteFile(filepath.Join(root, "privacy.json"), metadata, 0o600); writeErr != nil {
+		t.Fatal("synthetic metadata write failed")
+	}
+	manager, err := scratchpad.NewManagerAt(root)
+	if err != nil {
+		t.Fatal("synthetic manager creation failed")
+	}
 	t.Cleanup(func() { manager.Lock(); clear(pass) })
-	if manager.EnablePrivacy(pass) != nil {
+	if manager.Unlock(pass) != nil {
 		t.Fatal("synthetic privacy setup failed")
 	}
 	note, err := manager.GetByDate(syntheticDate)
