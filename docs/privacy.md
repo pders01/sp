@@ -123,11 +123,25 @@ copies created during reversal or revoke older backups/keys.
 
 Reversal metadata uses a newer format. Older privacy-aware builds reject it;
 very old builds may ignore unknown fields and remain unsafe. Continue using a
-supported build even after disabling. Passphrase changes and key rotation are
-not implemented; disabling and re-enabling is **not** either operation. The
-[key-lifecycle proposal](key-lifecycle-design.md) separates passphrase-only
-rewrapping from data-key rotation, including retained-key/backup limitations;
-it is a design for review, not an available command or approved migration.
+supported build even after disabling. Disabling and re-enabling is **not** a
+passphrase change or data-key rotation.
+
+**Main-branch addition after v0.22.0:** for a fully migrated enabled store,
+`sp privacy change-passphrase` is an explicit
+interactive same-key rewrap. Stop other SP instances, confirm the warning, then
+enter the current passphrase and a different new passphrase twice in masked
+forms. No secret arguments, files, environment variables or redirected input are
+accepted. Wrong/cancelled/mismatched input changes no metadata; after final
+confirmation, interruption or a publication durability warning may leave changed
+metadata. Keep what is actually present, authenticate the passphrase it accepts,
+and do not restore old metadata automatically. The manager is locked afterwards.
+
+Only the wrapping changes: the recipient, daily/shared/recovery bytes and key
+remain unchanged. Old metadata/key copies can still decrypt same-key data, so
+this does not revoke old passphrases/backups. No silent old-passphrase backup is
+created. Disabled, decrypting and incompletely migrated stores are unsupported.
+The [key-lifecycle record](key-lifecycle-design.md) explains implemented rewrapping
+and the separate, unimplemented rotation/recovery-format approval gates.
 
 ## Daily operation
 

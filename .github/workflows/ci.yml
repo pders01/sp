@@ -57,6 +57,10 @@ jobs:
         mkdir -p .privacy-adversarial
         go build -o .privacy-adversarial/sp-validation ./cmd/sp
         python3 scripts/privacy-terminal/main.py --binary .privacy-adversarial/sp-validation
+    - name: Passphrase-change terminal integration (synthetic stores only)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: make key-terminal
     - name: Bounded privacy fuzz checks
       if: runner.os == 'Linux'
       shell: bash

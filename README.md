@@ -147,10 +147,13 @@ outcomes distinguish saved, unchanged, cancelled, not saved, and unconfirmed
 durability; F1 retains full error/recovery details. Newer edits after an
 unconfirmed publication are explicitly labelled unsaved. Interactive
 migration/reversal reports stage/count progress, not secrets. Raw shared reads and quiet append remain the
-default; `--json` is opt-in and contains shared data only. Passphrase changes,
-data-key rotation and MCP access are not implemented. See the
-[full guide](docs/privacy.md) and the [key-lifecycle proposal](docs/key-lifecycle-design.md);
-that proposal does not authorize changing encryption or recovery formats.
+default; `--json` is opt-in and contains shared data only. The passphrase-change
+command is a post-v0.22.0 main-branch addition, not a feature of that release's
+frozen binaries. For a fully migrated enabled store, `sp privacy change-passphrase`
+explicitly rewraps the same key using masked current/new/confirmation forms. It
+does not rewrite notes, rotate the data key or revoke old metadata copies.
+Data-key rotation remains unimplemented. See the [full guide](docs/privacy.md)
+and [key-lifecycle details](docs/key-lifecycle-design.md).
 
 ### Agent automation
 
@@ -460,6 +463,7 @@ make build       # ./sp
 make test        # all packages
 make test-race   # race detector + coverage (matches the CI test command)
 make privacy-terminal # POSIX PTY enable/edit/recover checks; synthetic stores only
+make key-terminal     # five masked same-key passphrase-change PTY checks
 make ux-terminal      # integrated reader/editor/template/privacy UX; synthetic stores only
 make design-terminal  # 4 synthetic PTY cases: dark/light × 100x30/56x16
 make design-capture   # 418 actual frames / 55 scenes + historical concepts; needs ImageMagick

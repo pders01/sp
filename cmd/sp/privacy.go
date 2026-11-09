@@ -90,7 +90,7 @@ func newPrivacyCommand(factory managerFactory) *cobra.Command {
 	}
 	statusCommand.Flags().BoolVar(&dates, "dates", false, "List all dates by storage state")
 	cmd.AddCommand(statusCommand)
-	cmd.AddCommand(newRecoverCommand(factory))
+	cmd.AddCommand(newRecoverCommand(factory), newChangePassphraseCommand(factory))
 	return cmd
 }
 

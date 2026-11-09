@@ -1,4 +1,4 @@
-.PHONY: embedded-vim-assets all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal ux-terminal design-terminal design-capture privacy-fuzz vuln test-release
+.PHONY: embedded-vim-assets all help build run test test-race coverage lint modernize fmt clean install deps check ci release release-snapshot mod-update bench privacy-terminal key-terminal ux-terminal design-terminal design-capture privacy-fuzz vuln test-release
 
 # Variables
 BINARY_NAME=sp
@@ -118,6 +118,12 @@ privacy-terminal:
 	@mkdir -p .privacy-adversarial
 	@go build -o .privacy-adversarial/sp-validation $(MAIN_PATH)
 	@python3 scripts/privacy-terminal/main.py --binary .privacy-adversarial/sp-validation
+
+## key-terminal: Exercise exact masked passphrase changes against synthetic POSIX stores
+key-terminal:
+	@mkdir -p .privacy-adversarial
+	@go build -o .privacy-adversarial/sp-key-validation $(MAIN_PATH)
+	@python3 -B scripts/key-terminal/main.py --binary .privacy-adversarial/sp-key-validation
 
 ## ux-terminal: Exercise integrated reader/editor/template/privacy UX in synthetic POSIX terminals
 ux-terminal:

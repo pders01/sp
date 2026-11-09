@@ -1,10 +1,48 @@
 # Passphrase changes and key rotation — proposal
 
-**Design only; neither operation is implemented or approved for migration.**
-Current `privacy enable` reuses a retained identity, including after disable. It
-is not a passphrase-change or key-rotation command. Existing behavior and file
-formats remain unchanged. See [privacy guarantees](privacy.md) and
+**Passphrase-only rewrapping is implemented; data-key rotation remains a design.**
+This is post-v0.22.0 main-branch work, not a change to the published release.
+`sp privacy change-passphrase` is an explicit interactive command for a fully
+migrated enabled store. It authenticates the current secret, confirms a different
+new secret in masked exact-byte forms, then rewraps the SAME identity. It does not
+load private notes, change the data key, rewrite daily/recovery files or alter the
+metadata format. `privacy enable` still reuses a retained identity and is not a
+passphrase-change or rotation command. See [privacy guarantees](privacy.md) and
 [release evidence](release-preflight.md).
+
+## Current implementation
+
+```sh
+sp privacy change-passphrase
+```
+
+Stop other SP instances first and confirm `CHANGE PASSPHRASE`. Secrets cannot be
+supplied through arguments, flags, environment variables or redirected input.
+The command is separate from normal browsing/editing and installs no hooks. New
+and confirmation fields collect secrets only; they do not unlock or save notes.
+Empty/Escape/Ctrl+C and graceful signals during collection cancel without change.
+Wrong current authentication, mismatched/equal replacement secrets and invalid
+policy fail before publication. Disabled/decrypting/partially migrated stores
+are deliberately unsupported.
+
+`Manager.ChangePassphrase` freshly authenticates even an unlocked manager, does
+KDF/wrap verification outside the store lock, then rechecks the exact metadata
+fingerprint and complete enabled policy under the publication lock. It locks its
+manager after every attempt and preserves the pinned public recovery recipient.
+Other managers' stale fingerprints cease to authorize normal private access;
+this is not remote process locking, memory erasure or revocation of copied keys.
+Owned temporary key byte buffers are cleared best-effort, not all runtime copies.
+
+Publication is explicit in the API result even on directory-durability failure.
+After final confirmation, interruption can leave a visible but unconfirmed
+metadata change: keep the metadata actually present and authenticate the
+passphrase it accepts; never restore older metadata automatically. A failure to
+print final success also retains the published-change fact in the returned error.
+There is no silent old-passphrase backup. Keep matching metadata with retained
+backups, and remember old metadata can still unlock same-key data.
+
+The original design requirements and rotation approval gates below remain for
+review; rotation, keyring formats and recovery migration are NOT implemented.
 
 ## Two different operations
 
@@ -44,7 +82,8 @@ unqualified revocation.
 
 ## Proposed passphrase-change flow
 
-Proposed command/UI names are illustrative, not available commands.
+The passphrase-only flow is now implemented by the command above. The list below
+records its original design requirements; rotation-specific flows remain proposals.
 
 1. Require an explicit interactive action, no passphrases in argv/environment or
    ordinary agent APIs. Require other SP instances/editors to finish first.
