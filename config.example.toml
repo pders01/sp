@@ -18,6 +18,17 @@ icons = "unicode"
 # on macOS the system appearance change is detected automatically.
 theme = "auto"
 
+# Editor engine for encrypted private notes (bare sp and sp edit) when no
+# --editor flag is given:
+#   "builtin" — in-memory private writer (default)
+#   "vim"     — experimental bundled Vim engine; same in-memory guarantees,
+#               no external editor, no vimrc/plugins. See
+#               docs/embedded-vim-integration.md.
+# Plaintext notes are unaffected and always use EDITOR/VISUAL. An explicit
+# `sp edit --editor=...` flag overrides this setting.
+[editor]
+private = "builtin"
+
 # Optional day-template sections. The built-in "Workday timebox" template is
 # always available. Press "a" on a calendar or notebook day to choose one or
 # more sections; templates are never applied automatically.

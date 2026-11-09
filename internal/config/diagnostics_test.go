@@ -42,7 +42,8 @@ command = ["issue-template", "--markdown"]
 					t.Fatalf("LoadWithDiagnostics: warnings=%+v, err=%v", warnings, err)
 				}
 				want := &Config{
-					UI: UIConfig{Icons: icons, Theme: theme},
+					UI:     UIConfig{Icons: icons, Theme: theme},
+					Editor: EditorConfig{Private: "builtin"},
 					Templates: TemplatesConfig{
 						AllowCommands: true,
 						Items: []TemplateConfig{

@@ -14,8 +14,54 @@ func TestDefault(t *testing.T) {
 	if cfg.UI.Theme != "auto" {
 		t.Errorf("Theme = %q, want %q", cfg.UI.Theme, "auto")
 	}
+	if cfg.Editor.Private != "builtin" {
+		t.Errorf("Editor.Private = %q, want %q", cfg.Editor.Private, "builtin")
+	}
 	if cfg.Templates.AllowCommands {
 		t.Error("template commands should be disabled by default")
+	}
+}
+
+func TestLoadParsesEditorPrivate(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  string
+	}{
+		{"builtin", "builtin"},
+		{"vim", "vim"},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			body := "[editor]\nprivate = \"" + tc.value + "\"\n"
+			if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, warnings, err := LoadWithDiagnostics(path)
+			if err != nil || len(warnings) != 0 {
+				t.Fatalf("LoadWithDiagnostics: warnings=%+v, err=%v", warnings, err)
+			}
+			if cfg.Editor.Private != tc.want {
+				t.Errorf("Editor.Private = %q, want %q", cfg.Editor.Private, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadRejectsInvalidEditorPrivate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := "[editor]\nprivate = \"/bin/sh\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, warnings, err := LoadWithDiagnostics(path)
+	if err != nil {
+		t.Fatalf("LoadWithDiagnostics: %v", err)
+	}
+	if cfg.Editor.Private != "builtin" {
+		t.Errorf("Editor.Private = %q, want fallback %q", cfg.Editor.Private, "builtin")
+	}
+	if len(warnings) != 1 || warnings[0].Code != WarningInvalidValue || warnings[0].Path != "editor.private" {
+		t.Fatalf("warnings = %+v, want one editor.private invalid-value warning", warnings)
 	}
 }
 

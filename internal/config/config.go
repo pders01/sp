@@ -16,7 +16,18 @@ import (
 // install works without writing a file.
 type Config struct {
 	UI        UIConfig        `toml:"ui"`
+	Editor    EditorConfig    `toml:"editor"`
 	Templates TemplatesConfig `toml:"templates"`
+}
+
+// EditorConfig selects the engine used for encrypted private notes when no
+// explicit --editor flag is given. "builtin" is the in-memory private writer;
+// "vim" opts into the experimental bundled Vim engine. Plaintext-note editing
+// stays controlled by EDITOR/VISUAL and is never affected by this setting.
+type EditorConfig struct {
+	// Private selects the encrypted-note editor: "builtin" (default) or
+	// the experimental bundled "vim" engine.
+	Private string `toml:"private"`
 }
 
 // TemplatesConfig controls user-defined template sections. Executable
@@ -64,6 +75,9 @@ func Default() *Config {
 		UI: UIConfig{
 			Icons: "unicode",
 			Theme: "auto",
+		},
+		Editor: EditorConfig{
+			Private: "builtin",
 		},
 	}
 }
@@ -114,6 +128,9 @@ func LoadWithDiagnostics(path string) (*Config, []Warning, error) {
 			Icons any `toml:"icons"`
 			Theme any `toml:"theme"`
 		} `toml:"ui"`
+		Editor struct {
+			Private any `toml:"private"`
+		} `toml:"editor"`
 		Templates TemplatesConfig `toml:"templates"`
 	}
 	metadata, err := toml.Decode(string(data), &decoded)
@@ -135,6 +152,7 @@ func LoadWithDiagnostics(path string) (*Config, []Warning, error) {
 	}
 	cfg.UI.Icons = normalizeUIValue("ui.icons", decoded.UI.Icons, cfg.UI.Icons, []string{"unicode", "nerd"}, &warnings)
 	cfg.UI.Theme = normalizeUIValue("ui.theme", decoded.UI.Theme, cfg.UI.Theme, []string{"auto", "light", "dark"}, &warnings)
+	cfg.Editor.Private = normalizeUIValue("editor.private", decoded.Editor.Private, cfg.Editor.Private, []string{"builtin", "vim"}, &warnings)
 	cfg.Templates = decoded.Templates
 	for i := range cfg.Templates.Items {
 		file := cfg.Templates.Items[i].File
